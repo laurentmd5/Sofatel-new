@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+
+{% block title %}Créer utilisateur - Sofatelcom{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="h3 mb-4">
+            <i data-feather="user-plus" class="me-2"></i>
+            Créer un nouvel utilisateur
+        </h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header bg-sofatelcom-primary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="plus-circle" class="me-2"></i>
+                    Informations de l'utilisateur
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="createUserForm">
+                    {{ form.hidden_tag() }}
+
+                    <!-- Informations de base -->
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.username.label(class="form-label") }}
+                            {{ form.username(class="form-control", placeholder="Nom d'utilisateur unique") }}
+                            {% if form.username.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.username.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            {{ form.email.label(class="form-label") }}
+                            {{ form.email(class="form-control", placeholder="email@exemple.com") }}
+                            {% if form.email.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.email.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.password.label(class="form-label") }}
+                            {{ form.password(class="form-control") }}
+                            {% if form.password.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.password.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            {{ form.confirm_password.label(class="form-label") }}
+                            {{ form.confirm_password(class="form-control") }}
+                            {% if form.confirm_password.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.confirm_password.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Informations personnelles -->
+                    <hr class="my-4">
+                    <h6 class="mb-3">Informations personnelles</h6>
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            {{ form.nom.label(class="form-label") }}
+                            {{ form.nom(class="form-control", placeholder="Nom de famille") }}
+                            {% if form.nom.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.nom.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            {{ form.prenom.label(class="form-label") }}
+                            {{ form.prenom(class="form-control", placeholder="Prénom") }}
+                            {% if form.prenom.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.prenom.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            {{ form.telephone.label(class="form-label") }}
+                            {{ form.telephone(class="form-control", placeholder="77xxxxxxx ou +22177xxxxxxx") }}
+                            {% if form.telephone.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.telephone.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Rôle et affectations -->
+                    <hr class="my-4">
+                    <h6 class="mb-3">Rôle et affectations</h6>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.role.label(class="form-label") }}
+                            {{ form.role(class="form-control", id="roleSelect") }}
+                            {% if form.role.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.role.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-md-6 mb-3" id="serviceField" style="display: none;">
+                            {{ form.service.label(class="form-label") }}
+                            {{ form.service(class="form-control") }}
+                            {% if form.service.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.service.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="row" id="geographicFields" style="display: none;">
+                        <div class="col-md-4 mb-3">
+                            {{ form.zone.label(class="form-label") }}
+                            {{ form.zone(class="form-control") }}
+                            {% if form.zone.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.zone.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-md-4 mb-3" id="communeField">
+                            {{ form.commune.label(class="form-label") }}
+                            {{ form.commune(class="form-control", placeholder="Commune d'affectation") }}
+                            {% if form.commune.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.commune.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-md-4 mb-3" id="quartierField">
+                            {{ form.quartier.label(class="form-label") }}
+                            {{ form.quartier(class="form-control", placeholder="Quartier d'affectation") }}
+                            {% if form.quartier.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.quartier.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="row" id="technologiesField" style="display: none;">
+                        <div class="col-md-12 mb-3">
+                            {{ form.technologies.label(class="form-label") }}
+                            {{ form.technologies(class="form-control") }}
+                            <div class="form-text">Sélectionnez les technologies maîtrisées par le technicien</div>
+                            {% if form.technologies.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.technologies.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('manage_users') }}" class="btn btn-secondary">
+                            <i data-feather="arrow-left" class="me-1"></i>
+                            Retour
+                        </a>
+                        <button type="submit" class="btn btn-sofatelcom-primary">
+                            <i data-feather="save" class="me-1"></i>
+                            Créer l'utilisateur
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h6 class="mb-0">
+                    <i data-feather="info" class="me-2"></i>
+                    Aide
+                </h6>
+            </div>
+            <div class="card-body">
+                <h6>Rôles disponibles :</h6>
+                <ul class="list-unstyled">
+                    <li><strong>Chef PUR :</strong> Accès complet au système</li>
+                    <li><strong>Chef Pilote :</strong> Gestion d'un ou plusieurs services</li>
+                    <li><strong>Chef Zone :</strong> Gestion des équipes d'une zone</li>
+                    <li><strong>Gestionnaire de stock :</strong> Gestion des stocks</li>
+                    <li><strong>Magasinier :</strong> Gestion du stock local (par zone)</li>
+                    <li><strong>Comptabilité et services financiers :</strong> Gestion des comptes et des services
+                        financiers</li>
+                    <li><strong>Technicien :</strong> Exécution des interventions</li>
+                </ul>
+
+                <hr>
+
+                <h6>Services disponibles :</h6>
+                <ul class="list-unstyled">
+                    <li>• <strong>SAV :</strong> Service Après-Vente uniquement</li>
+                    <li>• <strong>Production :</strong> Production uniquement</li>
+                    <li>• <strong>SAV + Production :</strong> Les deux services</li>
+                </ul>
+
+                <hr>
+
+                <h6>Champs obligatoires :</h6>
+                <ul class="list-unstyled">
+                    <li>• Nom d'utilisateur</li>
+                    <li>• Email</li>
+                    <li>• Mot de passe</li>
+                    <li>• Nom et prénom</li>
+                    <li>• Rôle</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const roleSelect = document.getElementById('roleSelect');
+        const serviceField = document.getElementById('serviceField');
+        const geographicFields = document.getElementById('geographicFields');
+        const technologiesField = document.getElementById('technologiesField');
+        const communeField = document.getElementById('communeField');
+        const quartierField = document.getElementById('quartierField');
+        const zoneField = document.querySelector('[id="id_zone"]') || document.querySelector('select[name="zone"]');
+        const zoneLabel = zoneField ? zoneField.previousElementSibling : null;
+
+        function updateFormFields() {
+            const selectedRole = roleSelect.value;
+
+            // Reset all fields
+            serviceField.style.display = 'none';
+            geographicFields.style.display = 'none';
+            technologiesField.style.display = 'none';
+            communeField.style.display = 'none';
+            quartierField.style.display = 'none';
+
+            // Remove required asterisk if exists
+            if (zoneLabel && zoneLabel.classList.contains('form-label')) {
+                const requiredSpan = zoneLabel.querySelector('.text-danger');
+                if (requiredSpan) {
+                    requiredSpan.remove();
+                }
+            }
+
+            // Show relevant fields based on role
+            if (selectedRole === 'chef_pilote') {
+                serviceField.style.display = 'block';
+            }
+
+            // Magasinier: show zone field (REQUIRED)
+            if (selectedRole === 'magasinier') {
+                geographicFields.style.display = 'flex';
+                if (zoneField) {
+                    zoneField.required = true;
+                    zoneField.setAttribute('aria-required', 'true');
+                    if (zoneLabel && zoneLabel.classList.contains('form-label')) {
+                        const span = document.createElement('span');
+                        span.className = 'text-danger';
+                        span.innerHTML = ' <strong>*</strong>';
+                        zoneLabel.appendChild(span);
+                    }
+                }
+            }
+
+            // Chef Zone or Technicien: show zone field and other fields (REQUIRED)
+            if (selectedRole === 'chef_zone' || selectedRole === 'technicien') {
+                geographicFields.style.display = 'flex';
+                if (zoneField) {
+                    zoneField.required = true;
+                    zoneField.setAttribute('aria-required', 'true');
+                    if (zoneLabel && zoneLabel.classList.contains('form-label')) {
+                        const span = document.createElement('span');
+                        span.className = 'text-danger';
+                        span.innerHTML = ' <strong>*</strong>';
+                        zoneLabel.appendChild(span);
+                    }
+                }
+
+                if (selectedRole === 'technicien') {
+                    communeField.style.display = 'block';
+                    quartierField.style.display = 'block';
+                    technologiesField.style.display = 'block';
+                }
+            }
+        }
+
+        // Initialize form on page load
+        updateFormFields();
+
+        // Update form when role changes
+        roleSelect.addEventListener('change', updateFormFields);
+
+        // Form submission validation
+        const form = document.getElementById('createUserForm');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                const selectedRole = roleSelect.value;
+                
+                // Validate zone for roles that require it
+                if (['chef_zone', 'magasinier', 'technicien'].includes(selectedRole)) {
+                    const zoneValue = zoneField ? zoneField.value : null;
+                    if (!zoneValue || zoneValue === '0' || zoneValue === '') {
+                        e.preventDefault();
+                        alert('La zone est obligatoire pour un ' + 
+                              {'chef_zone': 'Chef de zone', 'magasinier': 'Magasinier', 'technicien': 'Technicien'}[selectedRole]);
+                        if (zoneField) zoneField.focus();
+                        return false;
+                    }
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

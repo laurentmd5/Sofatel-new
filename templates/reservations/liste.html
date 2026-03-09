@@ -1,0 +1,182 @@
+{% extends "reservations/base.html" %}
+
+{% block reservation_content %}
+<div class="card shadow mb-4">
+    <div class="card-header py-3">
+        <h6 class="m-0 font-weight-bold text-primary">Liste des réservations</h6>
+    </div>
+    <div class="card-body">
+        {% if reservations %}
+        <div class="table-responsive">
+            <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
+                <thead>
+                    <tr>
+                        <th>Référence</th>
+                        <th>Produit</th>
+                        <th>Quantité</th>
+                        <th>Statut</th>
+                        <th>Créée le</th>
+                        <th>Par</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for reservation in reservations %}
+                    <tr>
+                        <td>#{{ reservation.id }}</td>
+                        <td>
+                            {{ reservation.produit.nom }}
+                        </td>
+                        <td>{{ reservation.quantite }} {{ reservation.produit.unite_mesure or 'unité' }}</td>
+                        <td>
+                            <span class="badge 
+                                    {% if reservation.statut == 'en_attente' %}bg-warning text-dark
+                                    {% elif reservation.statut == 'validee' %}bg-success text-white
+                                    {% elif reservation.statut == 'annulee' %}bg-danger text-white
+                                    {% elif reservation.statut == 'utilisee' %}bg-info text-white
+                                    {% endif %}">
+                                {{ reservation.statut_libelle }}
+                            </span>
+                        </td>
+                        <td>{{ reservation.date_creation|format_datetime }}</td>
+                        <td>{{ reservation.utilisateur.username }}</td>
+                        <td>
+                            <div class="btn-group">
+                                {% if reservation.statut == 'en_attente' %}
+                                <form
+                                    action="{{ url_for('reservations.valider_reservation', reservation_id=reservation.id) }}"
+                                    method="POST" style="display: inline;">
+                                    <button type="submit" class="btn btn-sm btn-success"
+                                        onclick="return confirmerAction('Confirmer la validation de cette réservation ?')"
+                                        data-toggle="tooltip" title="Valider">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                </form>
+                                <form
+                                    action="{{ url_for('reservations.annuler_reservation', reservation_id=reservation.id) }}"
+                                    method="POST" style="display: inline;">
+                                    <button type="submit" class="btn btn-sm btn-warning"
+                                        onclick="return confirmerAction('Confirmer l\'annulation de cette réservation ?')"
+                                        data-toggle="tooltip" title="Annuler">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </form>
+                                {% elif reservation.statut == 'validee' %}
+                                <form
+                                    action="{{ url_for('reservations.utiliser_reservation', reservation_id=reservation.id) }}"
+                                    method="POST" style="display: inline;">
+                                    <button type="submit" class="btn btn-sm btn-info"
+                                        onclick="return confirmerAction('Marquer cette réservation comme utilisée ?')"
+                                        data-toggle="tooltip" title="Marquer comme utilisée">
+                                        <i class="fas fa-check-double"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+
+                                <button class="btn btn-sm btn-primary" data-toggle="modal"
+                                    data-target="#detailsReservation{{ reservation.id }}" data-toggle="tooltip"
+                                    title="Détails">
+                                    <i class="fas fa-info-circle"></i>
+                                </button>
+                            </div>
+
+                            <!-- Modal Détails de la réservation -->
+                            <div class="modal fade" id="detailsReservation{{ reservation.id }}" tabindex="-1"
+                                role="dialog" aria-labelledby="detailsReservationLabel" aria-hidden="true">
+                                <div class="modal-dialog" role="document">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title" id="detailsReservationLabel">Détails de la
+                                                réservation #{{ reservation.id }}</h5>
+                                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                                <span aria-hidden="true">&times;</span>
+                                            </button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="row mb-3">
+                                                <div class="col-md-6">
+                                                    <strong>Produit:</strong>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    {{ reservation.produit.nom }} ({{ reservation.produit.reference }})
+                                                </div>
+                                            </div>
+                                            <div class="row mb-3">
+                                                <div class="col-md-6">
+                                                    <strong>Quantité:</strong>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    {{ reservation.quantite }} {{ reservation.produit.unite_mesure or
+                                                    'unité' }}
+                                                </div>
+                                            </div>
+                                            <div class="row mb-3">
+                                                <div class="col-md-6">
+                                                    <strong>Statut:</strong>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <span class="badge 
+                                                            {% if reservation.statut == 'en_attente' %}bg-warning text-dark
+                                                            {% elif reservation.statut == 'validee' %}bg-success text-white
+                                                            {% elif reservation.statut == 'annulee' %}bg-danger text-white
+                                                            {% elif reservation.statut == 'utilisee' %}bg-info text-white
+                                                            {% endif %}">
+                                                        {{ reservation.statut_libelle }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            {% if reservation.commentaire %}
+                                            <div class="row mb-3">
+                                                <div class="col-md-12">
+                                                    <strong>Commentaire:</strong>
+                                                    <p class="mt-2">{{ reservation.commentaire|nl2br }}</p>
+                                                </div>
+                                            </div>
+                                            {% endif %}
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <strong>Créée le:</strong> {{
+                                                    reservation.date_creation|format_datetime }}
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <strong>Par:</strong> {{ reservation.utilisateur.username }}
+                                                </div>
+                                            </div>
+                                            {% if reservation.date_validation %}
+                                            <div class="row mt-2">
+                                                <div class="col-md-6">
+                                                    <strong>Validée le:</strong> {{
+                                                    reservation.date_validation|format_datetime }}
+                                                </div>
+                                            </div>
+                                            {% endif %}
+                                            {% if reservation.date_annulation %}
+                                            <div class="row mt-2">
+                                                <div class="col-md-12">
+                                                    <strong>Annulée le:</strong> {{
+                                                    reservation.date_annulation|format_datetime }}
+                                                </div>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary"
+                                                data-dismiss="modal">Fermer</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            Aucune réservation trouvée pour cette intervention.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

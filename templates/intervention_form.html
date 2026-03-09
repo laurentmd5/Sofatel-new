@@ -1,0 +1,1120 @@
+{% extends "base.html" %}
+
+{% block title %}Fiche d'intervention - Sofatelcom{% endblock %}
+
+{% block head %}
+<style>
+    /* Form Steps Enhanced Styles */
+    .intervention-form-wrapper {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+
+    .intervention-header {
+        background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%);
+        color: white;
+        padding: 25px;
+        border-bottom: 3px solid #0d6efd;
+    }
+
+    .intervention-header h1 {
+        margin: 0;
+        font-size: 1.8rem;
+        font-weight: 600;
+    }
+
+    .client-info-badge {
+        display: flex;
+        gap: 10px;
+        margin-top: 15px;
+        flex-wrap: wrap;
+    }
+
+    .client-info-badge .badge {
+        font-size: 0.9rem;
+        padding: 0.5rem 1rem;
+    }
+
+    /* Form Progress Bar */
+    .form-progress-container {
+        background: #f8f9fa;
+        padding: 30px 20px;
+        border-bottom: 2px solid #e9ecef;
+    }
+
+    .form-progress-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: relative;
+        max-width: 100%;
+    }
+
+    .form-progress-bar::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: #e9ecef;
+        transform: translateY(-50%);
+        z-index: 0;
+    }
+
+    .form-progress-fill {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        height: 2px;
+        background: linear-gradient(90deg, #dc3545, #0d6efd);
+        transform: translateY(-50%);
+        transition: width 0.3s ease;
+        z-index: 1;
+    }
+
+    .form-step-indicator {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        position: relative;
+        z-index: 2;
+        flex: 1;
+    }
+
+    .form-step-circle {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: white;
+        border: 2px solid #dee2e6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        color: #6c757d;
+        margin-bottom: 8px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+    .form-step-indicator.active .form-step-circle {
+        background: linear-gradient(135deg, #dc3545, #fd7e14);
+        color: white;
+        border-color: #dc3545;
+        box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+        transform: scale(1.1);
+    }
+
+    .form-step-indicator.completed .form-step-circle {
+        background: #28a745;
+        color: white;
+        border-color: #28a745;
+    }
+
+    .form-step-indicator.completed .form-step-circle::after {
+        content: '✓';
+        font-weight: bold;
+    }
+
+    .form-step-label {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: #495057;
+        text-align: center;
+        transition: color 0.3s ease;
+    }
+
+    .form-step-indicator.active .form-step-label {
+        color: #dc3545;
+        font-weight: 600;
+    }
+
+    .form-step-indicator.completed .form-step-label {
+        color: #28a745;
+    }
+
+    /* Form Steps Container */
+    .form-steps-container {
+        padding: 0;
+    }
+
+    .form-step {
+        display: none;
+        animation: fadeIn 0.3s ease;
+        padding: 40px;
+    }
+
+    .form-step.active {
+        display: block;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Step Title */
+    .form-step-title {
+        border-bottom: 3px solid #0d6efd;
+        padding-bottom: 15px;
+        margin-bottom: 25px;
+    }
+
+    .form-step-title h2 {
+        margin: 0;
+        font-size: 1.5rem;
+        color: #212529;
+        font-weight: 600;
+    }
+
+    .form-step-title p {
+        margin: 5px 0 0 0;
+        color: #6c757d;
+        font-size: 0.95rem;
+    }
+
+    /* Form Controls */
+    .form-control, .form-select {
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .form-control:focus, .form-select:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    }
+
+    .form-control.is-invalid {
+        border-color: #dc3545;
+        background-image: none;
+    }
+
+    .form-control.is-valid {
+        border-color: #28a745;
+        background-image: none;
+    }
+
+    /* Field Groups */
+    .form-field-group {
+        margin-bottom: 20px;
+    }
+
+    .form-label {
+        font-weight: 500;
+        color: #212529;
+        margin-bottom: 8px;
+    }
+
+    .form-text {
+        color: #6c757d;
+        font-size: 0.875rem;
+        margin-top: 4px;
+    }
+
+    .error-message {
+        color: #dc3545;
+        font-size: 0.875rem;
+        margin-top: 4px;
+        display: none;
+    }
+
+    .form-control.is-invalid ~ .error-message {
+        display: block;
+    }
+
+    /* Section Dividers */
+    .form-section {
+        background: #f8f9fa;
+        border-left: 4px solid #0d6efd;
+        padding: 20px;
+        margin: 25px 0;
+        border-radius: 0 8px 8px 0;
+    }
+
+    .form-section h5 {
+        margin: 0 0 15px 0;
+        color: #0d6efd;
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+
+    /* Form Actions */
+    .form-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: space-between;
+        align-items: center;
+        padding-top: 30px;
+        border-top: 2px solid #e9ecef;
+        margin-top: 40px;
+    }
+
+    .form-actions-left {
+        flex: 1;
+    }
+
+    .form-actions-center {
+        flex: 1;
+        text-align: center;
+    }
+
+    .form-actions-right {
+        flex: 1;
+        text-align: right;
+    }
+
+    .btn-step {
+        padding: 10px 24px;
+        font-weight: 500;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+        border: none;
+    }
+
+    .btn-step-prev {
+        background: #e9ecef;
+        color: #212529;
+    }
+
+    .btn-step-prev:hover {
+        background: #dee2e6;
+        transform: translateX(-2px);
+    }
+
+    .btn-step-next {
+        background: linear-gradient(135deg, #0d6efd, #0d6efd);
+        color: white;
+    }
+
+    .btn-step-next:hover {
+        background: linear-gradient(135deg, #0b5ed7, #0b5ed7);
+        transform: translateX(2px);
+        box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
+    }
+
+    .btn-step-submit {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+    }
+
+    .btn-step-submit:hover {
+        background: linear-gradient(135deg, #218838, #1aa179);
+        box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+    }
+
+    /* Step Progress Text */
+    .step-progress-text {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+
+    /* Signature Pad */
+    .signature-pad {
+        border: 2px dashed #dee2e6;
+        border-radius: 8px;
+        cursor: crosshair;
+        width: 100%;
+        height: 150px;
+        background: #f8f9fa;
+    }
+
+    .signature-container {
+        position: relative;
+        margin-bottom: 15px;
+    }
+
+    .signature-clear {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        z-index: 10;
+    }
+
+    /* Validation Feedback */
+    .valid-feedback, .invalid-feedback {
+        display: block;
+        margin-top: 0.25rem;
+        font-size: 0.875rem;
+    }
+
+    .invalid-feedback {
+        color: #dc3545;
+    }
+
+    .valid-feedback {
+        color: #28a745;
+    }
+
+    /* Info Box */
+    .info-box {
+        background: #e7f3ff;
+        border-left: 4px solid #0d6efd;
+        padding: 15px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+    }
+
+    .info-box strong {
+        color: #0d6efd;
+    }
+
+    /* Client Summary Box */
+    .client-summary {
+        background: white;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 25px;
+    }
+
+    .client-summary h6 {
+        margin: 0 0 10px 0;
+        color: #212529;
+        font-weight: 600;
+    }
+
+    .client-summary-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+    }
+
+    .client-summary-item {
+        padding: 10px;
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .client-summary-item:last-child {
+        border-bottom: none;
+    }
+
+    .client-summary-label {
+        font-weight: 500;
+        color: #6c757d;
+        font-size: 0.85rem;
+    }
+
+    .client-summary-value {
+        color: #212529;
+        font-size: 0.95rem;
+        margin-top: 3px;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .intervention-header {
+            padding: 15px;
+        }
+
+        .intervention-header h1 {
+            font-size: 1.3rem;
+        }
+
+        .form-step {
+            padding: 20px;
+        }
+
+        .form-progress-container {
+            padding: 15px 10px;
+        }
+
+        .form-step-label {
+            font-size: 0.75rem;
+        }
+
+        .form-step-circle {
+            width: 35px;
+            height: 35px;
+            font-size: 0.85rem;
+        }
+
+        .form-actions {
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .form-actions-left,
+        .form-actions-center,
+        .form-actions-right {
+            width: 100%;
+            text-align: center;
+        }
+
+        .btn-step {
+            width: 100%;
+        }
+
+        .client-summary-row {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media print {
+        .form-progress-container,
+        .form-actions {
+            display: none;
+        }
+
+        .form-step {
+            display: block !important;
+            page-break-inside: avoid;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="intervention-form-wrapper mb-5">
+    <!-- Header -->
+    <div class="intervention-header">
+        <h1>
+            <i data-feather="clipboard" class="me-2"></i>
+            Fiche d'intervention
+        </h1>
+        <div class="client-info-badge">
+            <span class="badge bg-light text-dark">{{ demande.service }}</span>
+            <span class="badge bg-light text-dark">{{ demande.type_techno }}</span>
+            <span class="badge bg-info">{{ demande.libelle_commune }}</span>
+        </div>
+    </div>
+
+    <!-- Progress Indicator -->
+    <div class="form-progress-container">
+        <div class="form-progress-bar">
+            <div class="form-progress-fill"></div>
+            
+            <div class="form-step-indicator active" data-step-indicator="1">
+                <div class="form-step-circle">1</div>
+                <span class="form-step-label">Infos générales</span>
+            </div>
+            
+            <div class="form-step-indicator" data-step-indicator="2">
+                <div class="form-step-circle">2</div>
+                <span class="form-step-label">Détails techniques</span>
+            </div>
+            
+            <div class="form-step-indicator" data-step-indicator="3">
+                <div class="form-step-circle">3</div>
+                <span class="form-step-label">Exécution</span>
+            </div>
+            
+            <div class="form-step-indicator" data-step-indicator="4">
+                <div class="form-step-circle">4</div>
+                <span class="form-step-label">Confirmation</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Form Steps -->
+    <form id="intervention-form" method="POST" action="{{ url_for('legacy.save_intervention', intervention_id=intervention.id) }}" enctype="multipart/form-data" class="form-steps-container">
+        {{ form.hidden_tag() }}
+        <!-- STEP 1: Informations Générales -->
+        <div class="form-step active" data-step="1">
+            <div class="form-step-title">
+                <h2>1. Informations Générales</h2>
+                <p>Informations client et localisation</p>
+            </div>
+
+            <!-- Client Summary -->
+            <div class="client-summary">
+                <h6>Résumé Client</h6>
+                <div class="client-summary-row">
+                    <div class="client-summary-item">
+                        <div class="client-summary-label">Client</div>
+                        <div class="client-summary-value">{{ demande.nom_client }} {{ demande.prenom_client }}</div>
+                    </div>
+                    <div class="client-summary-item">
+                        <div class="client-summary-label">Numéro</div>
+                        <div class="client-summary-value"><code>{{ demande.nd }}</code></div>
+                    </div>
+                    <div class="client-summary-item">
+                        <div class="client-summary-label">Service</div>
+                        <div class="client-summary-value">{{ demande.service }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section: Localisation -->
+            <div class="form-section">
+                <h5><i data-feather="map-pin" class="me-2"></i>Localisation</h5>
+                <div class="row">
+                    <div class="col-md-6 form-field-group">
+                        <label class="form-label">Commune</label>
+                        <input type="text" class="form-control" value="{{ demande.libelle_commune }}" disabled>
+                    </div>
+                    <div class="col-md-6 form-field-group">
+                        <label class="form-label">Quartier</label>
+                        <input type="text" class="form-control" value="{{ demande.libelle_quartier or 'Non précisé' }}" disabled>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 form-field-group">
+                        <label class="form-label">Latitude (GPS)*</label>
+                        <input type="number" class="form-control" name="gps_lat" step="0.0001" 
+                               placeholder="Exemple: 14.7167" required data-validation="gps">
+                        <small class="form-text">Format: -90 à 90</small>
+                    </div>
+                    <div class="col-md-6 form-field-group">
+                        <label class="form-label">Longitude (GPS)*</label>
+                        <input type="number" class="form-control" name="gps_long" step="0.0001" 
+                               placeholder="Exemple: -17.4674" required data-validation="gps">
+                        <small class="form-text">Format: -180 à 180</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section: Localisation Détaillée -->
+            <div class="form-section">
+                <h5><i data-feather="home" class="me-2"></i>Adresse et Contact</h5>
+                <div class="row">
+                    <div class="col-12 form-field-group">
+                        <label class="form-label">Adresse complète*</label>
+                        <input type="text" class="form-control" name="adresse_demande" required
+                               placeholder="Rue, numéro, bâtiment...">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-3 form-field-group">
+                        <label class="form-label">Étage</label>
+                        <input type="text" class="form-control" name="etage" placeholder="Rdc, 1er, 2e...">
+                    </div>
+                    <div class="col-md-3 form-field-group">
+                        <label class="form-label">Heure début*</label>
+                        <input type="time" class="form-control" name="h_debut" step="1" required>
+                    </div>
+                    <div class="col-md-3 form-field-group">
+                        <label class="form-label">Heure fin*</label>
+                        <input type="time" class="form-control" name="h_fin" step="1" required>
+                    </div>
+                    <div class="col-md-3 form-field-group">
+                        <label class="form-label">Date intervention*</label>
+                        <input type="date" class="form-control" name="date_intervention" required data-validation="date">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section: Contact -->
+            <div class="form-section">
+                <h5><i data-feather="phone" class="me-2"></i>Informations de Contact</h5>
+                <div class="row">
+                    <div class="col-md-6 form-field-group">
+                        <label class="form-label">Nom/Raison Sociale*</label>
+                        <input type="text" class="form-control" name="nom_raison_sociale" required>
+                    </div>
+                    <div class="col-md-6 form-field-group">
+                        <label class="form-label">Contact/Représentant*</label>
+                        <input type="text" class="form-control" name="contact" required>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 form-field-group">
+                        <label class="form-label">Téléphone 1*</label>
+                        <input type="tel" class="form-control" name="tel1" required data-validation="phone"
+                               placeholder="701234567 ou +221701234567">
+                    </div>
+                    <div class="col-md-6 form-field-group">
+                        <label class="form-label">Téléphone 2</label>
+                        <input type="tel" class="form-control" name="tel2" data-validation="phone"
+                               placeholder="701234567 ou +221701234567">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="form-actions">
+                <div class="form-actions-left">
+                    <span class="step-progress-text">Étape 1 sur 4</span>
+                </div>
+                <div class="form-actions-center">
+                    <span style="font-weight: 500; color: #495057;">Veuillez compléter tous les champs marqués *</span>
+                </div>
+                <div class="form-actions-right">
+                    <button type="button" class="btn btn-step btn-step-next" onclick="window.formManager.nextStep()">
+                        Suivant <i data-feather="arrow-right" style="width: 16px; height: 16px;"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 2: Détails Techniques -->
+        <div class="form-step" data-step="2">
+            <div class="form-step-title">
+                <h2>2. Détails Techniques</h2>
+                <p>Spécifications et configuration de la demande</p>
+            </div>
+
+            <!-- Section: Données techniques -->
+            <div class="form-section">
+                <h5><i data-feather="zap" class="me-2"></i>Données Techniques</h5>
+                <div class="row">
+                    <div class="col-md-4 form-field-group">
+                        <label class="form-label">Numéro de ligne*</label>
+                        <input type="text" class="form-control" name="n_ligne" required>
+                    </div>
+                    <div class="col-md-4 form-field-group">
+                        <label class="form-label">Numéro de demande*</label>
+                        <input type="text" class="form-control" name="n_demande" required>
+                    </div>
+                    <div class="col-md-4 form-field-group">
+                        <label class="form-label">Service demandé*</label>
+                        <select class="form-select" name="service_demande" required>
+                            <option value="">-- Sélectionner --</option>
+                            <option value="VLAN">VLAN</option>
+                            <option value="IP Fixe">IP Fixe</option>
+                            <option value="Routeur">Routeur</option>
+                            <option value="Sécurité">Sécurité</option>
+                            <option value="Support">Support</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section: Configuration -->
+            <div class="form-section">
+                <h5><i data-feather="settings" class="me-2"></i>Configuration</h5>
+                <div class="row">
+                    <div class="col-md-3 form-field-group">
+                        <label class="form-label">Technicien structure</label>
+                        <input type="text" class="form-control" name="technicien_structure">
+                    </div>
+                    <div class="col-md-3 form-field-group">
+                        <label class="form-label">Back-office structure</label>
+                        <input type="text" class="form-control" name="backoffice_structure">
+                    </div>
+                    <div class="col-md-3 form-field-group">
+                        <label class="form-label">Offre*</label>
+                        <select class="form-select" name="offre" required>
+                            <option value="">-- Sélectionner --</option>
+                            <option value="Basic">Basic</option>
+                            <option value="Standard">Standard</option>
+                            <option value="Premium">Premium</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 form-field-group">
+                        <label class="form-label">Débit*</label>
+                        <select class="form-select" name="debit" required>
+                            <option value="">-- Sélectionner --</option>
+                            <option value="2 Mbps">2 Mbps</option>
+                            <option value="5 Mbps">5 Mbps</option>
+                            <option value="10 Mbps">10 Mbps</option>
+                            <option value="20 Mbps">20 Mbps</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section: Type Installation -->
+            <div class="form-section">
+                <h5><i data-feather="package" class="me-2"></i>Type Installation</h5>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="type_mi" name="type_mi" value="1">
+                            <label class="form-check-label" for="type_mi">
+                                Type MI (Mise en place)
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="type_na" name="type_na" value="1">
+                            <label class="form-check-label" for="type_na">
+                                Type NA (Nouveau client)
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="type_ma" name="type_ma" value="1">
+                            <label class="form-check-label" for="type_ma">
+                                Type MA (Modification)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="form-actions">
+                <div class="form-actions-left">
+                    <button type="button" class="btn btn-step btn-step-prev" onclick="window.formManager.previousStep()">
+                        <i data-feather="arrow-left" style="width: 16px; height: 16px;"></i> Précédent
+                    </button>
+                </div>
+                <div class="form-actions-center">
+                    <span class="step-progress-text">Étape 2 sur 4</span>
+                </div>
+                <div class="form-actions-right">
+                    <button type="button" class="btn btn-step btn-step-next" onclick="window.formManager.nextStep()">
+                        Suivant <i data-feather="arrow-right" style="width: 16px; height: 16px;"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 3: Exécution -->
+        <div class="form-step" data-step="3">
+            <div class="form-step-title">
+                <h2>3. Exécution</h2>
+                <p>Détails de l'intervention et résultats</p>
+            </div>
+
+            <!-- Section: Exécution -->
+            <div class="form-section">
+                <h5><i data-feather="tool" class="me-2"></i>Détails Intervention</h5>
+                <div class="row">
+                    <div class="col-md-6 form-field-group">
+                        <label class="form-label">Technicien responsable*</label>
+                        <input type="text" class="form-control" name="technicien_responsable" required>
+                    </div>
+                    <div class="col-md-6 form-field-group">
+                        <label class="form-label">Statut*</label>
+                        <select class="form-select" name="statut" required>
+                            <option value="">-- Sélectionner --</option>
+                            <option value="En cours">En cours</option>
+                            <option value="Réussi">Réussi</option>
+                            <option value="Échoué">Échoué</option>
+                            <option value="Reporté">Reporté</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section: Résultats -->
+            <div class="form-section">
+                <h5><i data-feather="check-circle" class="me-2"></i>Résultats Obtenus</h5>
+                <div class="form-field-group">
+                    <label class="form-label">Observations et résultats*</label>
+                    <textarea class="form-control" name="observations" rows="6" required
+                              placeholder="Décrivez les résultats de l'intervention..."></textarea>
+                </div>
+            </div>
+
+            <!-- Section: Photos/Preuves -->
+            <div class="form-section">
+                <h5><i data-feather="camera" class="me-2"></i>Documentation</h5>
+                <div class="form-field-group">
+                    <label class="form-label">Photos de l'intervention</label>
+                    <input type="file" class="form-control" name="photos" multiple accept="image/*">
+                    <small class="form-text">Fichiers acceptés: JPG, PNG (Max 5MB chacun)</small>
+                </div>
+            </div>
+
+            <!-- Section: Signature -->
+            <div class="form-section">
+                <h5><i data-feather="edit" class="me-2"></i>Signatures</h5>
+                <div class="row">
+                    <div class="col-md-6 form-field-group">
+                        <label class="form-label">Signature du technicien*</label>
+                        <div class="signature-container">
+                            <canvas id="signatureEquipe" class="signature-pad"></canvas>
+                            <input type="hidden" id="signature_equipe" name="signature_equipe">
+                            <button type="button" class="btn btn-sm btn-secondary signature-clear" onclick="clearSignatureTechnicien()">
+                                Effacer
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-6 form-field-group">
+                        <label class="form-label">Signature du client*</label>
+                        <div class="signature-container">
+                            <canvas id="signatureClient" class="signature-pad"></canvas>
+                            <input type="hidden" id="signature_client" name="signature_client">
+                            <button type="button" class="btn btn-sm btn-secondary signature-clear" onclick="clearSignatureClient()">
+                                Effacer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="form-actions">
+                <div class="form-actions-left">
+                    <button type="button" class="btn btn-step btn-step-prev" onclick="window.formManager.previousStep()">
+                        <i data-feather="arrow-left" style="width: 16px; height: 16px;"></i> Précédent
+                    </button>
+                </div>
+                <div class="form-actions-center">
+                    <span class="step-progress-text">Étape 3 sur 4</span>
+                </div>
+                <div class="form-actions-right">
+                    <button type="button" class="btn btn-step btn-step-next" onclick="window.formManager.nextStep()">
+                        Suivant <i data-feather="arrow-right" style="width: 16px; height: 16px;"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 4: Confirmation -->
+        <div class="form-step" data-step="4">
+            <div class="form-step-title">
+                <h2>4. Confirmation et Validation</h2>
+                <p>Vérification finale avant soumission</p>
+            </div>
+
+            <!-- Info box -->
+            <div class="info-box">
+                <i data-feather="info" class="me-2"></i>
+                <strong>Veuillez vérifier les informations avant de soumettre.</strong>
+                Vous pouvez revenir aux étapes précédentes pour apporter des modifications.
+            </div>
+
+            <!-- Section: Résumé -->
+            <div class="form-section">
+                <h5><i data-feather="file-text" class="me-2"></i>Résumé de la Fiche</h5>
+                <div id="formSummary" class="row">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Section: Acceptation Conditions -->
+            <div class="form-section">
+                <h5><i data-feather="alert-circle" class="me-2"></i>Conditions</h5>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="confirm_data" name="confirm_data" required>
+                    <label class="form-check-label" for="confirm_data">
+                        Je confirme que les informations saisies sont exactes et complètes.
+                    </label>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" id="confirm_signature" name="confirm_signature" required>
+                    <label class="form-check-label" for="confirm_signature">
+                        Je confirme que la signature est valide et que je suis responsable de cette intervention.
+                    </label>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="form-actions">
+                <div class="form-actions-left">
+                    <button type="button" class="btn btn-step btn-step-prev" onclick="window.formManager.previousStep()">
+                        <i data-feather="arrow-left" style="width: 16px; height: 16px;"></i> Précédent
+                    </button>
+                </div>
+                <div class="form-actions-center">
+                    <span class="step-progress-text">Étape 4 sur 4 (Finale)</span>
+                </div>
+                <div class="form-actions-right">
+                    <button type="submit" class="btn btn-step btn-step-submit" onclick="event.preventDefault(); window.formManager.submit(event);">
+                        <i data-feather="check" style="width: 16px; height: 16px;"></i> Soumettre
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Initialize Form Manager -->
+<script>
+// Global signature clear functions - MUST be outside DOMContentLoaded
+function clearSignatureTechnicien() {
+    console.log('🔘 Effacer signature technicien cliqué');
+    
+    // Get the canvas element directly
+    const canvas = document.getElementById('signatureEquipe');
+    if (!canvas) {
+        console.error('❌ Canvas signatureEquipe non trouvé');
+        return;
+    }
+    
+    console.log('✓ Canvas trouvé:', canvas);
+    
+    // Try signature-manager's clearSignature with correct format
+    // It expects 'Survey', 'FT', or raw form name
+    if (typeof window.clearSignature === 'function') {
+        // Call with format that matches parseSignatureType logic
+        // For intervention + equipe: it expects 'Equipe' (capital) or 'equipe'
+        window.clearSignature('Equipe');  // This will trigger intervention -> equipe
+        console.log('✓ clearSignature appelé avec "Equipe"');
+        
+        // Force canvas redraw as backup
+        setTimeout(() => {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.fillStyle = 'rgb(255, 255, 255)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                console.log('✓ Canvas force-redessiner en blanc');
+            }
+        }, 50);
+        
+        return;
+    }
+    
+    console.error('❌ window.clearSignature non disponible');
+}
+
+function clearSignatureClient() {
+    console.log('🔘 Effacer signature client cliqué');
+    
+    // Get the canvas element directly
+    const canvas = document.getElementById('signatureClient');
+    if (!canvas) {
+        console.error('❌ Canvas signatureClient non trouvé');
+        return;
+    }
+    
+    console.log('✓ Canvas trouvé:', canvas);
+    
+    // Try signature-manager's clearSignature with correct format
+    if (typeof window.clearSignature === 'function') {
+        window.clearSignature('Client');  // This will trigger intervention -> client
+        console.log('✓ clearSignature appelé avec "Client"');
+        
+        // Force canvas redraw as backup
+        setTimeout(() => {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.fillStyle = 'rgb(255, 255, 255)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                console.log('✓ Canvas force-redessiner en blanc');
+            }
+        }, 50);
+        
+        return;
+    }
+    
+    console.error('❌ window.clearSignature non disponible');
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize form manager
+    window.formManager = new FormStepManager('#intervention-form', {
+        saveProgress: true,
+        autoFocus: true
+    });
+
+    // Add custom validation rules for Senegal phone
+    window.formManager.addValidationRule('tel1', (value, field) => {
+        if (!value) return 'Téléphone requis';
+        const cleanedValue = value.replace(/\s/g, '');
+        // Accept both +221XXXXXXXXX and XXXXXXXXX formats
+        if (!/^(\+221)?\d{9}$/.test(cleanedValue)) {
+            return 'Format: 701234567 ou +221701234567';
+        }
+        return null;
+    });
+
+    // Update form summary on step change - use direct call instead of .on()
+    const originalNextStep = window.formManager.nextStep;
+    window.formManager.nextStep = function() {
+        const result = originalNextStep.call(this);
+        if (this.currentStep === 3) {
+            // Resize signature pads when entering step 3 (signatures)
+            setTimeout(() => {
+                if (typeof resizeSignaturePads === 'function') {
+                    resizeSignaturePads('intervention');
+                    console.log('✓ Signature pads resized for step 3');
+                }
+            }, 50);
+        }
+        if (this.currentStep === 4) {
+            updateFormSummary();
+        }
+        updateProgressBar(this.currentStep);
+        return result;
+    };
+    
+    const originalPrevStep = window.formManager.previousStep;
+    window.formManager.previousStep = function() {
+        const result = originalPrevStep.call(this);
+        if (this.currentStep === 3) {
+            // Resize signature pads when going back to step 3
+            setTimeout(() => {
+                if (typeof resizeSignaturePads === 'function') {
+                    resizeSignaturePads('intervention');
+                    console.log('✓ Signature pads resized for step 3');
+                }
+            }, 50);
+        }
+        updateProgressBar(this.currentStep);
+        return result;
+    };
+
+    const originalGoToStep = window.formManager.goToStep;
+    window.formManager.goToStep = function(stepNumber) {
+        const result = originalGoToStep.call(this, stepNumber);
+        if (stepNumber === 3) {
+            // Resize signature pads when going directly to step 3 via indicators
+            setTimeout(() => {
+                if (typeof resizeSignaturePads === 'function') {
+                    resizeSignaturePads('intervention');
+                    console.log('✓ Signature pads resized for step 3 (via indicator)');
+                }
+            }, 50);
+        }
+        return result;
+    };
+
+    // Wait longer for signature-manager.js to initialize pads before accessing them
+    setTimeout(() => {
+        console.log('🔍 Checking for signature pads...');
+        console.log('State available:', !!window.state);
+        if (window.state) {
+            console.log('Intervention pads:', window.state.signaturePads?.intervention);
+        }
+    }, 1000);
+});
+
+function updateProgressBar(step) {
+    const progressFill = document.querySelector('.form-progress-fill');
+    const percentage = ((step - 1) / 3) * 100;
+    progressFill.style.width = percentage + '%';
+
+    // Update indicators
+    document.querySelectorAll('[data-step-indicator]').forEach((indicator, index) => {
+        const stepNum = index + 1;
+        indicator.classList.remove('active', 'completed');
+        if (stepNum === step) {
+            indicator.classList.add('active');
+        } else if (stepNum < step) {
+            indicator.classList.add('completed');
+        }
+    });
+}
+
+function updateFormSummary() {
+    const form = document.getElementById('intervention-form');
+    const formData = new FormData(form);
+    const summary = document.getElementById('formSummary');
+    
+    let html = '';
+    const fields = {
+        'nom_raison_sociale': 'Raison Sociale',
+        'contact': 'Contact',
+        'tel1': 'Téléphone',
+        'adresse_demande': 'Adresse',
+        'n_ligne': 'Numéro de ligne',
+        'offre': 'Offre',
+        'debit': 'Débit',
+        'observations': 'Observations'
+    };
+
+    for (const [key, label] of Object.entries(fields)) {
+        const value = formData.get(key);
+        if (value) {
+            html += `
+                <div class="col-md-6 mb-3">
+                    <div class="p-2" style="background: #f8f9fa; border-radius: 6px;">
+                        <small style="color: #6c757d; font-weight: 500;">${label}</small>
+                        <p class="mb-0" style="color: #212529;">${value}</p>
+                    </div>
+                </div>
+            `;
+        }
+    }
+    
+    summary.innerHTML = html || '<p class="text-muted">Aucune donnée</p>';
+}
+</script>
+
+{% endblock %}

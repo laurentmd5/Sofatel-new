@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="h3 mb-4 text-gray-800">Modifier le produit</h1>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Informations du produit</h6>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('stock.modifier_produit', id=produit.id) }}">
+                {{ form.hidden_tag() }}
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            {{ form.reference.label(class="form-control-label") }}
+                            {{ form.reference(class="form-control" + (' is-invalid' if form.reference.errors else ''))
+                            }}
+                            {% for error in form.reference.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.nom.label(class="form-control-label") }}
+                            {{ form.nom(class="form-control" + (' is-invalid' if form.nom.errors else '')) }}
+                            {% for error in form.nom.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.categorie_id.label(class="form-control-label") }}
+                            {{ form.categorie_id(class="form-control" + (' is-invalid' if form.categorie_id.errors else
+                            '')) }}
+                            {% for error in form.categorie_id.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.emplacement_id.label(class="form-control-label") }}
+                            {{ form.emplacement_id(class="form-control" + (' is-invalid' if form.emplacement_id.errors
+                            else '')) }}
+                            {% for error in form.emplacement_id.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.description.label(class="form-control-label") }}
+                            {{ form.description(class="form-control" + (' is-invalid' if form.description.errors else
+                            ''), rows=3) }}
+                            {% for error in form.description.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="form-row">
+                            <div class="form-group col-md-6">
+                                {{ form.quantite.label(class="form-control-label") }}
+                                <div class="input-group">
+                                    {{ form.quantite(class="form-control" + (' is-invalid' if form.quantite.errors else
+                                    '')) }}
+                                    <div class="input-group-append">
+                                        <span class="input-group-text">{{ produit.unite_mesure if produit.unite_mesure
+                                            else 'unité' }}</span>
+                                    </div>
+                                    {% for error in form.quantite.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <div class="form-group col-md-6">
+                                {{ form.stock_min.label(class="form-control-label") }}
+                                <div class="input-group">
+                                    {{ form.stock_min(class="form-control" + (' is-invalid' if
+                                    form.stock_min.errors else '')) }}
+                                    <div class="input-group-append">
+                                        <span class="input-group-text">{{ produit.unite_mesure if produit.unite_mesure
+                                            else 'unité' }}</span>
+                                    </div>
+                                    {% for error in form.stock_min.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.unite_mesure.label(class="form-control-label") }}
+                            {{ form.unite_mesure(class="form-control" + (' is-invalid' if form.unite_mesure.errors else
+                            '')) }}
+                            {% for error in form.unite_mesure.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.prix_vente.label(class="form-control-label") }}
+                            <div class="input-group">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text">FCFA</span>
+                                </div>
+                                {{ form.prix_vente(class="form-control" + (' is-invalid' if form.prix_vente.errors
+                                else ''), step="0.01") }}
+                                {% for error in form.prix_vente.errors %}
+                                <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.prix_achat.label(class="form-control-label") }}
+                            <div class="input-group">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text">FCFA</span>
+                                </div>
+                                {{ form.prix_achat(class="form-control" + (' is-invalid' if form.prix_achat.errors
+                                else ''), step="0.01") }}
+                                {% for error in form.prix_achat.errors %}
+                                <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.tva.label(class="form-control-label") }} (%)
+                            {{ form.tva(class="form-control" + (' is-invalid' if form.tva.errors else ''), step="0.01")
+                            }}
+                            {% for error in form.tva.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.fournisseur_id.label(class="form-control-label") }}
+                            {{ form.fournisseur_id(class="form-control" + (' is-invalid' if form.fournisseur_id.errors
+                            else '')) }}
+                            {% for error in form.fournisseur_id.errors %}
+                            <div class="invalid-feedback">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.stock_max.label(class="form-control-label") }}
+                            <div class="input-group">
+                                {{ form.stock_max(class="form-control" + (' is-invalid' if form.stock_max.errors else
+                                '')) }}
+                                <div class="input-group-append">
+                                    <span class="input-group-text">{{ produit.unite_mesure if produit.unite_mesure
+                                        else 'unité' }}</span>
+                                </div>
+                                {% for error in form.stock_max.errors %}
+                                <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <div class="custom-control custom-checkbox">
+                                {{ form.actif(class="custom-control-input" + (' is-invalid' if form.actif.errors else
+                                '')) }}
+                                <label class="custom-control-label" for="actif">{{ form.actif.label.text }}</label>
+                                {% for error in form.actif.errors %}
+                                <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <!-- Supprimé le champ date_achat qui n'existe pas dans le modèle -->
+                    </div>
+
+                    <div class="col-md-6">
+                        <!-- Supprimé le champ date_peremption qui n'existe pas dans le modèle -->
+                    </div>
+                </div>
+
+                <div class="form-group mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Enregistrer les modifications
+                    </button>
+                    <a href="{{ url_for('stock.gestion_stock') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Annuler
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Section historique des mouvements -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Historique des mouvements</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered" id="historiqueMouvements" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Quantité</th>
+                            <th>Utilisateur</th>
+                            <th>Commentaire</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for mouvement in produit.mouvements|sort(attribute='date_mouvement', reverse=true) %}
+                        <tr>
+                            <td>{{ mouvement.date_mouvement.strftime('%d/%m/%Y %H:%M') }}</td>
+                            <td>
+                                {% if mouvement.type_mouvement == 'entree' %}
+                                <span class="badge badge-success">Entrée</span>
+                                {% else %}
+                                <span class="badge badge-danger">Sortie</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ mouvement.quantite }} {{ produit.unite_mesure if produit.unite_mesure else 'unité' }}
+                            </td>
+                            <td>{{ mouvement.utilisateur.username if mouvement.utilisateur else 'Système' }}</td>
+                            <td>{{ mouvement.commentaire|default('', true) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center">Aucun mouvement enregistré pour ce produit</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    $(document).ready(function () {
+        // Initialisation des sélecteurs de date
+        $('.date').datetimepicker({
+            format: 'DD/MM/YYYY',
+            locale: 'fr',
+            buttons: {
+                showToday: true,
+                showClear: true,
+                showClose: true
+            }
+        });
+
+        // Initialisation de la DataTable pour l'historique
+        $('#historiqueMouvements').DataTable({
+            language: {
+                url: '//cdn.datatables.net/plug-ins/1.10.25/i18n/French.json'
+            },
+            order: [[0, 'desc']],
+            pageLength: 10,
+            responsive: true
+        });
+    });
+</script>
+{% endblock %}

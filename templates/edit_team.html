@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Modifier l'équipe - Sofatelcom{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-sofatelcom-primary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="edit" class="me-2"></i>
+                    Modifier l'équipe : {{ equipe.nom_equipe }}
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="editTeamForm">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="mb-3">
+                        <p class="text-muted">
+                            <strong>Nom de l'équipe:</strong> {{ equipe.nom_equipe }}<br>
+                            <strong>Date de création:</strong> {{ equipe.date_creation.strftime('%d/%m/%Y') }}
+                        </p>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            {{ form.zone.label(class="form-label") }}
+                            {{ form.zone(class="form-select") }}
+                            {% if form.zone.errors %}
+                                <div class="text-danger small mt-1">
+                                    {% for error in form.zone.errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            {{ form.technologies.label(class="form-label") }}
+                            {{ form.technologies(class="form-select") }}
+                            {% if form.technologies.errors %}
+                                <div class="text-danger small mt-1">
+                                    {% for error in form.technologies.errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            {{ form.service.label(class="form-label") }}
+                            {{ form.service(class="form-select") }}
+                            <div class="form-text">Sélectionnez "SAV + Production" pour les deux services</div>
+                            {% if form.service.errors %}
+                                <div class="text-danger small mt-1">
+                                    {% for error in form.service.errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.prestataire.label(class="form-label") }}
+                            {{ form.prestataire(class="form-select", id="prestataire-select") }}
+                            <div class="form-text">Sélectionnez le prestataire si applicable</div>
+                            {% if form.prestataire.errors %}
+                                <div class="text-danger small mt-1">
+                                    {% for error in form.prestataire.errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6 mb-3" id="prestataire-autre-div" style="display:none;">
+                            <label for="prestataire-autre" class="form-label">Nom du prestataire</label>
+                            <input type="text" name="prestataire_autre" id="prestataire-autre" class="form-control" maxlength="50" value="{{ prestataire_autre or '' }}">
+                            <div class="form-text">Saisissez le nom du prestataire</div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('teams.manage_team', equipe_id=equipe.id) }}" class="btn btn-secondary">
+                            <i data-feather="arrow-left" class="me-2"></i>
+                            Annuler
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i data-feather="save" class="me-2"></i>
+                            Enregistrer les modifications
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-8 mx-auto">
+        <div class="alert alert-info">
+            <h6 class="alert-heading">
+                <i data-feather="info" class="me-2"></i>
+                Informations importantes
+            </h6>
+            <ul class="mb-0">
+                <li>La modification de la zone affectera les futures affectations automatiques</li>
+                <li>Les changements de technologies impacteront la compatibilité des interventions</li>
+                <li>Le service peut être étendu pour couvrir SAV et Production simultanément</li>
+                <li>Le prestataire peut être ajouté ou retiré selon les besoins</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Activer les icônes Feather
+    feather.replace();
+    
+    // Gérer l'affichage du champ "Autres" pour le prestataire
+    document.addEventListener('DOMContentLoaded', function() {
+        const prestataireSelect = document.getElementById('prestataire-select');
+        const autreDiv = document.getElementById('prestataire-autre-div');
+        
+        if (prestataireSelect) {
+            // Vérifier l'état initial au chargement
+            if (prestataireSelect.value === 'Autres') {
+                autreDiv.style.display = '';
+            }
+            
+            // Écouter les changements
+            prestataireSelect.addEventListener('change', function() {
+                if (this.value === 'Autres') {
+                    autreDiv.style.display = '';
+                } else {
+                    autreDiv.style.display = 'none';
+                    document.getElementById('prestataire-autre').value = '';
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

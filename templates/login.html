@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Connexion - Sofatelcom PUR{% endblock %}
+
+{% block content %}
+<style>
+    body {
+        background: url('https://sonatel.sn/wp-content/uploads/2024/05/Rapport-annuel-sonatel_visuel-1-scaled.jpg') no-repeat center center fixed;
+        background-size: cover;
+    }
+    .card {
+        background: rgba(255,255,255,0.96);
+        border-radius: 1rem;
+    }
+</style>
+<div class="row justify-content-center min-vh-100 align-items-center">
+    <div class="col-md-6 col-lg-4">
+        <div class="card shadow-lg border-0">
+            <div class="card-header bg-sofatelcom-primary text-white text-center py-4">
+                <i data-feather="wifi" class="mb-3" style="width: 48px; height: 48px;"></i>
+                <h3 class="mb-0">Sofatelcom PUR</h3>
+                <small>Gestion des interventions techniques</small>
+            </div>
+            
+            <div class="card-body p-4">
+                <form method="POST">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="mb-3">
+                        {{ form.username.label(class="form-label") }}
+                        {{ form.username(class="form-control form-control-lg") }}
+                        {% if form.username.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.username.errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-4">
+                        {{ form.password.label(class="form-label") }}
+                        {{ form.password(class="form-control form-control-lg") }}
+                        {% if form.password.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.password.errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <button type="submit" class="btn btn-sofatelcom-primary btn-lg w-100">
+                        <i data-feather="log-in" class="me-2"></i>
+                        Se connecter
+                    </button>
+                </form>
+                
+                <div class="mt-4 text-center">
+                    <small class="text-muted">
+                        <a href="{{ url_for('reset_password_request') }}">Mot de passe oublié ?</a>
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

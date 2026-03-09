@@ -1,0 +1,575 @@
+{% extends "base.html" %}
+
+{% block title %}Historique des activités - Sofatelcom PUR{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2 class="mb-0">
+                    <i data-feather="activity" class="me-2"></i>
+                    Historique des activités
+                </h2>
+                <div class="d-flex gap-2">
+                    {% if current_user.role in ['chef_pur', 'admin'] %}
+                    <a href="{{ url_for('stock.gestion_stock') }}" class="btn btn-outline-primary d-flex align-items-center">
+                        <i data-feather="archive" class="me-2"></i> Gestion de stock
+                    </a>
+                    <a href="{{ url_for('dashboard_rh') }}" class="btn btn-outline-secondary d-flex align-items-center">
+                        <i data-feather="users" class="me-2"></i> Dashboard RH
+                    </a>
+                    {% endif %}
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i data-feather="search"></i>
+                        </span>
+                        <input type="text" id="searchInput" class="form-control" placeholder="Rechercher...">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-3">
+            <div class="row align-items-center">
+                <div class="col">
+                    <small class="text-muted">
+                        Affichage de {{ logs.items|length }} sur {{ logs.total }} activités
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- En-tête fixe du tableau -->
+        <div class="table-header-fixed">
+            <table class="table mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="px-4" data-bs-toggle="tooltip" data-bs-placement="top" title="Date et heure de l'activité">
+                            <div class="d-flex align-items-center gap-2">
+                                <i data-feather="calendar"></i>
+                                <span class="header-text">Date/Heure</span>
+                            </div>
+                        </th>
+                        <th data-bs-toggle="tooltip" data-bs-placement="top" title="Utilisateur ayant effectué l'action">
+                            <div class="d-flex align-items-center gap-2">
+                                <i data-feather="user"></i>
+                                <span class="header-text">Utilisateur</span>
+                            </div>
+                        </th>
+                        <th data-bs-toggle="tooltip" data-bs-placement="top" title="Rôle de l'utilisateur">
+                            <div class="d-flex align-items-center gap-2">
+                                <i data-feather="shield"></i>
+                                <span class="header-text">Rôle</span>
+                            </div>
+                        </th>
+                        <th data-bs-toggle="tooltip" data-bs-placement="top" title="Type d'action effectuée">
+                            <div class="d-flex align-items-center gap-2">
+                                <i data-feather="activity"></i>
+                                <span class="header-text">Action</span>
+                            </div>
+                        </th>
+                        <th data-bs-toggle="tooltip" data-bs-placement="top" title="Module concerné">
+                            <div class="d-flex align-items-center gap-2">
+                                <i data-feather="box"></i>
+                                <span class="header-text">Module</span>
+                            </div>
+                        </th>
+                        <th data-bs-toggle="tooltip" data-bs-placement="top" title="Entité affectée">
+                            <div class="d-flex align-items-center gap-2">
+                                <i data-feather="file-text"></i>
+                                <span class="header-text">Entité</span>
+                            </div>
+                        </th>
+                        <th data-bs-toggle="tooltip" data-bs-placement="top" title="Adresse IP de l'utilisateur">
+                            <div class="d-flex align-items-center gap-2">
+                                <i data-feather="globe"></i>
+                                <span class="header-text">IP</span>
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+            </table>
+        </div>
+
+        <!-- Contenu défilant du tableau -->
+        <div class="table-content-scrollable">
+            <table class="table mb-0" id="activitiesTable">
+                <tbody>
+                    {% for log in logs.items %}
+                    <tr class="activity-row" 
+                        data-log-id="{{ log.id }}"
+                        data-timestamp="{{ log.timestamp.strftime('%d/%m/%Y %H:%M:%S') }}"
+                        data-user="{{ log.user.prenom }} {{ log.user.nom }} ({{ log.user.username }})"
+                        data-role="{{ log.user.role|title }}"
+                        data-action="{{ log.action }}"
+                        data-module="{{ log.module }}"
+                        data-entity="{{ log.entity_name or '-' }}"
+                        data-entity-id="{{ log.entity_id or '' }}"
+                        data-ip="{{ log.ip_address or '-' }}"
+                        data-details='{{ log.details|tojson|safe }}'
+                        style="cursor: pointer;">
+                        <td class="px-4 col-date">
+                            <div class="d-flex align-items-center">
+                                <div class="me-2">
+                                    {% if log.action == 'login' %}
+                                        <i data-feather="log-in" class="text-success"></i>
+                                    {% elif log.action == 'logout' %}
+                                        <i data-feather="log-out" class="text-danger"></i>
+                                    {% elif log.action == 'create' %}
+                                        <i data-feather="plus-circle" class="text-primary"></i>
+                                    {% elif log.action == 'update' %}
+                                        <i data-feather="edit" class="text-warning"></i>
+                                    {% elif log.action == 'delete' %}
+                                        <i data-feather="trash-2" class="text-danger"></i>
+                                    {% elif log.action == 'validate' %}
+                                        <i data-feather="check-circle" class="text-success"></i>
+                                    {% elif log.action == 'reject' %}
+                                        <i data-feather="x-circle" class="text-danger"></i>
+                                    {% elif log.action == 'import' %}
+                                        <i data-feather="upload" class="text-info"></i>
+                                    {% elif log.action == 'delete_import' %}
+                                        <i data-feather="trash-2" class="text-danger"></i>
+                                    {% elif log.action == 'cloture' %}
+                                        <i data-feather="x-circle" class="text-warning"></i>
+                                    {% elif log.action == 'report' %}
+                                        <i data-feather="clock" class="text-info"></i>    
+                                    {% elif log.action == 'assign' %}
+                                        <i data-feather="user-check" class="text-primary"></i>
+                                    {% elif log.action == 'complete' %}
+                                        <i data-feather="check-square" class="text-success"></i>
+                                    {% elif log.action == 'add_member' %}
+                                        <i data-feather="user-plus" class="text-primary"></i>
+                                    {% elif log.action == 'remove_member' %}
+                                        <i data-feather="user-minus" class="text-danger"></i>
+                                    {% elif log.action == 'toggle_status' %}
+                                        <i data-feather="toggle-right" class="text-warning"></i>
+                                    {% else %}
+                                        <i data-feather="activity" class="text-secondary"></i>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <div class="fw-bold">{{ log.timestamp.strftime('%d/%m/%Y') }}</div>
+                                    <small class="text-muted">{{ log.timestamp.strftime('%H:%M:%S') }}</small>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="col-user">
+                            <div class="fw-bold">{{ log.user.prenom }} {{ log.user.nom }}</div>
+                            <small class="text-muted">{{ log.user.username }}</small>
+                        </td>
+                        <td class="col-role">
+                            <span class="badge bg-light text-dark">{{ log.user.role|title }}</span>
+                        </td>
+                        <td class="col-action">
+                            {% if log.action == 'login' %}
+                                <span class="badge bg-soft-success text-success">Connexion</span>
+                            {% elif log.action == 'logout' %}
+                                <span class="badge bg-soft-danger text-danger">Déconnexion</span>
+                            {% elif log.action == 'create' %}
+                                <span class="badge bg-soft-primary text-primary">Création</span>
+                            {% elif log.action == 'update' %}
+                                <span class="badge bg-soft-warning text-warning">Modification</span>
+                            {% elif log.action == 'delete' %}
+                                <span class="badge bg-soft-danger text-danger">Suppression</span>
+                            {% elif log.action == 'validate' %}
+                                <span class="badge bg-soft-success text-success">Validation</span>
+                            {% elif log.action == 'reject' %}
+                                <span class="badge bg-soft-danger text-danger">Rejet</span>
+                            {% elif log.action == 'import' %}
+                                <span class="badge bg-soft-info text-info">Import</span>
+                            {% elif log.action == 'delete_import' %}
+                                <span class="badge bg-soft-danger text-danger">Suppression import</span>
+                            {% elif log.action == 'cloture' %}
+                                <span class="badge bg-soft-warning text-warning">Clôture demande sans interv</span>
+                            {% elif log.action == 'report' %}
+                                <span class="badge bg-soft-info text-info">Report demande</span>        
+                            {% elif log.action == 'assign' %}
+                                <span class="badge bg-soft-primary text-primary">Affectation</span>
+                            {% elif log.action == 'complete' %}
+                                <span class="badge bg-soft-success text-success">Finalisation</span>
+                            {% elif log.action == 'add_member' %}
+                                <span class="badge bg-soft-primary text-primary">Ajout membre</span>
+                            {% elif log.action == 'remove_member' %}
+                                <span class="badge bg-soft-danger text-danger">Suppression membre</span>
+                            {% elif log.action == 'toggle_status' %}
+                                <span class="badge bg-soft-warning text-warning">Changement statut</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ log.action|title }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="col-module">
+                            <span class="badge bg-light text-dark">{{ log.module|title }}</span>
+                        </td>
+                        <td class="col-entity">
+                            {% if log.entity_name %}
+                                <div class="fw-bold">{{ log.entity_name }}</div>
+                                {% if log.entity_id %}
+                                    <small class="text-muted">ID: {{ log.entity_id }}</small>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="col-ip">
+                            <code class="small">{{ log.ip_address or '-' }}</code>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card-footer bg-white py-3">
+            <nav>
+                <ul class="pagination pagination-sm justify-content-center mb-0">
+                    <li class="page-item {% if not logs.has_prev %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('connection_history', page=logs.prev_num) if logs.has_prev else '#' }}">
+                            <i data-feather="chevron-left" style="width: 16px; height: 16px;"></i>
+                        </a>
+                    </li>
+                    {% for page_num in logs.iter_pages(left_edge=2, right_edge=2, left_current=2, right_current=3) %}
+                        {% if page_num %}
+                            <li class="page-item {% if page_num == logs.page %}active{% endif %}">
+                                <a class="page-link" href="{{ url_for('connection_history', page=page_num) }}">{{ page_num }}</a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+                    <li class="page-item {% if not logs.has_next %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('connection_history', page=logs.next_num) if logs.has_next else '#' }}">
+                            <i data-feather="chevron-right" style="width: 16px; height: 16px;"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+<!-- Modal pour les détails de l'activité-->
+<div class="modal fade" id="activityDetailsModal" tabindex="-1" aria-labelledby="activityDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="activityDetailsModalLabel">
+                    <i data-feather="info" class="me-2"></i>
+                    Détails de l'activité
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="border rounded p-3">
+                            <h6 class="text-primary mb-3">
+                                <i data-feather="user" class="me-2"></i>
+                                Utilisateur
+                            </h6>
+                            <p class="mb-1"><strong>Nom:</strong> <span id="modal-user"></span></p>
+                            <p class="mb-1"><strong>Rôle:</strong> <span id="modal-role"></span></p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="border rounded p-3">
+                            <h6 class="text-info mb-3">
+                                <i data-feather="activity" class="me-2"></i>
+                                Action
+                            </h6>
+                            <p class="mb-1"><strong>Action:</strong> <span id="modal-action"></span></p>
+                            <p class="mb-1"><strong>Module:</strong> <span id="modal-module"></span></p>
+                            <p class="mb-1"><strong>Date/Heure:</strong> <span id="modal-timestamp"></span></p>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="border rounded p-3">
+                            <h6 class="text-success mb-3">
+                                <i data-feather="target" class="me-2"></i>
+                                Entité concernée
+                            </h6>
+                            <p class="mb-1"><strong>Nom:</strong> <span id="modal-entity"></span></p>
+                            <p class="mb-1"><strong>ID:</strong> <span id="modal-entity-id"></span></p>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="border rounded p-3">
+                            <h6 class="text-warning mb-3">
+                                <i data-feather="globe" class="me-2"></i>
+                                Informations techniques
+                            </h6>
+                            <p class="mb-1"><strong>Adresse IP:</strong> <code id="modal-ip"></code></p>
+                        </div>
+                    </div>
+                    <div class="col-12" id="details-section" style="display: none;">
+                        <div class="border rounded p-3">
+                            <h6 class="text-secondary mb-3">
+                                <i data-feather="file-text" class="me-2"></i>
+                                Détails supplémentaires
+                            </h6>
+                            <div id="modal-details" class="small"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Couleurs des badges */
+.bg-soft-success { background-color: rgba(25, 135, 84, 0.1) !important; }
+.bg-soft-danger { background-color: rgba(220, 53, 69, 0.1) !important; }
+.bg-soft-primary { background-color: rgba(13, 110, 253, 0.1) !important; }
+.bg-soft-warning { background-color: rgba(255, 193, 7, 0.1) !important; }
+.bg-soft-info { background-color: rgba(13, 202, 240, 0.1) !important; }
+
+/* Style pour l'en-tête fixe */
+.table-header-fixed {
+    position: sticky;
+    top: 0;
+    background: white;
+    z-index: 1000;
+    border-bottom: 2px solid #dee2e6;
+}
+
+/* Style pour le contenu défilant */
+.table-content-scrollable {
+    height: calc(100vh - 350px);
+    overflow-y: auto;
+    border-top: none;
+}
+
+/* Alignement des colonnes */
+.table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.col-date { width: 180px; }
+.col-user { width: 200px; }
+.col-role { width: 120px; }
+.col-action { width: 150px; }
+.col-module { width: 150px; }
+.col-entity { width: 200px; }
+.col-ip { width: 150px; }
+
+/* Styles communs */
+.table th,
+.table td {
+    padding: 1rem 0.75rem;
+    vertical-align: middle;
+}
+
+.table tbody tr:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+}
+
+/* Styles pour les tooltips */
+.tooltip {
+    position: fixed;
+    z-index: 1100;
+}
+
+.tooltip .tooltip-inner {
+    background-color: #2c3e50;
+    color: white;
+    padding: 8px 12px;
+    font-size: 0.875rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialisation des tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl, {
+            container: 'body',
+            trigger: 'hover'
+        });
+    });
+
+    // Synchronisation du défilement horizontal
+    const contentDiv = document.querySelector('.table-content-scrollable');
+    const headerDiv = document.querySelector('.table-header-fixed');
+    if (contentDiv && headerDiv) {
+        contentDiv.addEventListener('scroll', function() {
+            headerDiv.scrollLeft = this.scrollLeft;
+        });
+    }
+
+    // Gestion du scroll pour les tooltips
+    const tableContainer = document.querySelector('.table-container');
+    if (tableContainer) {
+        tableContainer.addEventListener('scroll', function() {
+            tooltipList.forEach(tooltip => tooltip.hide());
+        });
+    }
+
+    // Recherche dans le tableau
+    const searchInput = document.getElementById('searchInput');
+    const table = document.getElementById('activitiesTable');
+    if (searchInput && table) {
+        searchInput.addEventListener('keyup', function() {
+            const searchText = this.value.toLowerCase();
+            const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+            
+            for (let row of rows) {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(searchText) ? '' : 'none';
+            }
+        });
+    }
+
+    // Initialisation du modal
+    const modal = new bootstrap.Modal(document.getElementById('activityDetailsModal'));
+
+    // Gestion des clics sur les lignes
+    document.querySelectorAll('.activity-row').forEach(row => {
+        row.addEventListener('click', function() {
+            const data = {
+                user: this.getAttribute('data-user'),
+                role: this.getAttribute('data-role'),
+                action: this.getAttribute('data-action'),
+                module: this.getAttribute('data-module'),
+                entity: this.getAttribute('data-entity'),
+                entityId: this.getAttribute('data-entity-id'),
+                ip: this.getAttribute('data-ip'),
+                timestamp: this.getAttribute('data-timestamp'),
+                details: this.getAttribute('data-details')
+            };
+
+            updateModal(data);
+            modal.show();
+        });
+    });
+
+    // Fonction pour mettre à jour le modal
+    function updateModal(data) {
+        document.getElementById('modal-user').textContent = data.user;
+        document.getElementById('modal-role').textContent = data.role;
+        document.getElementById('modal-action').textContent = formatAction(data.action);
+        document.getElementById('modal-module').textContent = formatModule(data.module);
+        document.getElementById('modal-entity').textContent = data.entity;
+        document.getElementById('modal-entity-id').textContent = data.entityId || '-';
+        document.getElementById('modal-ip').textContent = data.ip;
+        document.getElementById('modal-timestamp').textContent = data.timestamp;
+
+        handleDetails(data.details);
+    }
+
+    // Gestion des détails supplémentaires
+    function handleDetails(details) {
+        const detailsSection = document.getElementById('details-section');
+        const detailsDiv = document.getElementById('modal-details');
+
+        if (details && details !== 'null' && details !== '{}' && details !== '""') {
+            try {
+                let parsedDetails = JSON.parse(details);
+                if (typeof parsedDetails === 'string' && parsedDetails.startsWith('{')) {
+                    parsedDetails = JSON.parse(parsedDetails);
+                }
+                detailsDiv.innerHTML = formatDetails(parsedDetails);
+                detailsSection.style.display = 'block';
+            } catch (e) {
+                console.error('Erreur parsing détails:', e);
+                detailsSection.style.display = 'none';
+            }
+        } else {
+            detailsSection.style.display = 'none';
+        }
+    }
+
+    // Formatage des actions
+    function formatAction(action) {
+        const actionMap = {
+            'login': 'Connexion',
+            'logout': 'Déconnexion',
+            'create': 'Création',
+            'update': 'Modification',
+            'delete': 'Suppression',
+            'validate': 'Validation',
+            'reject': 'Rejet',
+            'import': 'Import',
+            'delete_import': 'Suppression d\'import',
+            'assign': 'Affectation',
+            'complete': 'Finalisation',
+            'add_member': 'Ajout de membre',
+            'remove_member': 'Suppression de membre',
+            'toggle_status': 'Changement de statut',
+            'auto_dispatch': 'Dispatching automatique'
+        };
+        return actionMap[action] || action.charAt(0).toUpperCase() + action.slice(1);
+    }
+
+    // Formatage des modules
+    function formatModule(module) {
+        const moduleMap = {
+            'auth': 'Authentification',
+            'users': 'Utilisateurs',
+            'teams': 'Équipes',
+            'demandes': 'Demandes',
+            'interventions': 'Interventions',
+            'surveys': 'Surveys',
+            'fiches_techniques': 'Fiches Techniques'
+        };
+        return moduleMap[module] || module.charAt(0).toUpperCase() + module.slice(1);
+    }
+
+    // Formatage des détails JSON
+    function formatDetails(detailsObj) {
+        if (typeof detailsObj === 'string') {
+            return `<pre class="bg-light p-2 rounded small">${detailsObj}</pre>`;
+        }
+
+        let html = '<div class="row g-2">';
+        for (const [key, value] of Object.entries(detailsObj)) {
+            const formattedKey = key.charAt(0).toUpperCase() + key.replace(/_/g, ' ').slice(1);
+            let formattedValue = formatValue(key, value);
+            
+            html += `
+                <div class="col-md-6">
+                    <div class="p-2 border rounded">
+                        <small class="text-muted d-block">${formattedKey}</small>
+                        <strong>${formattedValue}</strong>
+                    </div>
+                </div>
+            `;
+        }
+        html += '</div>';
+        return html;
+    }
+
+    // Formatage des valeurs spécifiques
+    function formatValue(key, value) {
+        if (value === null || value === undefined) return '-';
+        
+        if (key === 'ip_address') return `<code>${value}</code>`;
+        if (typeof value === 'boolean') return value ? 
+            '<span class="badge bg-success">Oui</span>' : 
+            '<span class="badge bg-danger">Non</span>';
+        if (key.includes('date') && value) {
+            try {
+                return new Date(value).toLocaleString('fr-FR');
+            } catch (e) {
+                return value;
+            }
+        }
+        return value.toString();
+    }
+
+    // Réinitialisation des icônes Feather
+    feather.replace();
+});
+</script>
+{% endblock %}

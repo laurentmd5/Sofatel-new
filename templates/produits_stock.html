@@ -1,0 +1,760 @@
+{% extends "base.html" %} {% block title %}Produits en Stock - Gestion des
+Stocks{% endblock %} {% block content %}
+<script>
+  // Add magasinier class to body if user is magasinier
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () {
+      if ("{{ current_user.role }}" === "magasinier") {
+        document.body.classList.add("magasinier-user");
+      }
+    });
+  } else {
+    if ("{{ current_user.role }}" === "magasinier") {
+      document.body.classList.add("magasinier-user");
+    }
+  }
+</script>
+<style>
+  .page-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 2rem 0;
+    margin-bottom: 2rem;
+    border-radius: 0 0 10px 10px;
+  }
+
+  .page-header h1 {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 700;
+  }
+
+  .page-header p {
+    margin: 0.5rem 0 0 0;
+    opacity: 0.9;
+    font-size: 1rem;
+  }
+
+  .stat-boxes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .stat-box {
+    background: white;
+    border-radius: 10px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .stat-box-icon {
+    font-size: 2.5rem;
+    width: 60px;
+    height: 60px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .stat-box-icon.info {
+    background: rgba(23, 162, 184, 0.1);
+    color: #17a2b8;
+  }
+
+  .stat-box-content h3 {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #666;
+    text-transform: uppercase;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+
+  .stat-box-content .value {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0.5rem 0 0 0;
+    color: #000;
+  }
+
+  .filters-section {
+    background: white;
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  }
+
+  .filters-section h5 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    font-weight: 600;
+    color: #333;
+  }
+
+  .filter-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+    align-items: end;
+  }
+
+  .form-group label {
+    font-weight: 500;
+    color: #555;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .form-control,
+  .form-select {
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    padding: 0.6rem 0.9rem;
+  }
+
+  .form-control:focus,
+  .form-select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+
+  .btn {
+    padding: 0.6rem 1.2rem;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: white;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    color: white;
+  }
+
+  .btn-outline-secondary {
+    border: 1px solid #ddd;
+    color: #666;
+    background: transparent;
+  }
+
+  .btn-outline-secondary:hover {
+    background: #f8f9fa;
+    border-color: #999;
+  }
+
+  .btn-sm {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.85rem;
+  }
+
+  .table-responsive {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .table {
+    margin-bottom: 0;
+    width: 100%;
+  }
+
+  .table thead {
+    background: #f8f9fa;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+  }
+
+  .table th {
+    padding: 1.2rem;
+    border: none;
+    vertical-align: middle;
+    color: #555;
+  }
+
+  .table tbody tr {
+    border-bottom: 1px solid #f0f0f0;
+    transition: all 0.2s ease;
+  }
+
+  .table tbody tr:hover {
+    background: rgba(102, 126, 234, 0.03);
+  }
+
+  .table td {
+    padding: 1.2rem;
+    vertical-align: middle;
+  }
+
+  .badge {
+    padding: 0.5rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+
+  .badge-success {
+    background: rgba(40, 167, 69, 0.1);
+    color: #28a745;
+  }
+
+  .badge-warning {
+    background: rgba(255, 193, 7, 0.1);
+    color: #ffc107;
+  }
+
+  .badge-info {
+    background: rgba(23, 162, 184, 0.1);
+    color: #17a2b8;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1.5rem;
+    color: #999;
+  }
+
+  .empty-state-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  .empty-state h3 {
+    color: #666;
+    margin-bottom: 0.5rem;
+  }
+
+  .breadcrumb {
+    background: transparent;
+    padding: 0;
+    margin-bottom: 1.5rem;
+  }
+
+  .breadcrumb-item.active {
+    color: #667eea;
+  }
+
+  .action-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .loading-spinner {
+    display: none;
+    text-align: center;
+    padding: 2rem;
+  }
+
+  .loading-spinner.show {
+    display: block;
+  }
+
+  .spinner-border {
+    width: 2rem;
+    height: 2rem;
+    border-width: 0.2em;
+    color: #667eea;
+  }
+
+  .alert {
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+  }
+
+  .export-section {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid #f0f0f0;
+  }
+
+  .export-buttons {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 768px) {
+    .page-header h1 {
+      font-size: 1.5rem;
+    }
+
+    .filter-row {
+      grid-template-columns: 1fr;
+    }
+
+    .stat-boxes {
+      grid-template-columns: 1fr;
+    }
+
+    .table {
+      font-size: 0.85rem;
+    }
+
+    .table th,
+    .table td {
+      padding: 0.75rem;
+    }
+
+    .action-buttons {
+      flex-direction: column;
+    }
+
+    .action-buttons .btn {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+</style>
+
+<div class="container-fluid px-4 py-4">
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-4">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item">
+        <a href="{{ url_for('stock.liste_produits') }}">Tableau de bord</a>
+      </li>
+      <li class="breadcrumb-item active">Produits en Stock</li>
+    </ol>
+  </nav>
+
+  <!-- Page Header -->
+  <div class="page-header">
+    <div class="container-fluid">
+      {% if current_user.role == 'magasinier' %}
+      <h1>
+        <i class="fas fa-boxes"></i> Mes Produits — Zone {{
+        current_user.zone.nom if current_user.zone else 'Zone' }}
+      </h1>
+      <p>
+        Produits disponibles dans votre zone ({{ product_count|default(0) }}
+        articles)
+      </p>
+      {% else %}
+      <h1><i class="fas fa-boxes"></i> Produits en Stock</h1>
+      <p>Vue complète de tous les produits actuellement en stock</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Statistics Boxes -->
+  <div class="stat-boxes">
+    <div class="stat-box">
+      <div class="stat-box-icon info">
+        <i class="fas fa-box"></i>
+      </div>
+      <div class="stat-box-content">
+        <h3>Total produits</h3>
+        <div class="value" id="statTotal">0</div>
+      </div>
+    </div>
+
+    <div class="stat-box">
+      <div class="stat-box-icon info">
+        <i class="fas fa-warehouse"></i>
+      </div>
+      <div class="stat-box-content">
+        <h3>Valeur stock total</h3>
+        <div class="value" id="statValeur">0 FCFA</div>
+      </div>
+    </div>
+
+    <div class="stat-box">
+      <div class="stat-box-icon info">
+        <i class="fas fa-cubes"></i>
+      </div>
+      <div class="stat-box-content">
+        <h3>Quantité totale</h3>
+        <div class="value" id="statQty">0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters Section -->
+  <div class="filters-section">
+    <h5><i class="fas fa-filter"></i> Filtres</h5>
+    <div class="filter-row">
+      <div class="form-group">
+        <label for="filterCategorie">Catégorie</label>
+        <select id="filterCategorie" class="form-select">
+          <option value="">Toutes les catégories</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="filterEmplacement">Emplacement</label>
+        <select id="filterEmplacement" class="form-select">
+          <option value="">Tous les emplacements</option>
+        </select>
+      </div>
+      <div>
+        <button id="btnReset" class="btn btn-outline-secondary w-100">
+          <i class="fas fa-redo"></i> Réinitialiser
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Spinner -->
+  <div id="loadingSpinner" class="loading-spinner">
+    <div class="spinner-border" role="status">
+      <span class="visually-hidden">Chargement...</span>
+    </div>
+    <p class="mt-2">Chargement des données...</p>
+  </div>
+
+  <!-- Data Table -->
+  <div id="tableContainer" style="display: none">
+    <div class="table-responsive">
+      <table id="produitsTable" class="table">
+        <thead>
+          <tr>
+            <th>Référence</th>
+            <th>Désignation</th>
+            <th>Catégorie</th>
+            <th>Quantité</th>
+            <th>Prix unitaire</th>
+            <th>Valeur stock</th>
+            <th>Emplacement</th>
+            <th>Statut</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="produitsBody">
+          <!-- Data will be injected here -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div
+      id="paginationContainer"
+      class="mt-4 mb-4 d-flex justify-content-center"
+    >
+      <!-- Pagination controls will be injected here -->
+    </div>
+
+    <!-- Export Section -->
+    <div class="export-section">
+      <h5><i class="fas fa-download"></i> Exporter</h5>
+      <div class="export-buttons">
+        <button id="btnExportCSV" class="btn btn-sm btn-outline-secondary">
+          <i class="fas fa-file-csv"></i> Exporter CSV
+        </button>
+        <button id="btnPrint" class="btn btn-sm btn-outline-secondary">
+          <i class="fas fa-print"></i> Imprimer
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Empty State -->
+  <div id="emptyState" style="display: none">
+    <div class="empty-state">
+      <div class="empty-state-icon">
+        <i class="fas fa-inbox"></i>
+      </div>
+      <h3>Aucun produit trouvé</h3>
+      <p>Aucun produit ne correspond à vos critères de filtre.</p>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/pagination-client.js') }}"></script>
+<script>
+  let allProduits = [];
+  let filteredProduits = [];
+  let pagination;
+
+  document.addEventListener("DOMContentLoaded", function () {
+    // Initialiser la pagination
+    pagination = new ClientPagination({
+      itemsPerPage: 10,
+      containerId: "tableContainer",
+      tbodyId: "produitsBody",
+      paginationContainerId: "paginationContainer",
+      emptyStateId: "emptyState",
+      renderRowCallback: renderProduitRow,
+      updateStatsCallback: updateStatistics,
+    });
+
+    loadProduits();
+    initializeFilters();
+    attachEventListeners();
+  });
+
+  function loadProduits() {
+    const spinner = document.getElementById("loadingSpinner");
+    const tableContainer = document.getElementById("tableContainer");
+    const emptyState = document.getElementById("emptyState");
+
+    spinner.classList.add("show");
+    tableContainer.style.display = "none";
+    emptyState.style.display = "none";
+
+    fetch("/gestion-stock/api/produits")
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.success && data.produits) {
+          allProduits = data.produits;
+          pagination.setData(allProduits);
+          populateFilters();
+          pagination.displayTable();
+        } else if (Array.isArray(data)) {
+          allProduits = data;
+          pagination.setData(allProduits);
+          populateFilters();
+          pagination.displayTable();
+        } else {
+          showError(
+            "Erreur: " + (data.message || "Impossible de charger les données"),
+          );
+        }
+      })
+      .catch((error) => {
+        console.error("Erreur:", error);
+        showError("Erreur de connexion: " + error.message);
+      })
+      .finally(() => {
+        spinner.classList.remove("show");
+      });
+  }
+
+  function populateFilters() {
+    const categories = new Set();
+    const emplacements = new Set();
+
+    allProduits.forEach((p) => {
+      if (p.categorie) categories.add(p.categorie);
+      if (p.emplacement) emplacements.add(p.emplacement);
+    });
+
+    const categorySelect = document.getElementById("filterCategorie");
+    const placementSelect = document.getElementById("filterEmplacement");
+
+    categories.forEach((cat) => {
+      const option = document.createElement("option");
+      option.value = cat;
+      option.textContent = cat;
+      categorySelect.appendChild(option);
+    });
+
+    emplacements.forEach((empl) => {
+      const option = document.createElement("option");
+      option.value = empl;
+      option.textContent = empl;
+      placementSelect.appendChild(option);
+    });
+  }
+
+  function applyFilters() {
+    const categorie = document.getElementById("filterCategorie").value;
+    const emplacement = document.getElementById("filterEmplacement").value;
+
+    pagination.applyFilter((p) => {
+      if (categorie && p.categorie !== categorie) return false;
+      if (emplacement && p.emplacement !== emplacement) return false;
+      return true;
+    });
+
+    pagination.displayTable();
+  }
+
+  function renderProduitRow(produit) {
+    const quantite = parseFloat(produit.quantite || 0);
+    const prixUnitaire = parseFloat(produit.prix_achat || 0);
+    const valeur = quantite * prixUnitaire;
+
+    let statut = "En stock";
+    let badgeClass = "badge-success";
+    if (quantite <= 0) {
+      statut = "Rupture";
+      badgeClass = "badge-danger";
+    } else if (quantite <= (produit.seuil_alerte || 0)) {
+      statut = "Alerte";
+      badgeClass = "badge-warning";
+    }
+
+    // Check if user is magasinier
+    const isMagasinier = document.body.classList.contains("magasinier-user");
+
+    let actionsHTML = "";
+    if (isMagasinier) {
+      // Magasinier: disable modify button, enable receive
+      actionsHTML = `
+                <div class="action-buttons">
+                    <a href="javascript:void(0)" 
+                       onclick="alert('Seul chef_pur peut modifier les produits. Donnée Master. Contactez gestionnaire.')"
+                       class="btn btn-sm btn-secondary disabled" title="Non autorisé (Magasinier)">
+                        <i class="fas fa-edit"></i>
+                    </a>
+                    <a href="javascript:void(0)" 
+                       onclick="window.location.href = '/gestion-stock/produit/entree/${produit.id}'"
+                       class="btn btn-sm btn-success" title="Ajouter entrée">
+                        <i class="fas fa-plus"></i>
+                    </a>
+                </div>
+            `;
+    } else {
+      // Gestionnaire: full access
+      actionsHTML = `
+                <div class="action-buttons">
+                    <a href="javascript:void(0)" 
+                       onclick="window.location.href = '/gestion-stock/produit/modifier/${produit.id}'"
+                       class="btn btn-sm btn-primary" title="Modifier">
+                        <i class="fas fa-edit"></i>
+                    </a>
+                    <a href="javascript:void(0)" 
+                       onclick="window.location.href = '/gestion-stock/produit/entree/${produit.id}'"
+                       class="btn btn-sm btn-success" title="Ajouter entrée">
+                        <i class="fas fa-plus"></i>
+                    </a>
+                </div>
+            `;
+    }
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+            <td><strong>${escapeHtml(produit.reference)}</strong></td>
+            <td>${escapeHtml(produit.nom)}</td>
+            <td>${escapeHtml(produit.categorie || "N/A")}</td>
+            <td>${quantite.toFixed(2)} ${produit.unite_mesure || ""}</td>
+            <td>${prixUnitaire.toFixed(0)} FCFA</td>
+            <td>${valeur.toFixed(0)} FCFA</td>
+            <td>${escapeHtml(produit.emplacement || "N/A")}</td>
+            <td><span class="badge ${badgeClass}">${statut}</span></td>
+            <td>${actionsHTML}</td>
+        `;
+    return row;
+  }
+
+  function displayTable() {
+    const tableContainer = document.getElementById("tableContainer");
+    const emptyState = document.getElementById("emptyState");
+    const tbody = document.getElementById("produitsBody");
+
+    tbody.innerHTML = "";
+
+    if (filteredProduits.length === 0) {
+      tableContainer.style.display = "none";
+      emptyState.style.display = "block";
+      return;
+    }
+
+    tableContainer.style.display = "block";
+    emptyState.style.display = "none";
+
+    filteredProduits.forEach((produit) => {
+      const row = renderProduitRow(produit);
+      tbody.appendChild(row);
+    });
+  }
+
+  function updateStatistics(items) {
+    // Utiliser les éléments fournis par la pagination, ou les éléments filtrés
+    const dataToUse = items || filteredProduits;
+
+    let total = dataToUse.length;
+    let valeur = 0;
+    let qty = 0;
+
+    dataToUse.forEach((p) => {
+      const q = parseFloat(p.quantite || 0);
+      const prix = parseFloat(p.prix_achat || 0);
+      qty += q;
+      valeur += q * prix;
+    });
+
+    document.getElementById("statTotal").textContent = total;
+    document.getElementById("statValeur").textContent =
+      valeur.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " FCFA";
+    document.getElementById("statQty").textContent = qty.toFixed(2);
+  }
+
+  function initializeFilters() {
+    document
+      .getElementById("filterCategorie")
+      .addEventListener("change", applyFilters);
+    document
+      .getElementById("filterEmplacement")
+      .addEventListener("change", applyFilters);
+  }
+
+  function attachEventListeners() {
+    document.getElementById("btnReset").addEventListener("click", function () {
+      document.getElementById("filterCategorie").value = "";
+      document.getElementById("filterEmplacement").value = "";
+      applyFilters();
+    });
+
+    document
+      .getElementById("btnExportCSV")
+      .addEventListener("click", exportCSV);
+    document.getElementById("btnPrint").addEventListener("click", function () {
+      window.print();
+    });
+  }
+
+  function exportCSV() {
+    let csv =
+      "Référence,Désignation,Catégorie,Quantité,Prix unitaire,Valeur stock,Emplacement\n";
+
+    filteredProduits.forEach((p) => {
+      const q = parseFloat(p.quantite || 0);
+      const prix = parseFloat(p.prix_achat || 0);
+      csv += `"${p.reference}","${p.nom}","${p.categorie}","${q.toFixed(2)}","${prix.toFixed(0)}","${(q * prix).toFixed(0)}","${p.emplacement}"\n`;
+    });
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `produits_stock_${new Date().toISOString().split("T")[0]}.csv`,
+    );
+    link.click();
+  }
+
+  function escapeHtml(text) {
+    if (!text) return "";
+    const map = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;",
+    };
+    return text.replace(/[&<>"']/g, (m) => map[m]);
+  }
+
+  function showError(message) {
+    const container = document.querySelector(".container-fluid");
+    const alert = document.createElement("div");
+    alert.className = "alert alert-danger alert-dismissible fade show";
+    alert.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+    container.insertBefore(alert, container.firstChild);
+    setTimeout(() => alert.remove(), 5000);
+  }
+</script>
+{% endblock %}

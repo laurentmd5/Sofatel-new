@@ -1,0 +1,78 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual Environments
+.venv/
+venv/
+env/
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+Dockerfile*
+
+# OS
+.env
+.env.example
+.env.production
+
+# Build artifacts
+*.tar.gz
+*.zip
+node_modules/
+
+# Uploads - À INCLURE en développement, à exclure en prod
+# uploads/
+
+# Tests
+tests/__pycache__/
+tests/.pytest_cache/
+.tox/
+
+# Documentation
+docs/_build/
+site/
+*.md
+
+# Dépendances locales
+.pip/
+pip-cache/

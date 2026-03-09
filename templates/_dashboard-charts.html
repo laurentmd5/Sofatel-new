@@ -1,0 +1,100 @@
+{# Template pour les diagrammes et charts du dashboard #}
+
+<!-- Diagramme de performance unifié -->
+<div class="row mb-4">
+    <div class="col-md-8 mb-3">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="bar-chart-2" class="me-2"></i> Performance des équipes
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="teamPerformanceChart" width="400" height="110"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h6 class="mb-0">
+                    <i data-feather="info" class="me-2"></i> Détails Performance
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Technicien (Équipe)</th>
+                                <th>Taux</th>
+                                <th>Type</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for technicien in performance_data.techniciens %}
+                            <tr>
+                                <td>
+                                    <strong>{{ technicien.prenom }} {{ technicien.nom }}</strong>
+                                    {% if technicien.equipe_nom %}
+                                    <br /><small class="badge bg-primary">{{ technicien.equipe_nom }}</small>
+                                    {% endif %} 
+                                    {% if technicien.prestataire %}
+                                    <br /><small class="badge bg-warning">{{ technicien.prestataire }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>{{ technicien.taux_reussite }}%</td>
+                                <td><span class="badge bg-success">Tech</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Performance par rôle -->
+<div class="row mb-4">
+    <div class="col-md-6 mb-3">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i data-feather="map-pin" class="me-2"></i> Performance des chefs zone
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="zoneManagerPerformanceChart" height="180"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i data-feather="briefcase" class="me-2"></i> Performance des chefs pilote
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="pilotManagerPerformanceChart" height="180"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Performance techniciens -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i data-feather="zap" class="me-2"></i> Performance des techniciens
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="technicianPerformanceChart" height="180"></canvas>
+            </div>
+        </div>
+    </div>
+</div>

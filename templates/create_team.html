@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+
+{% block title %}Créer une équipe - Sofatelcom{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="h3 mb-4">
+            <i data-feather="users" class="me-2"></i>
+            Créer une nouvelle équipe
+            {% if current_user.zone %}
+            <span class="badge bg-primary ms-2">{{ current_user.zone }}</span>
+            {% endif %}
+        </h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-sofatelcom-primary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="plus-circle" class="me-2"></i>
+                    Informations de l'équipe
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="createTeamForm">
+                    {{ form.hidden_tag() }}
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.nom_equipe.label(class="form-label") }}
+                            {{ form.nom_equipe(class="form-control", placeholder="Ex: Équipe Fibre Dakar A") }}
+                            {% if form.nom_equipe.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.nom_equipe.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            {{ form.date_creation.label(class="form-label") }}
+                            {{ form.date_creation(class="form-control") }}
+                            {% if form.date_creation.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.date_creation.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            {{ form.zone.label(class="form-label") }}
+                            {{ form.zone(class="form-select") }}
+                            {% if form.zone.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.zone.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            {{ form.technologies.label(class="form-label") }}
+                            {{ form.technologies(class="form-select") }}
+                            {% if form.technologies.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.technologies.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            {{ form.service.label(class="form-label") }}
+                            {{ form.service(class="form-select") }}
+                            {% if form.service.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.service.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.prestataire.label(class="form-label") }}
+                            {{ form.prestataire(class="form-select", id="prestataire-select") }}
+                            <div class="form-text">Sélectionnez le prestataire si applicable</div>
+                            {% if form.prestataire.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.prestataire.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6 mb-3" id="prestataire-autre-div" style="display:none;">
+                            <label for="prestataire-autre" class="form-label">Nom du prestataire</label>
+                            <input type="text" name="prestataire_autre" id="prestataire-autre" class="form-control"
+                                maxlength="50">
+                            <div class="form-text">Saisissez le nom du prestataire</div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+                            <i data-feather="arrow-left" class="me-2"></i>
+                            Retour
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i data-feather="save" class="me-2"></i>
+                            Créer l'équipe
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <!-- Guide de création -->
+        <div class="card">
+            <div class="card-header bg-sofatelcom-secondary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="help-circle" class="me-2"></i>
+                    Guide de création
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <h6 class="text-primary">
+                        <i data-feather="users" class="me-1"></i>
+                        Composition d'équipe
+                    </h6>
+                    <ul class="list-unstyled small text-muted">
+                        <li>• 1 technicien principal minimum</li>
+                        <li>• Accompagnants optionnels</li>
+                        <li>• Technologies compatibles</li>
+                        <li>• Zone d'intervention définie</li>
+                    </ul>
+                </div>
+
+                <div class="mb-3">
+                    <h6 class="text-info">
+                        <i data-feather="clock" class="me-1"></i>
+                        Planification
+                    </h6>
+                    <ul class="list-unstyled small text-muted">
+                        <li>• Création une seule fois</li>
+                        <li>• Valable tous les jours</li>
+                        <li>• Réorganisation possible</li>
+                    </ul>
+                </div>
+
+                <div class="alert alert-info mb-0">
+                    <i data-feather="info" class="me-1"></i>
+                    <small>
+                        Après création, vous pourrez ajouter les membres de l'équipe.
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Équipes existantes du jour -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i data-feather="calendar" class="me-2"></i>
+                    Équipes du jour
+                </h6>
+            </div>
+            <div class="card-body">
+                <div id="equipesJour">
+                    <div class="text-center">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status">
+                            <span class="visually-hidden">Chargement...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/teams.js') }}"></script>
+<script>
+    // Gérer l'affichage du champ "Autres" pour le prestataire
+    document.getElementById('prestataire-select').addEventListener('change', function () {
+        const autreDiv = document.getElementById('prestataire-autre-div');
+        if (this.value === 'Autres') {
+            autreDiv.style.display = '';
+        } else {
+            autreDiv.style.display = 'none';
+            document.getElementById('prestataire-autre').value = '';
+        }
+    });
+    // Préremplir la zone du chef de zone
+    document.addEventListener('DOMContentLoaded', function () {
+        const zoneSelect = document.getElementById('zone');
+        const chefZone = '{{ current_user.zone }}';
+
+        if (chefZone && zoneSelect) {
+            zoneSelect.value = chefZone;
+        }
+
+        // Définir la date du jour par défaut
+        const dateInput = document.getElementById('date_creation');
+        if (dateInput && !dateInput.value) {
+            const today = new Date().toISOString().split('T')[0];
+            dateInput.value = today;
+        }
+
+        // Générer automatiquement le nom d'équipe
+        generateTeamName();
+
+        // Charger les équipes du jour
+        loadEquipesJour();
+    });
+
+    function generateTeamName() {
+        const zone = document.getElementById('zone').value;
+        const technologies = document.getElementById('technologies').value;
+        const service = document.getElementById('service').value;
+        const date = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+
+        if (zone && technologies && service) {
+            const techAbbr = technologies.includes(',') ? 'Multi' : technologies;
+            const serviceAbbr = service === 'Production' ? 'Prod' : service;
+            const suggestion = `Équipe ${techAbbr} ${zone} ${serviceAbbr} ${date}`;
+
+            const nameInput = document.getElementById('nom_equipe');
+            if (!nameInput.value) {
+                nameInput.value = suggestion;
+            }
+        }
+    }
+
+    function loadEquipesJour() {
+        fetch('/api/equipes-jour')
+            .then(response => response.json())
+            .then(data => {
+                const container = document.getElementById('equipesJour');
+                if (data.success && data.equipes.length > 0) {
+                    let html = '';
+                    data.equipes.forEach(equipe => {
+                        html += `
+                        <div class="border-bottom pb-2 mb-2">
+                            <h6 class="mb-1">${equipe.nom_equipe}</h6>
+                            <small class="text-muted">
+                                ${equipe.service} - ${equipe.technologies}
+                                <br>
+                                ${equipe.nb_membres} membre(s)
+                            </small>
+                        </div>
+                    `;
+                    });
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<p class="text-muted small mb-0">Aucune équipe créée aujourd\'hui</p>';
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                document.getElementById('equipesJour').innerHTML = '<p class="text-danger small mb-0">Erreur de chargement</p>';
+            });
+    }
+
+    // Écouter les changements pour la génération automatique du nom
+    document.getElementById('zone').addEventListener('change', generateTeamName);
+    document.getElementById('technologies').addEventListener('change', generateTeamName);
+    document.getElementById('service').addEventListener('change', generateTeamName);
+
+    // Validation du formulaire
+    document.getElementById('createTeamForm').addEventListener('submit', function (e) {
+        const nom = document.getElementById('nom_equipe').value.trim();
+        const date = document.getElementById('date_creation').value;
+        const zone = document.getElementById('zone').value;
+        const technologies = document.getElementById('technologies').value;
+        const service = document.getElementById('service').value;
+
+        if (!nom || !date || !zone || !technologies || !service) {
+            e.preventDefault();
+            alert('Veuillez remplir tous les champs obligatoires.');
+            return;
+        }
+
+        // Vérifier que la date n'est pas dans le passé
+        const selectedDate = new Date(date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        if (selectedDate < today) {
+            e.preventDefault();
+            alert('La date de création ne peut pas être dans le passé.');
+            return;
+        }
+    });
+</script>
+{% endblock %}

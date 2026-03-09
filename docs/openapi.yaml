@@ -1,0 +1,131 @@
+openapi: 3.0.3
+info:
+  title: SOFATELCOM-V2 API
+  version: "1.0.0"
+  description: API pour la gestion des interventions, équipes, stock et réservations.
+servers:
+  - url: http://localhost:4300
+    description: Serveur local de développement
+paths:
+  /api/publish-selected-teams:
+    post:
+      summary: Publier des équipes sélectionnées
+      description: Publie une ou plusieurs équipes identifiées par leur `team_ids`.
+      tags:
+        - Teams
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                team_ids:
+                  type: array
+                  items:
+                    type: integer
+              required:
+                - team_ids
+      responses:
+        '200':
+          description: Succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  published_count:
+                    type: integer
+                  message:
+                    type: string
+        '400':
+          description: Requête invalide
+        '403':
+          description: Accès refusé
+  /api/unpublish-selected-teams:
+    post:
+      summary: Dé-publier des équipes sélectionnées
+      tags:
+        - Teams
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                team_ids:
+                  type: array
+                  items:
+                    type: integer
+              required:
+                - team_ids
+      responses:
+        '200':
+          description: Succès
+        '400':
+          description: Requête invalide
+        '403':
+          description: Accès refusé
+  /uploads/{filename}:
+    get:
+      summary: Récupérer un fichier uploadé
+      parameters:
+        - in: path
+          name: filename
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Fichier retourné
+        '404':
+          description: Non trouvé
+  /login:
+    post:
+      summary: Connexion
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+              required:
+                - username
+                - password
+      responses:
+        '200':
+          description: Connexion réussie
+        '401':
+          description: Échec d'authentification
+  /api/check-session:
+    get:
+      summary: Vérifier la session
+      responses:
+        '200':
+          description: État de la session
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authenticated:
+                    type: boolean
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: session
+security:
+  - cookieAuth: []
+tags:
+  - name: Teams
+    description: Endpoints de gestion des équipes

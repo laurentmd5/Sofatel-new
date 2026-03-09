@@ -1,0 +1,183 @@
+/* ========================================
+   CHART MODAL - Styles modulaires pour les popups de graphiques
+   ======================================== */
+
+/* Chart Card Styles */
+.chart-card {
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.chart-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0);
+    transition: background 0.3s ease;
+    pointer-events: none;
+    border-radius: 6px;
+}
+
+.chart-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15) !important;
+}
+
+.chart-card:hover::before {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.chart-card .chart-header {
+    transition: color 0.3s ease;
+    cursor: pointer;
+    user-select: none;
+}
+
+.chart-card:hover .chart-header {
+    opacity: 0.9;
+}
+
+/* Fullscreen Chart Modal */
+.chart-modal-fullscreen {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 2000;
+    animation: fadeInModal 0.3s ease-out;
+    padding: 20px;
+    overflow: auto;
+}
+
+.chart-modal-fullscreen.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chart-modal-content {
+    background: white;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 1200px;
+    max-height: 90vh;
+    overflow: auto;
+    position: relative;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    animation: slideUpModal 0.3s ease-out;
+    display: flex;
+    flex-direction: column;
+}
+
+.chart-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #e9ecef;
+    background: linear-gradient(135deg, #0d6efd 0%, #0dcaf0 100%);
+    color: white;
+    border-radius: 12px 12px 0 0;
+    flex-shrink: 0;
+}
+
+.chart-modal-header h5 {
+    margin: 0;
+    font-weight: 600;
+    font-size: 1.25rem;
+}
+
+.chart-modal-body {
+    padding: 30px;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.chart-modal-body canvas {
+    width: 100% !important;
+    height: auto !important;
+    max-height: 600px;
+}
+
+.chart-modal-close {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+}
+
+.chart-modal-close:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.1);
+}
+
+.chart-modal-close:active {
+    transform: scale(0.95);
+}
+
+/* Animations */
+@keyframes fadeInModal {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideUpModal {
+    from {
+        transform: translateY(30px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .chart-modal-content {
+        width: 95%;
+        max-height: 95vh;
+    }
+
+    .chart-modal-header {
+        padding: 15px;
+    }
+
+    .chart-modal-header h5 {
+        font-size: 1rem;
+    }
+
+    .chart-modal-body {
+        padding: 15px;
+    }
+
+    .chart-modal-body canvas {
+        max-height: 400px;
+    }
+}

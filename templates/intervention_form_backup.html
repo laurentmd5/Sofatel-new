@@ -1,0 +1,1895 @@
+{% extends "base.html" %}
+
+{% block title %}Fiche d'intervention - Sofatelcom{% endblock %}
+
+{% block head %}
+
+<style>
+    .signature-pad {
+        border: 2px dashed #dee2e6;
+        border-radius: 8px;
+        cursor: crosshair;
+        width: 100%;
+        height: 200px;
+    }
+
+    .signature-container {
+        position: relative;
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 10px;
+        margin-bottom: 15px;
+    }
+
+    .signature-clear {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        z-index: 10;
+    }
+
+    .intervention-section {
+        border-left: 4px solid #0d6efd;
+        background: #f8f9fa;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 0 8px 8px 0;
+    }
+
+    .field-group {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+
+    .toast-alert {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        min-width: 300px;
+    }
+
+    @media (max-width: 768px) {
+        .intervention-section {
+            padding: 10px;
+            border-left-width: 3px;
+        }
+
+        .field-group {
+            padding: 10px;
+        }
+
+        .signature-pad {
+            height: 150px;
+        }
+    }
+
+    .progress-indicator {
+        background: linear-gradient(45deg, #dc3545, #fd7e14);
+        color: white;
+        padding: 10px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+
+    .survey-section {
+        background: #e7f3ff;
+        border: 2px solid #007bff;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+
+    .loading-spinner {
+        animation: spin 1s linear infinite;
+        display: inline-block;
+    }
+
+    @keyframes spin {
+        from {
+            transform: rotate(0deg);
+        }
+
+        to {
+            transform: rotate(360deg);
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3 mb-0">
+                <i data-feather="clipboard" class="me-2"></i>
+                Fiche d'intervention
+            </h1>
+            <div>
+                <span class="badge bg-primary">{{ demande.service }}</span>
+                <span class="badge bg-secondary">{{ demande.type_techno }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Informations client -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-primary">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="user" class="me-2"></i>
+                    Informations client
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p class="mb-2">
+                            <strong>Client:</strong> {{ demande.nom_client }} {{ demande.prenom_client }}
+                        </p>
+                        <p class="mb-2">
+                            <strong>ND:</strong> <code>{{ demande.nd }}</code>
+                        </p>
+                        <p class="mb-2">
+                            <strong>Adresse:</strong> {{ demande.libelle_commune }}{% if demande.libelle_quartier %}, {{
+                            demande.libelle_quartier }}{% endif %}
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-2">
+                            <strong>Technologie:</strong> {{ demande.type_techno }}
+                        </p>
+                        <p class="mb-2">
+                            <strong>Service:</strong> {{ demande.service }}
+                        </p>
+                        <p class="mb-2">
+                            <strong>Date demande:</strong>
+                            {{ demande.date_demande_intervention.strftime('%d/%m/%Y') if
+                            demande.date_demande_intervention else 'Non précisée' }}
+                        </p>
+                    </div>
+                </div>
+
+                {% if demande.commentaire_interv %}
+                <div class="alert alert-info mt-3 mb-0">
+                    <strong>Commentaire:</strong> {{ demande.commentaire_interv }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Survey pour Production -->
+{% if demande.service == 'Production' and survey_form %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="survey-section">
+            <h5 class="text-primary mb-3">
+                <i data-feather="search" class="me-2"></i>
+                Phase Survey (Reconnaissance)
+            </h5>
+
+            {% if not intervention.survey_ok %}
+            <div class="alert alert-warning">
+                <i data-feather="alert-triangle" class="me-2"></i>
+                <strong>Étape obligatoire:</strong> Le Survey doit être validé avant d'accéder à la fiche technique.
+            </div>
+
+            <form action="/save-survey/{{ intervention.id }}" method="POST" data-no-ajax="true"
+                enctype="multipart/form-data" id="surveyForm">
+                {{ survey_form.hidden_tag() }}
+                <!-- Informations générales -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">Informations générales</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                {{ survey_form.date_survey.label(class="form-label") }}
+                                {{ survey_form.date_survey(class="form-control", type="date") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ survey_form.nom_raison_sociale.label(class="form-label") }}
+                                {{ survey_form.nom_raison_sociale(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ survey_form.contact.label(class="form-label") }}
+                                {{ survey_form.contact(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-4">
+                                {{ survey_form.tel1.label(class="form-label") }}
+                                {{ survey_form.tel1(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ survey_form.tel2.label(class="form-label") }}
+                                {{ survey_form.tel2(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ survey_form.represente_par.label(class="form-label") }}
+                                {{ survey_form.represente_par(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                {{ survey_form.adresse_demande.label(class="form-label") }}
+                                {{ survey_form.adresse_demande(class="form-control") }}
+                            </div>
+                            <div class="col-md-2">
+                                {{ survey_form.etage.label(class="form-label") }}
+                                {{ survey_form.etage(class="form-control") }}
+                            </div>
+                            <div class="col-md-2">
+                                {{ survey_form.h_debut.label(class="form-label") }}
+                                {{ survey_form.h_debut(class="form-control", type="time") }}
+                            </div>
+                            <div class="col-md-2">
+                                {{ survey_form.h_fin.label(class="form-label") }}
+                                {{ survey_form.h_fin(class="form-control", type="time") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                {{ survey_form.gps_lat.label(class="form-label") }}
+                                {{ survey_form.gps_lat(class="form-control") }}
+                            </div>
+                            <div class="col-md-6">
+                                {{ survey_form.gps_long.label(class="form-label") }}
+                                {{ survey_form.gps_long(class="form-control") }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Informations techniques -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">Informations techniques</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                {{ survey_form.n_ligne.label(class="form-label") }}
+                                {{ survey_form.n_ligne(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ survey_form.n_demande.label(class="form-label") }}
+                                {{ survey_form.n_demande(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ survey_form.service_demande.label(class="form-label") }}
+                                {{ survey_form.service_demande(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-3">
+                                {{ survey_form.technicien_structure.label(class="form-label") }}
+                                {{ survey_form.technicien_structure(class="form-control") }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ survey_form.backoffice_structure.label(class="form-label") }}
+                                {{ survey_form.backoffice_structure(class="form-control") }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ survey_form.offre.label(class="form-label") }}
+                                {{ survey_form.offre(class="form-control") }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ survey_form.debit.label(class="form-label") }}
+                                {{ survey_form.debit(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ survey_form.type_mi(class="form-check-input") }}
+                                    {{ survey_form.type_mi.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ survey_form.type_na(class="form-check-input") }}
+                                    {{ survey_form.type_na.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ survey_form.type_transfer(class="form-check-input") }}
+                                    {{ survey_form.type_transfer.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ survey_form.type_autre(class="form-check-input") }}
+                                    {{ survey_form.type_autre.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- État du client et localisation -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">État du client et localisation</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                {{ survey_form.etat_client.label(class="form-label") }}
+                                {{ survey_form.etat_client(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ survey_form.nature_local.label(class="form-label") }}
+                                {{ survey_form.nature_local(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ survey_form.type_logement.label(class="form-label") }}
+                                {{ survey_form.type_logement(class="form-control") }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Réseaux -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">Réseaux</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Fibre</h6>
+                                <div class="form-check mb-2">
+                                    {{ survey_form.fibre_dispo(class="form-check-input") }}
+                                    {{ survey_form.fibre_dispo.label(class="form-check-label") }}
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        {{ survey_form.gpon_olt.label(class="form-label") }}
+                                        {{ survey_form.gpon_olt(class="form-control") }}
+                                    </div>
+                                    <div class="col-md-6">
+                                        {{ survey_form.splitter.label(class="form-label") }}
+                                        {{ survey_form.splitter(class="form-control") }}
+                                    </div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-md-6">
+                                        {{ survey_form.distance_fibre.label(class="form-label") }}
+                                        {{ survey_form.distance_fibre(class="form-control") }}
+                                    </div>
+                                    <div class="col-md-6">
+                                        {{ survey_form.etat_fibre.label(class="form-label") }}
+                                        {{ survey_form.etat_fibre(class="form-control") }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Cuivre</h6>
+                                <div class="form-check mb-2">
+                                    {{ survey_form.cuivre_dispo(class="form-check-input") }}
+                                    {{ survey_form.cuivre_dispo.label(class="form-check-label") }}
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        {{ survey_form.sr.label(class="form-label") }}
+                                        {{ survey_form.sr(class="form-control") }}
+                                    </div>
+                                    <div class="col-md-6">
+                                        {{ survey_form.pc.label(class="form-label") }}
+                                        {{ survey_form.pc(class="form-control") }}
+                                    </div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-md-6">
+                                        {{ survey_form.distance_cuivre.label(class="form-label") }}
+                                        {{ survey_form.distance_cuivre(class="form-control") }}
+                                    </div>
+                                    <div class="col-md-6">
+                                        {{ survey_form.etat_cuivre.label(class="form-label") }}
+                                        {{ survey_form.etat_cuivre(class="form-control") }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Données réseaux détaillées -->
+                        <div class="row mt-4">
+                            <div class="col-12">
+                                <h6>Données réseaux détaillées</h6>
+                            </div>
+                            <div class="col-md-4">
+                                {{ survey_form.nro.label(class="form-label") }}
+                                {{ survey_form.nro(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ survey_form.type_reseau.label(class="form-label") }}
+                                {{ survey_form.type_reseau(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ survey_form.plaque.label(class="form-label") }}
+                                {{ survey_form.plaque(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-3">
+                                {{ survey_form.bpi.label(class="form-label") }}
+                                {{ survey_form.bpi(class="form-control") }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ survey_form.pbo.label(class="form-label") }}
+                                {{ survey_form.pbo(class="form-control") }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ survey_form.coupleur.label(class="form-label") }}
+                                {{ survey_form.coupleur(class="form-control") }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ survey_form.fibre.label(class="form-label") }}
+                                {{ survey_form.fibre(class="form-control") }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mesures WiFi -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">Mesures WiFi</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                {{ survey_form.niveau_wifi_salon.label(class="form-label") }}
+                                {{ survey_form.niveau_wifi_salon(class="form-control") }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ survey_form.niveau_wifi_chambre1.label(class="form-label") }}
+                                {{ survey_form.niveau_wifi_chambre1(class="form-control") }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ survey_form.niveau_wifi_bureau1.label(class="form-label") }}
+                                {{ survey_form.niveau_wifi_bureau1(class="form-control") }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ survey_form.niveau_wifi_autres_pieces.label(class="form-label") }}
+                                {{ survey_form.niveau_wifi_autres_pieces(class="form-control") }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Accessoires recommandés -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">Accessoires recommandés</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Répéteur WiFi</h6>
+                                <div class="form-check">
+                                    {{ survey_form.repeteur_wifi_oui(class="form-check-input") }}
+                                    {{ survey_form.repeteur_wifi_oui.label(class="form-check-label") }}
+                                </div>
+                                <div class="form-check">
+                                    {{ survey_form.repeteur_wifi_non(class="form-check-input") }}
+                                    {{ survey_form.repeteur_wifi_non.label(class="form-check-label") }}
+                                </div>
+                                <div class="mt-2">
+                                    {{ survey_form.repeteur_wifi_quantite.label(class="form-label") }}
+                                    {{ survey_form.repeteur_wifi_quantite(class="form-control") }}
+                                </div>
+                                <div class="mt-2">
+                                    {{ survey_form.repeteur_wifi_emplacement.label(class="form-label") }}
+                                    {{ survey_form.repeteur_wifi_emplacement(class="form-control") }}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>CPL</h6>
+                                <div class="form-check">
+                                    {{ survey_form.cpl_oui(class="form-check-input") }}
+                                    {{ survey_form.cpl_oui.label(class="form-check-label") }}
+                                </div>
+                                <div class="form-check">
+                                    {{ survey_form.cpl_non(class="form-check-input") }}
+                                    {{ survey_form.cpl_non.label(class="form-check-label") }}
+                                </div>
+                                <div class="mt-2">
+                                    {{ survey_form.cpl_quantite.label(class="form-label") }}
+                                    {{ survey_form.cpl_quantite(class="form-control") }}
+                                </div>
+                                <div class="mt-2">
+                                    {{ survey_form.cpl_emplacement.label(class="form-label") }}
+                                    {{ survey_form.cpl_emplacement(class="form-control") }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <h6>Câble local</h6>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        {{ survey_form.cable_local_type.label(class="form-label") }}
+                                        {{ survey_form.cable_local_type(class="form-control") }}
+                                    </div>
+                                    <div class="col-md-6">
+                                        {{ survey_form.cable_local_longueur.label(class="form-label") }}
+                                        {{ survey_form.cable_local_longueur(class="form-control") }}
+                                    </div>
+                                </div>
+                                <div class="mt-2">
+                                    {{ survey_form.cable_local_connecteurs.label(class="form-label") }}
+                                    {{ survey_form.cable_local_connecteurs(class="form-control") }}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Goulottes</h6>
+                                <div class="form-check">
+                                    {{ survey_form.goulottes_oui(class="form-check-input") }}
+                                    {{ survey_form.goulottes_oui.label(class="form-check-label") }}
+                                </div>
+                                <div class="form-check">
+                                    {{ survey_form.goulottes_non(class="form-check-input") }}
+                                    {{ survey_form.goulottes_non.label(class="form-check-label") }}
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-md-6">
+                                        {{ survey_form.goulottes_quantite.label(class="form-label") }}
+                                        {{ survey_form.goulottes_quantite(class="form-control") }}
+                                    </div>
+                                    <div class="col-md-6">
+                                        {{ survey_form.goulottes_nombre_x2m.label(class="form-label") }}
+                                        {{ survey_form.goulottes_nombre_x2m(class="form-control") }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section photos -->
+                <div class="intervention-section mb-4">
+                    <h5 class="text-primary mb-3">
+                        <i data-feather="image" class="me-2"></i>
+                        Photos et documents
+                    </h5>
+
+                    <div class="field-group">
+                        <div class="mb-3">
+                            <label class="form-label">Importer des photos (justificatifs, etc.)</label>
+                            <input type="file" name="photos[]" id="photos" accept="image/*" multiple
+                                class="form-control" required>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- Photos -->
+                <!-- <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">Photos</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                {{ survey_form.photo_batiment.label(class="form-label") }}
+                                {{ survey_form.photo_batiment(class="form-control") }}
+                            </div>
+                            <div class="col-md-6">
+                                {{ survey_form.photo_environ.label(class="form-label") }}
+                                {{ survey_form.photo_environ(class="form-control") }}
+                            </div>
+                        </div>
+                    </div>
+                </div> -->
+
+                <!-- Conclusion -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">Conclusion</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-12">
+                                {{ survey_form.conclusion.label(class="form-label") }}
+                                {{ survey_form.conclusion(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                {{ survey_form.observation_tech.label(class="form-label") }}
+                                {{ survey_form.observation_tech(class="form-control", rows=4) }}
+                            </div>
+                            <div class="col-md-6">
+                                {{ survey_form.observation_client.label(class="form-label") }}
+                                {{ survey_form.observation_client(class="form-control", rows=4) }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-12">
+                                <div class="form-check form-check-inline">
+                                    {{ survey_form.survey_ok(class="form-check-input") }}
+                                    {{ survey_form.survey_ok.label(class="form-check-label") }}
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    {{ survey_form.survey_nok(class="form-check-input") }}
+                                    {{ survey_form.survey_nok.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-12">
+                                {{ survey_form.motif.label(class="form-label") }}
+                                {{ survey_form.motif(class="form-select") }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Satisfaction client -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">Satisfaction client</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-check">
+                                    {{ survey_form.client_tres_satisfait(class="form-check-input") }}
+                                    {{ survey_form.client_tres_satisfait.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check">
+                                    {{ survey_form.client_satisfait(class="form-check-input") }}
+                                    {{ survey_form.client_satisfait.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check">
+                                    {{ survey_form.client_pas_satisfait(class="form-check-input") }}
+                                    {{ survey_form.client_pas_satisfait.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-12">
+                                {{ survey_form.commentaires.label(class="form-label") }}
+                                {{ survey_form.commentaires(class="form-control", rows=3) }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Signatures -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">Signatures</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Signature de l'équipe</label>
+                                <div class="signature-container">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary signature-clear"
+                                        onclick="clearSignature('equipeSurvey')">
+                                        <i data-feather="x" style="width: 16px; height: 16px;"></i>
+                                    </button>
+                                    <canvas id="signatureEquipeSurvey" class="signature-pad"></canvas>
+                                </div>
+                                {{ survey_form.signature_equipe() }}
+                                <div class="invalid-feedback signature-feedback" id="equipeSurvey-feedback"
+                                    style="display: none;">
+                                    Signature requise
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Signature du client</label>
+                                <div class="signature-container">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary signature-clear"
+                                        onclick="clearSignature('clientSurvey')">
+                                        <i data-feather="x" style="width: 16px; height: 16px;"></i>
+                                    </button>
+                                    <canvas id="signatureClientSurvey" class="signature-pad"></canvas>
+                                </div>
+                                {{ survey_form.signature_client() }}
+                                <div class="invalid-feedback signature-feedback" id="clientSurvey-feedback"
+                                    style="display: none;">
+                                    Signature requise
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Actions -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body d-flex justify-content-between">
+                                <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+                                    <i data-feather="arrow-left" class="me-2"></i>
+                                    Retour
+                                </a>
+
+                                <div>
+                                    <button type="button" class="btn btn-outline-primary me-2" onclick="saveAsDraft()">
+                                        <i data-feather="save" class="me-2"></i>
+                                        Sauvegarder brouillon
+                                    </button>
+                                    <button type="submit" name="action" value="save_only" class="btn btn-primary me-2">
+                                        <i data-feather="check-circle" class="me-2"></i>
+                                        Valider le survey
+                                    </button>
+                                    <button type="submit" name="action" value="save_and_continue"
+                                        class="btn btn-success">
+                                        <i data-feather="arrow-right-circle" class="me-2"></i>
+                                        Valider et passer à la fiche technique
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+
+            {% else %}
+            <div class="alert alert-success">
+                <i data-feather="check-circle" class="me-2"></i>
+                <strong>Survey validé</strong> le {{ intervention.survey_date.strftime('%d/%m/%Y à %H:%M') if
+                intervention.survey_date else 'date inconnue' }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Fiche technique (accessible après Survey pour Production) -->
+{% if demande.service == 'Production' and intervention.fichier_technique_accessible %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="survey-section" style="border-color: #007bff;">
+            <h5 class="text-primary mb-3">
+                <i data-feather="file-text" class="me-2"></i>
+                Fiche Technique d'Installation
+            </h5>
+
+            <form method="POST" action="/save-fiche-technique/{{ intervention.id }}" id="ficheTechniqueForm">
+                {{ fiche_technique_form.hidden_tag() }}
+
+                <!-- Informations générales -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Informations générales</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.nom_raison_sociale.label(class="form-label") }}
+                                {{ fiche_technique_form.nom_raison_sociale(class="form-control",
+                                value=survey.nom_raison_sociale if survey else "") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.contact.label(class="form-label") }}
+                                {{ fiche_technique_form.contact(class="form-control",
+                                value=survey.contact if survey else "") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.represente_par.label(class="form-label") }}
+                                {{ fiche_technique_form.represente_par(class="form-control",
+                                value=survey.represente_par if survey else "") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.date_installation.label(class="form-label") }}
+                                {{ fiche_technique_form.date_installation(class="form-control", type="date",
+                                value=survey.date_survey.strftime('%Y-%m-%d') if survey and survey.date_survey else "")
+                                }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.tel1.label(class="form-label") }}
+                                {{ fiche_technique_form.tel1(class="form-control",
+                                value=survey.tel1 if survey else "") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.tel2.label(class="form-label") }}
+                                {{ fiche_technique_form.tel2(class="form-control",
+                                value=survey.tel2 if survey else "") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                {{ fiche_technique_form.adresse_demandee.label(class="form-label") }}
+                                {{ fiche_technique_form.adresse_demandee(class="form-control",
+                                value=survey.adresse_demande if survey else "") }}
+                            </div>
+                            <div class="col-md-2">
+                                {{ fiche_technique_form.etage.label(class="form-label") }}
+                                {{ fiche_technique_form.etage(class="form-control",
+                                value=survey.etage if survey else "") }}
+                            </div>
+                            <div class="col-md-2">
+                                {{ fiche_technique_form.h_arrivee.label(class="form-label") }}
+                                {{ fiche_technique_form.h_arrivee(class="form-control", type="time",
+                                value=survey.h_debut if survey else "") }}
+                            </div>
+                            <div class="col-md-2">
+                                {{ fiche_technique_form.h_depart.label(class="form-label") }}
+                                {{ fiche_technique_form.h_depart(class="form-control", type="time",
+                                value=survey.h_fin if survey else "") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                {{ fiche_technique_form.gps_lat.label(class="form-label") }}
+                                {{ fiche_technique_form.gps_lat(class="form-control",
+                                value=survey.gps_lat if survey else "") }}
+                            </div>
+                            <div class="col-md-6">
+                                {{ fiche_technique_form.gps_long.label(class="form-label") }}
+                                {{ fiche_technique_form.gps_long(class="form-control",
+                                value=survey.gps_long if survey else "") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                {{ fiche_technique_form.type_logement_avec_bpi.label(class="form-label") }}
+                                {{ fiche_technique_form.type_logement_avec_bpi(class="form-control") }}
+                            </div>
+                            <div class="col-md-6">
+                                {{ fiche_technique_form.type_logement_sans_bpi.label(class="form-label") }}
+                                {{ fiche_technique_form.type_logement_sans_bpi(class="form-control") }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Informations techniques -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Informations techniques</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.n_ligne.label(class="form-label") }}
+                                {{ fiche_technique_form.n_ligne(class="form-control",
+                                value=survey.n_ligne if survey else "") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.n_demande.label(class="form-label") }}
+                                {{ fiche_technique_form.n_demande(class="form-control",
+                                value=survey.n_demande if survey else "") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.offre.label(class="form-label") }}
+                                {{ fiche_technique_form.offre(class="form-control",
+                                value=survey.offre if survey else "") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.technicien_structure.label(class="form-label") }}
+                                {{ fiche_technique_form.technicien_structure(class="form-control",
+                                value=survey.technicien_structure if survey else "") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.pilote_structure.label(class="form-label") }}
+                                {{ fiche_technique_form.pilote_structure(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.debit.label(class="form-label") }}
+                                {{ fiche_technique_form.debit(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.type_mc(class="form-check-input") }}
+                                    {{ fiche_technique_form.type_mc.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.type_na(class="form-check-input") }}
+                                    {{ fiche_technique_form.type_na.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.type_transfert(class="form-check-input") }}
+                                    {{ fiche_technique_form.type_transfert.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.type_autre(class="form-check-input") }}
+                                    {{ fiche_technique_form.type_autre.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-12">
+                                {{ fiche_technique_form.backoffice_structure.label(class="form-label") }}
+                                {{ fiche_technique_form.backoffice_structure(class="form-control") }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Matériels -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Matériels installés</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.type_ont.label(class="form-label") }}
+                                {{ fiche_technique_form.type_ont(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.nature_ont.label(class="form-label") }}
+                                {{ fiche_technique_form.nature_ont(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.numero_serie_ont.label(class="form-label") }}
+                                {{ fiche_technique_form.numero_serie_ont(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.type_decodeur.label(class="form-label") }}
+                                {{ fiche_technique_form.type_decodeur(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.nature_decodeur.label(class="form-label") }}
+                                {{ fiche_technique_form.nature_decodeur(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.numero_serie_decodeur.label(class="form-label") }}
+                                {{ fiche_technique_form.numero_serie_decodeur(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-2">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.disque_dur(class="form-check-input") }}
+                                    {{ fiche_technique_form.disque_dur.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.telephone(class="form-check-input") }}
+                                    {{ fiche_technique_form.telephone.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.recepteur_wifi(class="form-check-input") }}
+                                    {{ fiche_technique_form.recepteur_wifi.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.cpl(class="form-check-input") }}
+                                    {{ fiche_technique_form.cpl.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.carte_vaccess(class="form-check-input") }}
+                                    {{ fiche_technique_form.carte_vaccess.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Accessoires -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Accessoires</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.type_cable_lc.label(class="form-label") }}
+                                {{ fiche_technique_form.type_cable_lc(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.type_cable_bti.label(class="form-label") }}
+                                {{ fiche_technique_form.type_cable_bti(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.type_cable_pto_one.label(class="form-label") }}
+                                {{ fiche_technique_form.type_cable_pto_one(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-2">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.kit_pto(class="form-check-input") }}
+                                    {{ fiche_technique_form.kit_pto.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.piton(class="form-check-input") }}
+                                    {{ fiche_technique_form.piton.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.arobase(class="form-check-input") }}
+                                    {{ fiche_technique_form.arobase.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.malico(class="form-check-input") }}
+                                    {{ fiche_technique_form.malico.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.ds6(class="form-check-input") }}
+                                    {{ fiche_technique_form.ds6.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                {{ fiche_technique_form.autre_accessoire.label(class="form-label") }}
+                                {{ fiche_technique_form.autre_accessoire(class="form-control") }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tests de services -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Tests de services</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.appel_sortant_ok(class="form-check-input") }}
+                                    {{ fiche_technique_form.appel_sortant_ok.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.appel_sortant_nok(class="form-check-input") }}
+                                    {{ fiche_technique_form.appel_sortant_nok.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.appel_entrant_ok(class="form-check-input") }}
+                                    {{ fiche_technique_form.appel_entrant_ok.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.appel_entrant_nok(class="form-check-input") }}
+                                    {{ fiche_technique_form.appel_entrant_nok.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.tvo_mono_ok(class="form-check-input") }}
+                                    {{ fiche_technique_form.tvo_mono_ok.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.tvo_mono_nok(class="form-check-input") }}
+                                    {{ fiche_technique_form.tvo_mono_nok.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.tvo_multi_ok(class="form-check-input") }}
+                                    {{ fiche_technique_form.tvo_multi_ok.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.tvo_multi_nok(class="form-check-input") }}
+                                    {{ fiche_technique_form.tvo_multi_nok.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.enregistreur_dd_ok(class="form-check-input") }}
+                                    {{ fiche_technique_form.enregistreur_dd_ok.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.enregistreur_dd_nok(class="form-check-input") }}
+                                    {{ fiche_technique_form.enregistreur_dd_nok.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tests de débits -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Tests de débits</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                {{ fiche_technique_form.par_cable_salon.label(class="form-label") }}
+                                {{ fiche_technique_form.par_cable_salon(class="form-control") }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ fiche_technique_form.par_cable_chambres.label(class="form-label") }}
+                                {{ fiche_technique_form.par_cable_chambres(class="form-control") }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ fiche_technique_form.par_cable_bureau.label(class="form-label") }}
+                                {{ fiche_technique_form.par_cable_bureau(class="form-control") }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ fiche_technique_form.par_cable_autres.label(class="form-label") }}
+                                {{ fiche_technique_form.par_cable_autres(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                {{ fiche_technique_form.par_cable_vitesse_wifi.label(class="form-label") }}
+                                {{ fiche_technique_form.par_cable_vitesse_wifi(class="form-control") }}
+                            </div>
+                            <div class="col-md-6">
+                                {{ fiche_technique_form.par_cable_mesure_mbps.label(class="form-label") }}
+                                {{ fiche_technique_form.par_cable_mesure_mbps(class="form-control", type="number") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-3">
+                                {{ fiche_technique_form.par_wifi_salon.label(class="form-label") }}
+                                {{ fiche_technique_form.par_wifi_salon(class="form-control") }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ fiche_technique_form.par_wifi_chambres.label(class="form-label") }}
+                                {{ fiche_technique_form.par_wifi_chambres(class="form-control") }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ fiche_technique_form.par_wifi_bureau.label(class="form-label") }}
+                                {{ fiche_technique_form.par_wifi_bureau(class="form-control") }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ fiche_technique_form.par_wifi_autres.label(class="form-label") }}
+                                {{ fiche_technique_form.par_wifi_autres(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                {{ fiche_technique_form.par_wifi_vitesse_wifi.label(class="form-label") }}
+                                {{ fiche_technique_form.par_wifi_vitesse_wifi(class="form-control") }}
+                            </div>
+                            <div class="col-md-6">
+                                {{ fiche_technique_form.par_wifi_mesure_mbps.label(class="form-label") }}
+                                {{ fiche_technique_form.par_wifi_mesure_mbps(class="form-control", type="number") }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Etiquetages et Nettoyage -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Etiquetages et Nettoyage</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.etiquetage_colliers_serres(class="form-check-input") }}
+                                    {{ fiche_technique_form.etiquetage_colliers_serres.label(class="form-check-label")
+                                    }}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.etiquetage_pbo_normalise(class="form-check-input") }}
+                                    {{ fiche_technique_form.etiquetage_pbo_normalise.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.nettoyage_depose(class="form-check-input") }}
+                                    {{ fiche_technique_form.nettoyage_depose.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.nettoyage_tutorat(class="form-check-input") }}
+                                    {{ fiche_technique_form.nettoyage_tutorat.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rattachement -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Rattachement</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.rattachement_nro.label(class="form-label") }}
+                                {{ fiche_technique_form.rattachement_nro(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.rattachement_type.label(class="form-label") }}
+                                {{ fiche_technique_form.rattachement_type(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.rattachement_num_carte.label(class="form-label") }}
+                                {{ fiche_technique_form.rattachement_num_carte(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.rattachement_num_port.label(class="form-label") }}
+                                {{ fiche_technique_form.rattachement_num_port(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.rattachement_plaque.label(class="form-label") }}
+                                {{ fiche_technique_form.rattachement_plaque(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.rattachement_bpi_pbo.label(class="form-label") }}
+                                {{ fiche_technique_form.rattachement_bpi_pbo(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.rattachement_coupleur.label(class="form-label") }}
+                                {{ fiche_technique_form.rattachement_coupleur(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.rattachement_fibre.label(class="form-label") }}
+                                {{ fiche_technique_form.rattachement_fibre(class="form-control") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ fiche_technique_form.rattachement_ref_dbm.label(class="form-label") }}
+                                {{ fiche_technique_form.rattachement_ref_dbm(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-12">
+                                {{ fiche_technique_form.rattachement_mesure_dbm.label(class="form-label") }}
+                                {{ fiche_technique_form.rattachement_mesure_dbm(class="form-control") }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Commentaires -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Commentaires</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-12">
+                                {{ fiche_technique_form.commentaires.label(class="form-label") }}
+                                {{ fiche_technique_form.commentaires(class="form-control", rows=4) }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Section photos -->
+                <div class="intervention-section mb-4">
+                    <h5 class="text-primary mb-3">
+                        <i data-feather="image" class="me-2"></i>
+                        Photos et documents
+                    </h5>
+
+                    <div class="field-group">
+                        <div class="mb-3">
+                            <label class="form-label">Importer des photos (justificatifs, etc.)</label>
+                            <input type="file" name="photos[]" id="photos" accept="image/*" multiple
+                                class="form-control" required>
+                        </div>
+                    </div>
+                </div>
+                <!-- Signatures et satisfaction -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Validation et signatures</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.client_tres_satisfait(class="form-check-input") }}
+                                    {{ fiche_technique_form.client_tres_satisfait.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.client_satisfait(class="form-check-input") }}
+                                    {{ fiche_technique_form.client_satisfait.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check">
+                                    {{ fiche_technique_form.client_pas_satisfait(class="form-check-input") }}
+                                    {{ fiche_technique_form.client_pas_satisfait.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <label class="form-label">Signature de l'équipe</label>
+                                <div class="signature-container position-relative">
+                                    <button type="button"
+                                        class="btn btn-sm btn-outline-secondary signature-clear position-absolute top-0 end-0"
+                                        onclick="clearSignature('equipeFT')">
+                                        <i data-feather="x" style="width: 16px; height: 16px;"></i>
+                                    </button>
+                                    <canvas id="signatureEquipeFT" class="signature-pad w-100" height="150"></canvas>
+                                </div>
+                                {{ fiche_technique_form.signature_equipe() }}
+                                <div class="invalid-feedback signature-feedback" id="equipeFT-feedback"
+                                    style="display: none;">
+                                    Signature requise
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Signature du client</label>
+                                <div class="signature-container position-relative">
+                                    <button type="button"
+                                        class="btn btn-sm btn-outline-secondary signature-clear position-absolute top-0 end-0"
+                                        onclick="clearSignature('clientFT')">
+                                        <i data-feather="x" style="width: 16px; height: 16px;"></i>
+                                    </button>
+                                    <canvas id="signatureClientFT" class="signature-pad w-100" height="150"></canvas>
+                                </div>
+                                {{ fiche_technique_form.signature_client() }}
+                                <div class="invalid-feedback signature-feedback" id="clientFT-feedback"
+                                    style="display: none;">
+                                    Signature requise
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body d-flex justify-content-between">
+                                <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+                                    <i data-feather="arrow-left" class="me-2"></i>
+                                    Retour
+                                </a>
+
+                                <div>
+                                    <button type="button" class="btn btn-outline-primary me-2" onclick="saveAsDraft()">
+                                        <i data-feather="save" class="me-2"></i>
+                                        Sauvegarder brouillon
+                                    </button>
+                                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                                        <i data-feather="check-circle" class="me-2"></i>
+                                        Valider la fiche technique
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% elif demande.service == 'Production' and not intervention.fichier_technique_accessible %}
+<!-- Accès bloqué au fichier technique -->
+<div class="row">
+    <div class="col-12">
+        <div class="alert alert-danger text-center">
+            <i data-feather="lock" style="width: 48px; height: 48px;" class="mb-3"></i>
+            <h4>Accès au fichier technique bloqué</h4>
+            <p>Vous devez d'abord valider le Survey pour accéder à la fiche d'intervention technique.</p>
+        </div>
+    </div>
+</div>
+<!-- Fiche SAV (accessible) -->
+{% else %}
+<form method="POST" id="interventionForm" action="/save-intervention/{{ intervention.id }}"
+    enctype="multipart/form-data">
+    {{ form.hidden_tag() }}
+
+    <!-- Section diagnostic -->
+    <div class="intervention-section mb-4">
+        <h5 class="text-primary mb-3">
+            <i data-feather="search" class="me-2"></i>
+            Diagnostic et signalisation
+        </h5>
+
+        <div class="field-group">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    {{ form.numero.label(class="form-label") }}
+                    {{ form.numero(class="form-control",
+                    value=demande.nd if demande else "") }}
+                    <div class="invalid-feedback">Ce champ est requis</div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    {{ form.constitutions.label(class="form-label") }}
+                    {{ form.constitutions(class="form-control",
+                    value=demande.constitution if demande else "") }}
+                </div>
+                <div class="col-md-4 mb-3">
+                    {{ form.valeur_pB0.label(class="form-label") }}
+                    {{ form.valeur_pB0(class="form-control") }}
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    {{ form.nature_signalisation.label(class="form-label") }}
+                    {{ form.nature_signalisation(class="form-control") }}
+                </div>
+                <div class="col-md-6 mb-3">
+                    {{ form.diagnostic_technicien.label(class="form-label") }}
+                    {{ form.diagnostic_technicien(class="form-control", required="required") }}
+                    <div class="invalid-feedback">Ce champ est requis</div>
+                </div>
+
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    {{ form.cause_derangement.label(class="form-label") }}
+                    {{ form.cause_derangement(class="form-control", rows="2") }}
+                </div>
+                <div class="col-md-6 mb-3">
+                    {{ form.action_releve.label(class="form-label") }}
+                    {{ form.action_releve(class="form-control", rows="2") }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Champs géolocalisation automatique -->
+    <div class="intervention-section mb-4">
+        <h5 class="text-primary mb-3">
+            <i data-feather="map-pin" class="me-2"></i>
+            Géolocalisation technicien
+        </h5>
+        <div class="field-group">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Latitude</label>
+                    <input type="text" name="gps_lat" id="gps_lat" class="form-control" readonly>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Longitude</label>
+                    <input type="text" name="gps_long" id="gps_long" class="form-control" readonly>
+                </div>
+            </div>
+            <div class="alert alert-info" id="geoStatus" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- Section matériel -->
+    <div class="intervention-section mb-4">
+        <h5 class="text-primary mb-3">
+            <i data-feather="package" class="me-2"></i>
+            Matériel et équipements
+        </h5>
+
+        <div class="field-group">
+            <table class="table table-bordered mb-4">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 30%;">MATÉRIELS LIVRÉS</th>
+                        <th>NUMÉRO SÉRIE</th>
+                        <th>MATÉRIELS RECUPÉRÉS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Ligne pour les matériels -->
+                    <tr>
+                        <td>{{ form.materiel_livre(class="form-control") }}</td>
+                        <td>{{ form.numero_serie_livre(class="form-control") }}</td>
+                        <td>
+                            <div class="mb-2">
+                                <label class="form-label small">Nature:</label>
+                                {{ form.materiel_recup(class="form-control") }}
+                            </div>
+                            <div>
+                                <label class="form-label small">Numéro de série:</label>
+                                {{ form.numero_serie_recup(class="form-control") }}
+                            </div>
+                        </td>
+                    </tr>
+                    <!-- Ligne pour les accessoires -->
+                    <tr>
+                        <td class="text-center align-middle fw-bold">ACCESSOIRES</td>
+                        <td colspan="2">
+                            <div class="row g-2">
+                                <div class="col-md-2">
+                                    <label class="form-label small">Jarretière:</label>
+                                    {{ form.jarretiere(class="form-control") }}
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small">Nombre et type BPE:</label>
+                                    {{ form.nombre_type_bpe(class="form-control") }}
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small">Coupleur C1:</label>
+                                    {{ form.coupleur_c1(class="form-control") }}
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small">Coupleur C2:</label>
+                                    {{ form.coupleur_c2(class="form-control") }}
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small">Arobase:</label>
+                                    {{ form.arobase(class="form-control") }}
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small">Malico:</label>
+                                    {{ form.malico(class="form-control") }}
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small">Type de cable:</label>
+                                    {{ form.type_cable(class="form-control") }}
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small">LC en mètre:</label>
+                                    {{ form.lc_metre(class="form-control") }}
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small">BTI en mètre:</label>
+                                    {{ form.bti_metre(class="form-control") }}
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small">PTO ONE:</label>
+                                    {{ form.pto_one(class="form-control") }}
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small">KITPTO en mètre:</label>
+                                    {{ form.kitpto_metre(class="form-control") }}
+                                </div>
+                                <div class="col-md-1">
+                                    <label class="form-label small">Piton:</label>
+                                    {{ form.piton(class="form-control") }}
+                                </div>
+                                <div class="col-md-1">
+                                    <label class="form-label small">DS6:</label>
+                                    {{ form.ds6(class="form-control") }}
+                                </div>
+                                <div class="col-md-12">
+                                    <label class="form-label small">Autres:</label>
+                                    {{ form.autres_accessoires(class="form-control") }}
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Section tests -->
+    <div class="intervention-section mb-4">
+        <h5 class="text-primary mb-3">
+            <i data-feather="activity" class="me-2"></i>
+            TESTS SERVICES CLIENT APRÈS RELEVÉ
+        </h5>
+
+        <div class="field-group">
+            <table class="table table-bordered mb-4">
+                <thead class="table-light">
+                    <tr>
+                        <th>Appel sortant - Envoi numéro</th>
+                        <th>Appel entrant - Affichage numéro</th>
+                        <th>TVO mono</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>
+                            <div class="d-flex gap-3">
+                                <div class="form-check">
+                                    <input type="radio" id="appel_sortant_ok" name="appel_sortant" value="1"
+                                        class="form-check-input">
+                                    <label for="appel_sortant_ok" class="form-check-label">OK</label>
+                                </div>
+                                <div class="form-check">
+                                    <input type="radio" id="appel_sortant_nok" name="appel_sortant" value="0"
+                                        class="form-check-input">
+                                    <label for="appel_sortant_nok" class="form-check-label">NOK</label>
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                {{ form.envoi_numero.label(class="form-label small") }}
+                                {{ form.envoi_numero(class="form-control form-control-sm") }}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="d-flex gap-3">
+                                <div class="form-check">
+                                    <input type="radio" id="appel_entrant_ok" name="appel_entrant" value="1"
+                                        class="form-check-input">
+                                    <label for="appel_entrant_ok" class="form-check-label">OK</label>
+                                </div>
+                                <div class="form-check">
+                                    <input type="radio" id="appel_entrant_nok" name="appel_entrant" value="0"
+                                        class="form-check-input">
+                                    <label for="appel_entrant_nok" class="form-check-label">NOK</label>
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                {{ form.affichage_numero.label(class="form-label small") }}
+                                {{ form.affichage_numero(class="form-control form-control-sm") }}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="d-flex gap-3">
+                                <div class="form-check">
+                                    <input type="radio" id="tvo_mono_ok" name="tvo_mono_ok" value="1"
+                                        class="form-check-input">
+                                    <label for="tvo_mono_ok" class="form-check-label">OK</label>
+                                </div>
+                                <div class="form-check">
+                                    <input type="radio" id="tvo_mono_nok" name="tvo_mono_ok" value="0"
+                                        class="form-check-input">
+                                    <label for="tvo_mono_nok" class="form-check-label">NOK</label>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+
+        </div>
+    </div>
+
+    <!-- Section installation -->
+    <div class="intervention-section mb-4">
+        <h5 class="text-primary mb-3">
+            <i data-feather="home" class="me-2"></i>
+            Installation et localisation
+        </h5>
+
+        <div class="field-group">
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>{{ form.pieces.label(class="form-label") }}</th>
+                        <th>{{ form.communes.label(class="form-label") }}</th>
+                        <th>{{ form.chambres.label(class="form-label") }}</th>
+                        <th>{{ form.bureau.label(class="form-label") }}</th>
+                        <th colspan="2">Avec Wifi Extender si &lt;-70dBm</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>{{ form.pieces(class="form-control") }}</td>
+                        <td>{{ form.communes(class="form-control") }}</td>
+                        <td>{{ form.chambres(class="form-control") }}</td>
+                        <td>{{ form.bureau(class="form-control") }}</td>
+                        <td>
+                            <div class="form-check">
+                                <label class="form-check-label">Autres pièces</label>
+                                {{ form.wifi_extender(class="form-check-input") }}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="form-group">
+                                <label class="form-label">Mesure en dBm</label>
+                                {{ form.mesure_dbm(class="form-control") }}
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <!-- Nouvelle section Tests débits -->
+            <div class="row mt-4">
+                <h5 class="mb-3">Tests débits</h5>
+                <div class="col-md-3 mb-3">
+                    {{ form.debit_cable_montant.label(class="form-label") }}
+                    {{ form.debit_cable_montant(class="form-control", placeholder="Ex: 100 Mbs/s") }}
+                </div>
+                <div class="col-md-3 mb-3">
+                    {{ form.debit_mbs_descendant.label(class="form-label") }}
+                    {{ form.debit_mbs_descendant(class="form-control", placeholder="Ex: 50 Mbs/s") }}
+                </div>
+                <div class="col-md-3 mb-3">
+                    {{ form.debit_mbs_ping.label(class="form-label") }}
+                    {{ form.debit_mbs_ping(class="form-control", placeholder="Ex: 10 mbs/s") }}
+                </div>
+                <div class="col-md-3 mb-3">
+                    {{ form.debit_ms.label(class="form-label") }}
+                    {{ form.debit_ms(class="form-control", placeholder="Ex: 5 ms") }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section satisfaction -->
+    <div class="intervention-section mb-4">
+        <h5 class="text-primary mb-3">
+            <i data-feather="star" class="me-2"></i>
+            Satisfaction client
+        </h5>
+
+        <div class="field-group">
+            <div class="row">
+                <div class="col-md-12 mb-3">
+                    <label class="form-label">Satisfaction client</label>
+                    <div class="d-flex flex-wrap gap-4">
+                        <div class="form-check">
+                            <input type="radio" id="satisfait1" name="satisfaction" value="1" class="form-check-input">
+                            <label for="satisfait1" class="form-check-label">Satisfait</label>
+                        </div>
+                        <div class="form-check">
+                            <input type="radio" id="satisfait2" name="satisfaction" value="2" class="form-check-input">
+                            <label for="satisfait2" class="form-check-label">Peu satisfait</label>
+                        </div>
+                        <div class="form-check">
+                            <input type="radio" id="satisfait3" name="satisfaction" value="3" class="form-check-input">
+                            <label for="satisfait3" class="form-check-label">Très satisfait</label>
+                        </div>
+                        <div class="form-check">
+                            <input type="radio" id="pas_satisfait" name="satisfaction" value="0"
+                                class="form-check-input">
+                            <label for="pas_satisfait" class="form-check-label">Pas satisfait</label>
+                        </div>
+                    </div>
+                    <div class="invalid-feedback">Veuillez sélectionner une valeur</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Section photos -->
+    <div class="intervention-section mb-4">
+        <h5 class="text-primary mb-3">
+            <i data-feather="image" class="me-2"></i>
+            Photos et documents
+        </h5>
+
+        <div class="field-group">
+            <div class="mb-3">
+                <label class="form-label">Importer des photos (justificatifs, etc.)</label>
+                <input type="file" name="photos[]" id="photos" accept="image/*" multiple class="form-control" required>
+            </div>
+        </div>
+    </div>
+    <!-- Section signatures -->
+    <div class="intervention-section mb-4">
+        <h5 class="text-primary mb-3">
+            <i data-feather="edit" class="me-2"></i>
+            Signatures
+        </h5>
+
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Signature de l'équipe</label>
+                <div class="signature-container position-relative">
+                    <button type="button"
+                        class="btn btn-sm btn-outline-secondary signature-clear position-absolute top-0 end-0"
+                        onclick="clearSignature('equipe')">
+                        <i data-feather="x" style="width: 16px; height: 16px;"></i>
+                    </button>
+                    <canvas id="signatureEquipe" class="signature-pad w-100" height="150"></canvas>
+                </div>
+                {{ form.signature_equipe() }}
+                <div class="invalid-feedback signature-feedback" id="equipe-feedback" style="display: none;">
+                    Signature requise
+                </div>
+            </div>
+
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Signature du client</label>
+                <div class="signature-container position-relative">
+                    <button type="button"
+                        class="btn btn-sm btn-outline-secondary signature-clear position-absolute top-0 end-0"
+                        onclick="clearSignature('client')">
+                        <i data-feather="x" style="width: 16px; height: 16px;"></i>
+                    </button>
+                    <canvas id="signatureClient" class="signature-pad w-100" height="150"></canvas>
+                </div>
+                {{ form.signature_client() }}
+                <div class="invalid-feedback signature-feedback" id="client-feedback" style="display: none;">
+                    Signature requise
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body d-flex justify-content-between">
+                    <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+                        <i data-feather="arrow-left" class="me-2"></i>
+                        Retour
+                    </a>
+
+                    <div>
+                        <button type="button" class="btn btn-outline-primary me-2" onclick="saveAsDraft()">
+                            <i data-feather="save" class="me-2"></i>
+                            Sauvegarder brouillon
+                        </button>
+                        <button type="submit" class="btn btn-primary" id="submitBtn">
+                            <i data-feather="check-circle" class="me-2"></i>
+                            Terminer intervention
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+
+{% endif %}
+<!-- Toast Notification -->
+<div id="toastNotification" class="toast-alert" style="display: none;">
+    <div class="toast show">
+        <div class="toast-header">
+            <strong class="me-auto">Notification</strong>
+            <button type="button" class="btn-close" onclick="hideToast()"></button>
+        </div>
+        <div class="toast-body" id="toastMessage"></div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<!-- Signature Pad Library -->
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
+<!-- <script>
+    document.addEventListener("DOMContentLoaded", function () {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(function (position) {
+                document.getElementById('gps_lat').value = position.coords.latitude;
+                document.getElementById('gps_long').value = position.coords.longitude;
+                document.getElementById('geoStatus').style.display = "none";
+            }, function (error) {
+                let msg = "Impossible d'obtenir la position géographique.";
+                if (error.code === 1) msg = "Permission de géolocalisation refusée.";
+                document.getElementById('geoStatus').textContent = msg;
+                document.getElementById('geoStatus').style.display = "block";
+            });
+        } else {
+            document.getElementById('geoStatus').textContent = "Géolocalisation non supportée par ce navigateur.";
+            document.getElementById('geoStatus').style.display = "block";
+        }
+    });
+</script> -->
+{% endblock %}

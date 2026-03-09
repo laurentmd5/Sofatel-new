@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% from "_design-system.html" import stat_card, button, alert_box, badge %}
+
+{% block title %}Tableau de bord Chef PUR - Sofatelcom{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-2">
+                <i data-feather="monitor" class="me-2" aria-hidden="true"></i>
+                Tableau de bord Chef PUR
+            </h1>
+            <p class="text-muted mb-0">Vue synthétique des opérations et KPIs clés</p>
+        </div>
+    </div>
+</div>
+
+<!-- KPIs Principaux (4 cartes majeures) -->
+<section class="kpi-hero mb-5">
+    <h2 class="mb-4">Indicateurs clés</h2>
+    <div class="row g-3">
+        <!-- Total des demandes -->
+        {{ stat_card(
+            'Instances totales',
+            stats.total_demandes,
+            icon='file-text',
+            color='primary',
+            onclick="showDetailsModal('total_demandes', document.getElementById('counter-total_demandes').textContent, 'Total des demandes')"
+        ) }}
+        
+        <!-- Interventions en cours -->
+        {{ stat_card(
+            'En cours',
+            stats.interventions_cours,
+            icon='activity',
+            color='warning',
+            onclick="showDetailsModal('interventions_cours', document.getElementById('counter-interventions_cours').textContent, 'Interventions en cours')"
+        ) }}
+        
+        <!-- Attente validation -->
+        {{ stat_card(
+            'Attente validation',
+            stats.attente_validation,
+            icon='clock',
+            color='info',
+            onclick="showDetailsModal('attente_validation', document.getElementById('counter-attente_validation').textContent, 'Interventions en attente')"
+        ) }}
+        
+        <!-- Validées -->
+        {{ stat_card(
+            'Validées',
+            stats.interventions_validees,
+            icon='check-circle',
+            color='success',
+            onclick="showDetailsModal('interventions_validees', document.getElementById('counter-interventions_validees').textContent, 'Interventions validées')"
+        ) }}
+    </div>
+</section>
+
+<!-- Détails par onglet (Drill-down) -->
+<section class="details-section mb-5">
+    <h2 class="mb-3">Détails opérationnels</h2>
+    
+    <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="tab-sav" data-bs-toggle="tab" data-bs-target="#content-sav" 
+                    type="button" role="tab" aria-controls="content-sav" aria-selected="true">
+                <i data-feather="tool" class="me-2" aria-hidden="true" style="width: 18px; height: 18px;"></i>
+                SAV ({{ stats.demandes_jour_sav }})
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-prod" data-bs-toggle="tab" data-bs-target="#content-prod" 
+                    type="button" role="tab" aria-controls="content-prod" aria-selected="false">
+                <i data-feather="cpu" class="me-2" aria-hidden="true" style="width: 18px; height: 18px;"></i>
+                Production ({{ stats.demandes_jour_production }})
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-status" data-bs-toggle="tab" data-bs-target="#content-status" 
+                    type="button" role="tab" aria-controls="content-status" aria-selected="false">
+                <i data-feather="pie-chart" class="me-2" aria-hidden="true" style="width: 18px; height: 18px;"></i>
+                Status
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- Tab: SAV -->
+        <div class="tab-pane fade show active" id="content-sav" role="tabpanel" aria-labelledby="tab-sav">
+            <div class="card">
+                <div class="card-body">
+                    <h5>Demandes du jour SAV</h5>
+                    <p class="text-muted mb-3">{{ stats.demandes_jour_sav }} instances</p>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="stat-card stat-card-secondary p-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <p class="text-muted small">Validées SAV</p>
+                                        <h4>{{ stats.interventions_validees_sav }}</h4>
+                                    </div>
+                                    <i data-feather="check" class="text-success" style="width: 32px; height: 32px;"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="stat-card stat-card-danger p-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <p class="text-muted small">Rejetées SAV</p>
+                                        <h4>{{ stats.interventions_rejetees }}</h4>
+                                    </div>
+                                    <i data-feather="x-circle" class="text-danger" style="width: 32px; height: 32px;"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Production -->
+        <div class="tab-pane fade" id="content-prod" role="tabpanel" aria-labelledby="tab-prod">
+            <div class="card">
+                <div class="card-body">
+                    <h5>Demandes du jour Production</h5>
+                    <p class="text-muted mb-3">{{ stats.demandes_jour_production }} instances</p>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="stat-card stat-card-success p-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <p class="text-muted small">Validées Production</p>
+                                        <h4>{{ stats.interventions_validees_production }}</h4>
+                                    </div>
+                                    <i data-feather="check" class="text-success" style="width: 32px; height: 32px;"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="stat-card stat-card-warning p-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <p class="text-muted small">En validation</p>
+                                        <h4>{{ stats.attente_validation }}</h4>
+                                    </div>
+                                    <i data-feather="clock" class="text-warning" style="width: 32px; height: 32px;"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Status -->
+        <div class="tab-pane fade" id="content-status" role="tabpanel" aria-labelledby="tab-status">
+            <div class="card">
+                <div class="card-body">
+                    <h5>Résumé de statut</h5>
+                    
+                    <div class="progress-list">
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Instances totales:</span>
+                                <strong>{{ stats.total_demandes }}</strong>
+                            </div>
+                            <div class="progress" role="progressbar">
+                                <div class="progress-bar" style="width: 100%"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>En cours:</span>
+                                <strong>{{ stats.interventions_cours }}</strong>
+                            </div>
+                            <div class="progress" role="progressbar">
+                                <div class="progress-bar bg-warning" 
+                                     style="width: {% if stats.total_demandes > 0 %}{{ (stats.interventions_cours / stats.total_demandes * 100)|round }}{% else %}0{% endif %}%"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Attente validation:</span>
+                                <strong>{{ stats.attente_validation }}</strong>
+                            </div>
+                            <div class="progress" role="progressbar">
+                                <div class="progress-bar bg-info" 
+                                     style="width: {% if stats.total_demandes > 0 %}{{ (stats.attente_validation / stats.total_demandes * 100)|round }}{% else %}0{% endif %}%"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Validées:</span>
+                                <strong>{{ stats.interventions_validees }}</strong>
+                            </div>
+                            <div class="progress" role="progressbar">
+                                <div class="progress-bar bg-success" 
+                                     style="width: {% if stats.total_demandes > 0 %}{{ (stats.interventions_validees / stats.total_demandes * 100)|round }}{% else %}0{% endif %}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Graphique performance -->
+{% if charts %}
+<section class="charts-section mb-5">
+    <h2 class="mb-3">Performance</h2>
+    <div class="card">
+        <div class="card-body">
+            <canvas id="performance-chart" height="80"></canvas>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+<!-- Actions principales -->
+<section class="actions-section mb-5">
+    <h2 class="mb-3">Actions rapides</h2>
+    <div class="btn-group" role="group" aria-label="Actions rapides">
+        {{ button('Créer intervention', href=url_for('create_intervention'), variant='primary', icon='plus') }}
+        {{ button('Importer demandes', href=url_for('import_demandes'), variant='secondary', icon='upload') }}
+        {{ button('Rapport', onclick="window.location.href='#'", variant='outline-secondary', icon='file-text') }}
+    </div>
+</section>
+
+<!-- Modales pour détails -->
+<div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="detailsModalLabel">Détails</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body" id="detailsModalBody">
+                <!-- Contenu dynamique -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showDetailsModal(type, value, title) {
+    const modal = new bootstrap.Modal(document.getElementById('detailsModal'));
+    const body = document.getElementById('detailsModalBody');
+    const label = document.getElementById('detailsModalLabel');
+    
+    label.textContent = title;
+    body.innerHTML = `<p>Détail pour: <strong>${value}</strong> ${type}</p>`;
+    
+    modal.show();
+}
+
+// Initialize feather icons
+feather.replace();
+
+// Real-time counter updates (if using WebSocket or polling)
+document.addEventListener('DOMContentLoaded', function() {
+    // Code for real-time updates would go here
+});
+</script>
+
+{% endblock %}

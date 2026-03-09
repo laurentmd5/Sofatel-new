@@ -1,0 +1,340 @@
+{% extends "base.html" %}
+{% from 'pagination_macro.html' import render_pagination, render_per_page_selector %}
+
+{% block title %}Import demandes - Sofatelcom{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="h3 mb-4">
+            <i data-feather="upload" class="me-2"></i>
+            Import des demandes d'intervention
+        </h1>
+    </div>
+</div>
+
+<!-- Formulaire d'import -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-sofatelcom-primary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="file-plus" class="me-2"></i>
+                    Nouveau fichier Excels
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data" id="importForm">
+                    {{ form.hidden_tag() }}
+
+                    <div class="mb-3">
+                        {{ form.service.label(class="form-label") }}
+                        {{ form.service(class="form-select") }}
+                        {% if current_user.role == 'chef_pilote' and current_user.service != 'SAV,Production' %}
+                        <div class="form-text">Votre profil vous permet d'importer uniquement pour le service {{
+                            current_user.service }}</div>
+                        {% elif current_user.role == 'chef_pilote' and current_user.service == 'SAV,Production' %}
+                        <div class="form-text">Sélectionnez le service pour lequel vous importez les demandes</div>
+                        {% else %}
+                        <div class="form-text">Sélectionnez le service des demandes à importer</div>
+                        {% endif %}
+                        {% if form.service.errors %}
+                        <div class="text-danger small mt-1">
+                            {% for error in form.service.errors %}
+                            <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        {{ form.fichier_excel.label(class="form-label") }}
+                        {{ form.fichier_excel(class="form-control", accept=".xlsx,.xls") }}
+                        {% if form.fichier_excel.errors %}
+                        <div class="text-danger small mt-1">
+                            {% for error in form.fichier_excel.errors %}
+                            <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <div class="form-text">
+                            Formats acceptés: .xlsx, .xls (maximum 50MB)
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <i data-feather="upload" class="me-2"></i>
+                        Importer le fichier
+                    </button>
+
+                    <div id="progressContainer" class="mt-3" style="display: none;">
+                        <div class="progress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
+                                style="width: 0%"></div>
+                        </div>
+                        <small class="text-muted">Traitement en cours...</small>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-sofatelcom-secondary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="info" class="me-2"></i>
+                    Format attendu
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="small mb-3">Le fichier Excel doit contenir les colonnes suivantes:</p>
+
+                <div class="accordion accordion-flush" id="formatAccordion">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="headingRequired">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                data-bs-target="#collapseRequired">
+                                Champs obligatoires
+                            </button>
+                        </h2>
+                        <div id="collapseRequired" class="accordion-collapse collapse"
+                            data-bs-parent="#formatAccordion">
+                            <div class="accordion-body small">
+                                <ul class="list-unstyled mb-0">
+                                    <li>• nd</li>
+                                    <li>• nom_client</li>
+                                    <li>• prenom_client</li>
+                                    <li>• type_techno</li>
+                                    <li>• zone</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="headingOptional">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                data-bs-target="#collapseOptional">
+                                Champs optionnels
+                            </button>
+                        </h2>
+                        <div id="collapseOptional" class="accordion-collapse collapse"
+                            data-bs-parent="#formatAccordion">
+                            <div class="accordion-body small">
+                                <ul class="list-unstyled mb-0">
+                                    <li>• priorite_traitement</li>
+                                    <li>• origine</li>
+                                    <li>• offre</li>
+                                    <li>• produit</li>
+                                    <li>• libelle_commune</li>
+                                    <li>• libelle_quartier</li>
+                                    <li>• date_demande_intervention</li>
+                                    <li>• commentaire_interv</li>
+                                    <li>... et autres</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert alert-info mt-3 mb-0">
+                    <i data-feather="download" class="me-2"></i>
+                    <small>
+                        <a href="#" class="text-decoration-none" onclick="downloadTemplate()">
+                            Télécharger un modèle
+                        </a>
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Historique des imports -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i data-feather="clock" class="me-2"></i>
+                    Historique des imports
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if imports.items %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Fichier</th>
+                                <th>Service</th>
+                                <th>Lignes</th>
+                                <th>Erreurs</th>
+                                <th>Statut</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for import in imports.items %}
+                            <tr>
+                                <td>{{ import.date_import.strftime('%d/%m/%Y %H:%M') }}</td>
+                                <td>
+                                    <i data-feather="file" class="me-1"></i>
+                                    {{ import.nom_fichier }}
+                                </td>
+                                <td>
+                                    {% set service_badge = 'primary' if import.service == 'SAV' else 'success' %}
+                                    <span class="badge bg-{{ service_badge }}">
+                                        {{ import.service }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-info">{{ import.nb_lignes }}</span>
+                                </td>
+                                <td>
+                                    {% if import.nb_erreurs > 0 %}
+                                    <span class="badge bg-warning">{{ import.nb_erreurs }}</span>
+                                    {% else %}
+                                    <span class="badge bg-success">0</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if import.statut == 'termine' %}
+                                    <span class="badge bg-success">
+                                        <i data-feather="check" style="width: 12px; height: 12px;"></i>
+                                        Terminé
+                                    </span>
+                                    {% elif import.statut == 'en_cours' %}
+                                    <span class="badge bg-warning">
+                                        <i data-feather="clock" style="width: 12px; height: 12px;"></i>
+                                        En cours
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-danger">
+                                        <i data-feather="x" style="width: 12px; height: 12px;"></i>
+                                        Erreur
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-danger" data-import-id="{{ import.id }}"
+                                        data-filename="{{ import.nom_fichier|e }}" {% if import.statut=='en_cours'
+                                        %}disabled{% endif %}>
+                                        <i data-feather="trash-2" style="width: 14px; height: 14px;"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i data-feather="inbox" style="width: 48px; height: 48px;" class="text-muted mb-3"></i>
+                    <h6 class="text-muted">Aucun import effectué</h6>
+                    <p class="text-muted">Commencez par importer votre premier fichier Excel</p>
+                </div>
+                {% endif %}
+
+                <!-- Pagination et contrôles -->
+                {% if imports.items %}
+                <div class="card-footer bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        {{ render_per_page_selector(request.args.get('per_page', '25'), 'import_demandes') }}
+                        {{ render_pagination(imports, 'import_demandes') }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.getElementById('importForm').addEventListener('submit', function (e) {
+        const submitBtn = document.getElementById('submitBtn');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = progressContainer.querySelector('.progress-bar');
+
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i data-feather="loader" class="me-2"></i>Traitement...';
+        progressContainer.style.display = 'block';
+
+        // Simulation de progression
+        let progress = 0;
+        const interval = setInterval(() => {
+            progress += Math.random() * 15;
+            if (progress > 95) progress = 95;
+            progressBar.style.width = progress + '%';
+        }, 500);
+
+        // Le formulaire continuera son submission normal
+        // La progression sera stoppée lors du rechargement de la page
+    });
+
+    function downloadTemplate() {
+        // Créer un template Excel basique
+        const data = [
+            ['nd', 'zone', 'priorite_traitement', 'origine', 'offre', 'type_techno', 'produit', 'age', 'nom_client', 'prenom_client', 'rep_srp', 'constitution', 'specialite', 'resultat_essai', 'commentaire_essai', 'agent_essai', 'date_demande_intervention', 'commentaire_interv', 'id_ot', 'equipe', 'section_id', 'statut', 'libelle_commune', 'libelle_quartier'],
+            ['ND001', 'Dakar', 'Normale', 'Client', 'ADSL', 'Fibre', 'Internet', '6 mois', 'Diop', 'Amadou', 'REP001', 'Individuel', 'Installation', 'OK', 'Test réussi', 'Tech01', '2024-01-15', 'RAS', 'OT001', 'Equipe A', 'SECT001', 'nouveau', 'Dakar', 'Plateau']
+        ];
+
+        // Convertir en CSV pour téléchargement
+        let csvContent = '';
+        data.forEach(row => {
+            csvContent += row.join(',') + '\n';
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'template_demandes_sofatelcom.csv';
+        a.click();
+        window.URL.revokeObjectURL(url);
+    }
+
+    // Gestion des événements de clic sur les boutons de suppression
+    document.querySelectorAll('.btn-outline-danger').forEach(button => {
+        button.addEventListener('click', function () {
+            const importId = this.getAttribute('data-import-id');
+            const filename = this.getAttribute('data-filename');
+            confirmDelete(importId, filename);
+        });
+    });
+
+    // Auto-refresh de la page toutes les 30 secondes pendant un import
+    const enCoursBadges = Array.from(document.querySelectorAll('.badge')).filter(badge =>
+        badge.textContent.trim().includes('En cours')
+    );
+    if (enCoursBadges.length > 0) {
+        setTimeout(() => {
+            location.reload();
+        }, 30000);
+    }
+
+    function confirmDelete(importId, filename) {
+        if (confirm(`Êtes-vous sûr de vouloir supprimer l'import "${filename}" et toutes les demandes associées ?\n\nCette action est irréversible.`)) {
+            // Créer un formulaire pour envoyer la requête DELETE
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/import-demandes/delete/${importId}`;
+            
+            // Ajouter le jeton CSRF
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = csrfToken;
+            form.appendChild(csrfInput);
+            
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+</script>
+{% endblock %}

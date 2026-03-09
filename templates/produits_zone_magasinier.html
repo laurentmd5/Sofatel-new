@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+
+{% block title %}Produits de ma Zone - Sofatelcom PUR{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-5">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('dashboard_magasinier') }}">Accueil</a></li>
+            <li class="breadcrumb-item active">Produits de ma Zone</li>
+        </ol>
+    </nav>
+
+    <!-- Header -->
+    <div class="page-header mb-4">
+        <div class="row align-items-center">
+            <div class="col">
+                <h1 class="mb-2">
+                    <i class="fas fa-boxes"></i> Produits en Stock
+                </h1>
+                <p class="text-muted mb-0">Tous les produits dans votre zone</p>
+            </div>
+            <div class="col-auto">
+                <div class="stat-box" style="min-width: 250px;">
+                    <div class="stat-box-icon info">
+                        <i class="fas fa-box"></i>
+                    </div>
+                    <div class="stat-box-content">
+                        <h3>Articles</h3>
+                        <div class="value">{{ total_produits }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list"></i> Liste des Produits
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if produits and produits|length > 0 %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>
+                                        <a href="{{ url_for('stock.liste_produits_zone', sort='reference', direction=direction) }}" class="text-decoration-none">
+                                            Référence
+                                            {% if sort == 'reference' %}
+                                            <i class="fas fa-{{ 'arrow-up' if direction == 'asc' else 'arrow-down' }}"></i>
+                                            {% endif %}
+                                        </a>
+                                    </th>
+                                    <th>
+                                        <a href="{{ url_for('stock.liste_produits_zone', sort='nom', direction=direction) }}" class="text-decoration-none">
+                                            Nom
+                                            {% if sort == 'nom' %}
+                                            <i class="fas fa-{{ 'arrow-up' if direction == 'asc' else 'arrow-down' }}"></i>
+                                            {% endif %}
+                                        </a>
+                                    </th>
+                                    <th>Catégorie</th>
+                                    <th>Emplacement</th>
+                                    <th class="text-end">
+                                        <a href="{{ url_for('stock.liste_produits_zone', sort='quantite', direction=direction) }}" class="text-decoration-none">
+                                            Quantité
+                                            {% if sort == 'quantite' %}
+                                            <i class="fas fa-{{ 'arrow-up' if direction == 'asc' else 'arrow-down' }}"></i>
+                                            {% endif %}
+                                        </a>
+                                    </th>
+                                    <th class="text-end">Prix Unitaire</th>
+                                    <th class="text-end">Valeur Stock</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for produit in produits %}
+                                <tr>
+                                    <td>
+                                        <code>{{ produit.reference }}</code>
+                                    </td>
+                                    <td>
+                                        <strong>{{ produit.nom }}</strong>
+                                    </td>
+                                    <td>
+                                        {% if produit.categorie %}
+                                        <span class="badge badge-info">{{ produit.categorie.nom }}</span>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if produit.emplacement %}
+                                        {{ produit.emplacement.designation }}
+                                        {% else %}
+                                        <span class="text-muted">Non spécifié</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <strong>{{ produit.quantite }}</strong>
+                                        {% if produit.quantite == 0 %}
+                                        <span class="badge bg-danger ms-2">Rupture</span>
+                                        {% elif produit.quantite < 5 %}
+                                        <span class="badge bg-warning ms-2">Stock Faible</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if produit.prix_vente %}
+                                        {{ "%.0f"|format(produit.prix_vente) }} FCFA
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <strong>
+                                            {% if produit.prix_vente %}
+                                            {{ "%.0f"|format(produit.quantite * produit.prix_vente) }} FCFA
+                                            {% else %}
+                                            <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </strong>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="empty-state py-5">
+                        <div class="empty-state-icon">
+                            <i class="fas fa-inbox"></i>
+                        </div>
+                        <h3>Aucun produit trouvé</h3>
+                        <p class="text-muted">Aucun produit n'est assigné à votre zone pour le moment.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Emplacements Summary -->
+    {% if emplacements and emplacements|length > 0 %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="fas fa-warehouse"></i> Résumé par Emplacement
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for emp in emplacements %}
+                        <div class="col-md-4 mb-3">
+                            <div class="p-3 bg-light rounded">
+                                <strong>{{ emp.nom }}</strong>
+                                <div class="h4 text-primary mb-0">{{ emp.nombre }} article{{ 's' if emp.nombre != 1 else '' }}</div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Action Buttons -->
+    <div class="row mt-5 mb-5">
+        <div class="col-12">
+            <a href="{{ url_for('dashboard_magasinier') }}" class="btn btn-outline-primary">
+                <i class="fas fa-arrow-left me-2"></i> Retour au Tableau de Bord
+            </a>
+            <button class="btn btn-outline-secondary ms-2" onclick="window.print()">
+                <i class="fas fa-print me-2"></i> Imprimer
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .page-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 10px;
+        margin-bottom: 2rem;
+    }
+
+    .page-header h1 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 700;
+    }
+
+    .page-header p {
+        margin: 0.5rem 0 0 0;
+        opacity: 0.9;
+    }
+
+    .stat-box {
+        background: white;
+        border-radius: 8px;
+        padding: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .stat-box-icon {
+        width: 50px;
+        height: 50px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+    }
+
+    .stat-box-icon.info {
+        background: rgba(102, 126, 234, 0.1);
+        color: #667eea;
+    }
+
+    .stat-box-content h3 {
+        margin: 0;
+        font-size: 0.85rem;
+        color: #666;
+        text-transform: uppercase;
+        font-weight: 500;
+    }
+
+    .stat-box-content .value {
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin: 0.25rem 0 0 0;
+        color: #000;
+    }
+
+    .badge-info {
+        background: rgba(102, 126, 234, 0.1);
+        color: #667eea;
+    }
+
+    .badge-success {
+        background: rgba(40, 167, 69, 0.1);
+        color: #28a745;
+    }
+
+    .badge-warning {
+        background: rgba(255, 193, 7, 0.1);
+        color: #ffc107;
+    }
+
+    .table th {
+        border-top: 1px solid #dee2e6;
+        padding: 1rem;
+        font-weight: 600;
+        color: #495057;
+    }
+
+    .table td {
+        padding: 1rem;
+        vertical-align: middle;
+    }
+
+    .table tbody tr:hover {
+        background-color: rgba(102, 126, 234, 0.05);
+    }
+
+    .empty-state {
+        text-align: center;
+    }
+
+    .empty-state-icon {
+        font-size: 3rem;
+        color: #dee2e6;
+        margin-bottom: 1rem;
+    }
+
+    .empty-state h3 {
+        color: #666;
+        margin-bottom: 0.5rem;
+    }
+
+    .breadcrumb {
+        background: transparent;
+        padding: 0;
+        margin-bottom: 2rem;
+    }
+
+    .breadcrumb-item.active {
+        color: #667eea;
+        font-weight: 600;
+    }
+
+    .breadcrumb-item a {
+        color: #667eea;
+        text-decoration: none;
+    }
+
+    .breadcrumb-item a:hover {
+        text-decoration: underline;
+    }
+
+    code {
+        background: rgba(102, 126, 234, 0.1);
+        color: #667eea;
+        padding: 0.2rem 0.5rem;
+        border-radius: 3px;
+        font-size: 0.9em;
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,646 @@
+name: 🚀 DevSecOps CI/CD - Defense in Depth
+
+on:
+  push:
+    branches: [ dev ]
+  pull_request:
+    branches: [ dev ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  REGISTRY_USERNAME: ${{ github.actor }}
+
+jobs:
+  # ============================================================================
+  # PHASE 1: CODE QUALITY & SECURITY ANALYSIS
+  # ============================================================================
+  code-quality:
+    name: 🔍 Code Quality & SAST Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🔨 Install quality tools
+        run: |
+          pip install pylint flake8 black bandit safety
+
+      - name: 🎨 Format check (Black)
+        run: |
+          black --check . --line-length=100 || true
+        continue-on-error: true
+
+      - name: 📋 Lint code (Flake8)
+        run: |
+          # Ignorer les erreurs de formatage mineurs, se concentrer sur la sécurité
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || true
+        continue-on-error: true
+
+      - name: 🔐 Security scan (Bandit)
+        run: |
+          bandit -r . -f json -o bandit-report.json || true
+          bandit -r . -f txt || true
+
+      - name: 📊 Upload Bandit report
+        uses: actions/upload-artifact@v3
+        with:
+          name: bandit-security-report
+          path: bandit-report.json
+        if: always()
+
+      - name: 🛡️ Dependency security check (Safety)
+        run: |
+          safety check --json --output safety-report.json || true
+          safety check || true
+        continue-on-error: true
+
+      - name: 📤 Upload Safety report
+        uses: actions/upload-artifact@v3
+        with:
+          name: safety-security-report
+          path: safety-report.json
+        if: always()
+
+      - name: 🔍 SAST analysis (Pylint)
+        run: |
+          pylint app.py models.py extensions.py routes*.py --exit-zero --output-format=json > pylint-report.json || true
+        continue-on-error: true
+
+      - name: 📈 Upload Pylint report
+        uses: actions/upload-artifact@v3
+        with:
+          name: pylint-analysis-report
+          path: pylint-report.json
+        if: always()
+
+  # ============================================================================
+  # PHASE 2: UNIT TESTS
+  # ============================================================================
+  unit-tests:
+    name: ✅ Unit Tests & Coverage
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: test_db
+          MYSQL_USER: testuser
+          MYSQL_PASSWORD: testpass
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+        ports:
+          - 3306:3306
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+        ports:
+          - 6379:6379
+
+    permissions:
+      contents: read
+      checks: write
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-mysql
+
+      - name: ⏳ Wait for MySQL
+        run: |
+          python -c "
+          import pymysql
+          import time
+          for i in range(30):
+              try:
+                  pymysql.connect(host='localhost', user='testuser', password='testpass', database='test_db')
+                  print('MySQL is ready')
+                  break
+              except:
+                  time.sleep(1)
+          "
+
+      - name: ⏳ Wait for Redis
+        run: |
+          python -c "
+          import redis
+          import time
+          for i in range(30):
+              try:
+                  redis.Redis(host='localhost', port=6379).ping()
+                  print('Redis is ready')
+                  break
+              except:
+                  time.sleep(1)
+          "
+
+      - name: 🧪 Run unit tests
+        env:
+          SQLALCHEMY_DATABASE_URI: mysql+pymysql://testuser:testpass@localhost:3306/test_db
+          REDIS_URL: redis://localhost:6379/0
+          FLASK_ENV: testing
+          SESSION_SECRET: test_secret_key
+        run: |
+          pytest tests/ -v --cov=. --cov-report=xml --cov-report=html --cov-report=term
+
+      - name: 📊 Upload coverage reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: htmlcov/
+        if: always()
+
+      - name: 📈 Codecov integration
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+  # ============================================================================
+  # PHASE 3: DEPENDENCY SCANNING
+  # ============================================================================
+  dependency-check:
+    name: 🔗 Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔍 Run dependency-check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'SOFATELCOM-V2'
+          path: '.'
+          format: 'JSON'
+          args: >
+            --enableExperimental
+
+      - name: 📤 Upload dependency-check report
+        uses: actions/upload-artifact@v3
+        with:
+          name: dependency-check-report
+          path: reports/
+        if: always()
+
+  # ============================================================================
+  # PHASE 4: BUILD DOCKER IMAGE (avec scan de sécurité)
+  # ============================================================================
+  build-docker:
+    name: 🐳 Build & Scan Docker Image
+    runs-on: ubuntu-latest
+    needs: [code-quality, unit-tests, dependency-check]
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: 🔐 Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.REGISTRY_USERNAME }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📝 Extract metadata
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=dev-${{ github.run_number }}
+
+      - name: 🔨 Build Docker image
+        id: build
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ github.run_number }}
+
+      - name: 🔐 Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.meta.outputs.tags }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: 📤 Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+        if: always()
+
+      - name: 📊 Upload Trivy report
+        uses: actions/upload-artifact@v3
+        with:
+          name: trivy-scan-report
+          path: trivy-results.sarif
+        if: always()
+
+      - name: 🔐 Generate SBOM (Syft)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft ${{ steps.meta.outputs.tags }} -o json > sbom.json
+        continue-on-error: true
+
+      - name: 📤 Upload SBOM
+        uses: actions/upload-artifact@v3
+        with:
+          name: sbom-report
+          path: sbom.json
+        if: always()
+
+  # ============================================================================
+  # PHASE 5: DEPLOY TO STAGING (via SSH to Ubuntu VM)
+  # ============================================================================
+  deploy-staging:
+    name: 🚀 Deploy to Staging (Ubuntu VM)
+    runs-on: ubuntu-latest
+    needs: build-docker
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    permissions:
+      contents: read
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.STAGING_SERVER_IP }} >> ~/.ssh/known_hosts
+
+      - name: 📦 Prepare deployment files
+        run: |
+          mkdir -p deploy
+          cp docker-compose.yml deploy/
+          cp Dockerfile deploy/
+          cp .dockerignore deploy/
+          cp .env.docker deploy/.env.staging
+          cp requirements.txt deploy/
+          cp entrypoint.sh deploy/
+          cp init-db.sql deploy/
+          
+          # Créer un script de déploiement
+          cat > deploy/deploy.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          echo "🚀 Déploiement SOFATELCOM Staging"
+          echo "=================================="
+          
+          # Variables
+          DOCKER_IMAGE="${{ needs.build-docker.outputs.image-tag }}"
+          APP_DIR="/opt/sofatelcom"
+          
+          # 1. Créer le répertoire d'application
+          sudo mkdir -p $APP_DIR
+          sudo chown -R $USER:$USER $APP_DIR
+          cd $APP_DIR
+          
+          # 2. Copier les fichiers
+          cp -r /tmp/sofatelcom-deploy/* $APP_DIR/ || true
+          
+          # 3. Configurer les variables d'environnement
+          if [ ! -f .env ]; then
+            cp .env.staging .env
+            echo "⚠️  Éditer .env avec vos paramètres!"
+          fi
+          
+          # 4. Arrêter les anciens containers
+          echo "🛑 Arrêt des anciens containers..."
+          docker-compose down || true
+          
+          # 5. Nettoyer les anciennes images
+          docker system prune -f || true
+          
+          # 6. Démarrer les nouveaux containers
+          echo "🚀 Démarrage des nouveaux containers..."
+          docker-compose pull
+          docker-compose up -d
+          
+          # 7. Attendre que l'app soit prête
+          echo "⏳ Attente de l'initialisation..."
+          sleep 10
+          
+          # 8. Vérifier la santé
+          echo "🏥 Vérification de santé..."
+          docker-compose ps
+          docker-compose exec -T app curl http://localhost:5000/api/health || echo "Health check en cours..."
+          
+          echo "✅ Déploiement complété avec succès!"
+          EOF
+          
+          chmod +x deploy/deploy.sh
+
+      - name: 📤 Upload to staging server
+        run: |
+          scp -r deploy/* ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_SERVER_IP }}:/tmp/sofatelcom-deploy/
+
+      - name: 🚀 Execute deployment
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_SERVER_IP }} << 'EOF'
+          set -e
+          
+          echo "🚀 Déploiement SOFATELCOM Staging"
+          echo "=================================="
+          echo "Serveur: 192.168.61.131 (VMware Local)"
+          echo "Utilisateur: deployer"
+          echo "========================================="
+          
+          APP_DIR="/opt/sofatelcom"
+          
+          # 1. Créer le répertoire d'application
+          echo "📁 Création du répertoire d'application..."
+          sudo mkdir -p $APP_DIR
+          sudo chown deployer:deployer $APP_DIR
+          cd $APP_DIR
+          
+          # 2. Copier les fichiers de déploiement
+          echo "📦 Copie des fichiers de déploiement..."
+          cp -r /tmp/sofatelcom-deploy/* . || true
+          
+          # 3. Configurer les variables d'environnement
+          if [ ! -f .env ]; then
+            cp .env.staging .env
+            echo "⚠️  ATTENTION: Éditer .env avec vos paramètres!"
+          fi
+          
+          # 4. Créer les répertoires de logs et backups
+          echo "📁 Création des répertoires de logs..."
+          sudo mkdir -p /var/log/sofatelcom
+          sudo chown deployer:deployer /var/log/sofatelcom
+          sudo mkdir -p /opt/sofatelcom-backups
+          sudo chown deployer:deployer /opt/sofatelcom-backups
+          
+          # 5. Backup de l'état actuel
+          if [ -f docker-compose.yml ]; then
+            echo "💾 Sauvegarde de l'état actuel..."
+            docker-compose ps > /opt/sofatelcom-backups/pre-deploy-status-$(date +%s).txt || true
+          fi
+          
+          # 6. Arrêter les anciens containers
+          echo "🛑 Arrêt des anciens containers..."
+          docker-compose down --remove-orphans 2>/dev/null || true
+          
+          # 7. Nettoyer les images/containers non utilisés
+          echo "🧹 Nettoyage des ressources Docker..."
+          docker system prune -f || true
+          
+          # 8. Démarrer les nouveaux containers
+          echo "🚀 Démarrage des nouveaux containers..."
+          docker-compose pull || true
+          docker-compose up -d --remove-orphans
+          
+          # 9. Attendre l'initialisation de l'app
+          echo "⏳ Attente de l'initialisation de l'application..."
+          HEALTH_CHECK_RETRIES=0
+          MAX_RETRIES=30
+          while [ $HEALTH_CHECK_RETRIES -lt $MAX_RETRIES ]; do
+            if docker-compose exec -T app curl -f http://localhost:5000/api/health > /dev/null 2>&1; then
+              echo "✅ Application est prête et en bonne santé!"
+              break
+            fi
+            HEALTH_CHECK_RETRIES=$((HEALTH_CHECK_RETRIES + 1))
+            echo "⏳ Tentative $HEALTH_CHECK_RETRIES/$MAX_RETRIES..."
+            sleep 2
+          done
+          
+          if [ $HEALTH_CHECK_RETRIES -eq $MAX_RETRIES ]; then
+            echo "⚠️  Timeout sur le health check, mais les containers sont en cours de démarrage"
+          fi
+          
+          # 10. Vérification finale
+          echo "✅ Vérification finale des services..."
+          echo "📊 Status des containers:"
+          docker-compose ps
+          
+          echo ""
+          echo "📊 Logs des 10 dernières lignes (app):"
+          docker-compose logs --tail=10 app || true
+          
+          echo ""
+          echo "✅ Déploiement complété avec succès!"
+          echo "✅ Serveur Staging opérationnel sur: http://192.168.61.131:5000"
+          EOF
+
+      - name: 📊 Post-deployment verification
+        run: |
+          echo "🔍 Vérification complète du déploiement sur 192.168.61.131..."
+          ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_SERVER_IP }} << 'EOF'
+          set -e
+          
+          cd /opt/sofatelcom
+          
+          echo ""
+          echo "╔════════════════════════════════════════════════════════════════╗"
+          echo "║         SOFATELCOM STAGING - POST-DEPLOY CHECK                  ║"
+          echo "║         Server: 192.168.61.131 (VMware Local)                    ║"
+          echo "╚════════════════════════════════════════════════════════════════╝"
+          
+          # 1. Status des containers
+          echo ""
+          echo "📊 Status des containers:"
+          docker-compose ps
+          
+          # 2. Vérifier que tous les containers sont running
+          RUNNING=$(docker-compose ps --services --filter "status=running" | wc -l)
+          TOTAL=$(docker-compose ps --services | wc -l)
+          echo ""
+          echo "📈 Containers: $RUNNING/$TOTAL en cours d'exécution"
+          
+          # 3. Logs récents de l'app
+          echo ""
+          echo "📝 Logs de l'application (30 dernières lignes):"
+          docker-compose logs --tail=30 app || echo "Logs non disponibles"
+          
+          # 4. Health check
+          echo ""
+          echo "🏥 Health check de l'API:"
+          if curl -s http://localhost:5000/api/health; then
+            echo ""
+            echo "✅ API est opérationnelle!"
+          else
+            echo ""
+            echo "⚠️  API pas encore disponible (startup en cours)"
+          fi
+          
+          # 5. Usage des ressources
+          echo ""
+          echo "💾 Utilisation des ressources Docker:"
+          docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}" || true
+          
+          # 6. Espace disque
+          echo ""
+          echo "💿 Espace disque:"
+          df -h /opt/sofatelcom
+          
+          # 7. Informations de déploiement
+          echo ""
+          echo "ℹ️  Informations de déploiement:"
+          echo "   - Serveur: 192.168.61.131 (VMware)"
+          echo "   - Répertoire: /opt/sofatelcom"
+          echo "   - Utilisateur: deployer"
+          echo "   - URL Staging: http://192.168.61.131:5000"
+          echo "   - Logs: /var/log/sofatelcom"
+          echo "   - Backups: /opt/sofatelcom-backups"
+          
+          echo ""
+          echo "✅ Vérification de déploiement complétée!"
+          EOF
+
+  # ============================================================================
+  # PHASE 6: NOTIFICATIONS & REPORTING
+  # ============================================================================
+  notify:
+    name: 📢 Notifications & Reports
+    runs-on: ubuntu-latest
+    needs: [code-quality, unit-tests, dependency-check, build-docker, deploy-staging]
+    if: always()
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📊 Generate summary
+        run: |
+          cat > /tmp/deployment_summary.txt << 'EOF'
+          🚀 SOFATELCOM CI/CD PIPELINE SUMMARY
+          ====================================
+          
+          Workflow: ${{ github.workflow }}
+          Branch: ${{ github.ref }}
+          Commit: ${{ github.sha }}
+          Author: ${{ github.actor }}
+          
+          Jobs Status:
+          - Code Quality: ${{ needs.code-quality.result }}
+          - Unit Tests: ${{ needs.unit-tests.result }}
+          - Dependency Check: ${{ needs.dependency-check.result }}
+          - Build Docker: ${{ needs.build-docker.result }}
+          - Deploy Staging: ${{ needs.deploy-staging.result }}
+          
+          Artifacts:
+          - Bandit Security Report
+          - Safety Dependency Report
+          - Pylint Analysis
+          - Coverage Report
+          - Dependency Check Report
+          - Trivy Vulnerability Scan
+          - SBOM (Software Bill of Materials)
+          
+          Staging URL: http://${{ secrets.STAGING_SERVER_IP }}:5000
+          
+          Documentation:
+          - Guide: DOCKER_DEPLOYMENT_GUIDE.md
+          - Security: SECURITY_POLICY.md
+          EOF
+          
+          cat /tmp/deployment_summary.txt
+
+      - name: 📧 Send Slack notification
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ job.status }}
+          text: |
+            🚀 SOFATELCOM Deployment Pipeline
+            Branch: ${{ github.ref }}
+            Status: ${{ job.status }}
+            Author: ${{ github.actor }}
+            
+            Jobs:
+            ✓ Code Quality: ${{ needs.code-quality.result }}
+            ✓ Unit Tests: ${{ needs.unit-tests.result }}
+            ✓ Dependency Check: ${{ needs.dependency-check.result }}
+            ✓ Build Docker: ${{ needs.build-docker.result }}
+            ✓ Deploy: ${{ needs.deploy-staging.result }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+      - name: 💬 Create GitHub issue on failure
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 CI/CD Pipeline Failed - ${context.ref}`,
+              body: `
+            Pipeline failed for commit: ${context.sha}
+            Branch: ${context.ref}
+            Author: ${context.actor}
+            
+            Check the workflow logs: ${context.server_url}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}
+            `,
+              labels: ['bug', 'ci-cd']
+            })

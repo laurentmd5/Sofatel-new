@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}Tableau de bord {{ current_user.get_role_display() }} - Sofatelcom{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="h3 mb-4">
+            <i data-feather="{% if current_user.service == 'SAV,Production' %}award{% else %}navigation{% endif %}" class="me-2"></i>
+            Tableau de bord {{ current_user.get_role_display() }}
+            {% if current_user.service %}
+                <span class="badge bg-primary ms-2">{{ current_user.service }}</span>
+            {% endif %}
+        </h1>
+    </div>
+</div>
+
+<!-- Statistiques par statut -->
+<div class="row mb-4">
+    <div class="col-md-2 mb-3">
+        <div class="card border-secondary">
+            <div class="card-body text-center">
+                <h4 class="text-secondary">{{ stats.total_demandes }}</h4>
+                <p class="mb-0 small">Total</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-2 mb-3">
+        <div class="card border-danger">
+            <div class="card-body text-center">
+                <h4 class="text-danger">{{ stats.demandes_nouvelles }}</h4>
+                <p class="mb-0 small">Nouvelles</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-2 mb-3">
+        <div class="card border-warning">
+            <div class="card-body text-center">
+                <h4 class="text-warning">{{ stats.demandes_affectees }}</h4>
+                <p class="mb-0 small">Affectées</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-2 mb-3">
+        <div class="card border-info">
+            <div class="card-body text-center">
+                <h4 class="text-info">{{ stats.demandes_terminees }}</h4>
+                <p class="mb-0 small">Terminées</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-2 mb-3">
+        <div class="card border-success">
+            <div class="card-body text-center">
+                <h4 class="text-success">{{ stats.demandes_validees }}</h4>
+                <p class="mb-0 small">Validées</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-2 mb-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body text-center">
+                <h4>{{ stats.demandes_jour }}</h4>
+                <p class="mb-0 small">Aujourd'hui</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Workflow management -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-sofatelcom-primary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="workflow" class="me-2"></i>
+                    Gestion des demandes
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <a href="{{ url_for('import_demandes') }}" class="btn btn-outline-primary w-100 h-100 d-flex align-items-center justify-content-center">
+                            <div class="text-center">
+                                <i data-feather="upload" class="mb-2" style="width: 32px; height: 32px;"></i>
+                                <br>
+                                <strong>Importer demandes</strong>
+                                <br>
+                                <small>Fichiers Excel Sonatel</small>
+                            </div>
+                        </a>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <a href="{{ url_for('dispatching') }}" class="btn btn-outline-success w-100 h-100 d-flex align-items-center justify-content-center">
+                            <div class="text-center">
+                                <i data-feather="send" class="mb-2" style="width: 32px; height: 32px;"></i>
+                                <br>
+                                <strong>Dispatching</strong>
+                                <br>
+                                <small>Manuel & Automatique</small>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+                
+                {% if stats.demandes_nouvelles > 0 %}
+                <div class="alert alert-warning mb-0">
+                    <i data-feather="alert-triangle" class="me-2"></i>
+                    <strong>{{ stats.demandes_nouvelles }} demandes</strong> en attente d'affectation
+                    <a href="{{ url_for('dispatching') }}" class="btn btn-warning btn-sm ms-2">Traiter maintenant</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header bg-sofatelcom-secondary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="check-square" class="me-2"></i>
+                    Validation
+                </h5>
+            </div>
+            <div class="card-body d-flex flex-column">
+                <p class="text-muted">Interventions en attente de validation</p>
+                <div class="mt-auto">
+                    <a href="{{ url_for('intervention_history') }}?filter=termine" class="btn btn-outline-info w-100">
+                        <i data-feather="eye" class="me-2"></i>
+                        Voir les interventions
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Performance indicators -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i data-feather="bar-chart-2" class="me-2"></i>
+                    Indicateurs de performance
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <h6>Taux d'affectation</h6>
+                        <div class="progress mb-3">
+                            {% set taux_affectation = ((stats.demandes_affectees + stats.demandes_terminees + stats.demandes_validees) / stats.total_demandes * 100) if stats.total_demandes > 0 else 0 %}
+                            <div class="progress-bar bg-success" style="width: {{ taux_affectation|round }}%">
+                                {{ taux_affectation|round }}%
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <h6>Taux de completion</h6>
+                        <div class="progress mb-3">
+                            {% set taux_completion = ((stats.demandes_terminees + stats.demandes_validees) / stats.total_demandes * 100) if stats.total_demandes > 0 else 0 %}
+                            <div class="progress-bar bg-info" style="width: {{ taux_completion|round }}%">
+                                {{ taux_completion|round }}%
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <h6>Taux de validation</h6>
+                        <div class="progress mb-3">
+                            {% set taux_validation = (stats.demandes_validees / stats.total_demandes * 100) if stats.total_demandes > 0 else 0 %}
+                            <div class="progress-bar bg-warning" style="width: {{ taux_validation|round }}%">
+                                {{ taux_validation|round }}%
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Auto-refresh toutes les 30 secondes
+setInterval(() => {
+    fetch('/api/stats')
+        .then(response => response.json())
+        .then(data => {
+            location.reload();
+        })
+        .catch(error => console.error('Erreur refresh:', error));
+}, 30000);
+</script>
+{% endblock %}

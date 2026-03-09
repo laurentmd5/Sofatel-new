@@ -1,0 +1,1657 @@
+{% extends "base.html" %}
+{% from 'pagination_macro.html' import render_pagination, render_per_page_selector %}
+
+{% block title %}Dispatching - Sofatelcom{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+    .filter-popup {
+        min-width: 280px;
+        max-width: 320px;
+    }
+
+    .filter-items {
+        max-height: 300px;
+        overflow-y: auto;
+        margin-bottom: 10px;
+        padding-right: 10px;
+    }
+
+    .form-check {
+        margin-bottom: 0.5rem;
+    }
+
+    .form-check-label {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: pointer;
+    }
+
+    /* Styles spécifiques pour les filtres de colonnes */
+    .sortable {
+        position: relative;
+        padding-right: 25px !important;
+        white-space: nowrap;
+    }
+
+    .filter-icon {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 14px;
+        height: 14px;
+        opacity: 0.5;
+        cursor: pointer;
+        color: var(--sofatelcom-dark);
+        transition: all 0.2s ease;
+    }
+
+    .filter-icon:hover,
+    .filter-icon.active {
+        opacity: 1;
+        color: var(--sofatelcom-secondary);
+    }
+
+    .filter-popup {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        min-width: 250px;
+        z-index: 1050;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+        margin-top: 5px;
+    }
+
+    .filter-popup::before {
+        content: '';
+        position: absolute;
+        top: -6px;
+        right: 10px;
+        width: 12px;
+        height: 12px;
+        background: white;
+        border-left: 1px solid #dee2e6;
+        border-top: 1px solid #dee2e6;
+        transform: rotate(45deg);
+    }
+
+    .filter-popup input {
+        border: 1px solid #dee2e6;
+        transition: all 0.2s ease;
+    }
+
+    .filter-popup input:focus {
+        border-color: var(--sofatelcom-secondary);
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+    }
+
+    .filter-popup .btn-group {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+
+    .filter-active {
+        position: relative;
+    }
+
+    .filter-active::after {
+        content: '';
+        position: absolute;
+        width: 6px;
+        height: 6px;
+        background: var(--sofatelcom-secondary);
+        border-radius: 50%;
+        top: 0;
+        right: 0;
+    }
+
+    /* Ajustements pour le responsive */
+    @media (max-width: 768px) {
+        .filter-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            max-width: 320px;
+        }
+
+        .filter-popup::before {
+            display: none;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="h3 mb-4">
+            <i data-feather="send" class="me-2"></i>
+            Dispatching des demandes
+            {% if current_user.service %}
+            <span class="badge bg-primary ms-2">{{ current_user.service }}</span>
+            {% endif %}
+        </h1>
+    </div>
+</div>
+
+<!-- Contrôles de dispatching -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-sofatelcom-primary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="filter" class="me-2"></i>
+                    Filtres et actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Technologie</label>
+                        <select class="form-select" id="filterTechnologie" onchange="filterDemandes()">
+                            <option value="" {% if not request.args.get('technologie') %}selected{% endif %}>Toutes
+                            </option>
+                            <option value="Fibre" {% if request.args.get('technologie')=='Fibre' %}selected{% endif %}>
+                                Fibre</option>
+                            <option value="Cuivre" {% if request.args.get('technologie')=='Cuivre' %}selected{% endif
+                                %}>Cuivre</option>
+                            <option value="5G" {% if request.args.get('technologie')=='5G' %}selected{% endif %}>5G
+                            </option>
+                        </select>
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <label class="form-label">Zone</label>
+                        <select class="form-select" id="filterZone" onchange="filterDemandes()">
+                            <option value="" {% if not request.args.get('zone') %}selected{% endif %}>Toutes</option>
+                            <option value="Dakar" {% if request.args.get('zone')=='Dakar' %}selected{% endif %}>Dakar
+                            </option>
+                            <option value="Mbour" {% if request.args.get('zone')=='Mbour' %}selected{% endif %}>Mbour
+                            </option>
+                            <option value="Kaolack" {% if request.args.get('zone')=='Kaolack' %}selected{% endif %}>
+                                Kaolack</option>
+                            <option value="Autres">Autres</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <label class="form-label">Âge</label>
+                        <select class="form-select" id="filterAge" onchange="filterDemandes()">
+                            <option value="" {% if not request.args.get('age') %}selected{% endif %}>Tous</option>
+                            {% for age in ages %}
+                            <option value="{{ age }}" {% if request.args.get('age')==age|string %}selected{% endif %}>{{
+                                age }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <label class="form-label">Offre</label>
+                        <select class="form-select" id="filterOffre" onchange="filterDemandes()">
+                            <option value="" {% if not request.args.get('offre') %}selected{% endif %}>Toutes</option>
+                            {% for offre in offres %}
+                            <option value="{{ offre }}" {% if request.args.get('offre')==offre %}selected{% endif %}>{{
+                                offre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Priorité</label>
+                        <select class="form-select" id="filterPriorite" onchange="filterDemandes()">
+                            <option value="" {% if not request.args.get('priorite_traitement') %}selected{% endif %}>
+                                Toutes</option>
+                            {% for priorite in priorites %}
+                            <option value="{{ priorite }}" {% if request.args.get('priorite_traitement')==priorite
+                                %}selected{% endif %}>{{ priorite }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <button type="button" class="btn btn-success" onclick="dispatchingAutomatique()">
+                            <i data-feather="zap" class="me-2"></i>
+                            Dispatching automatique
+                        </button>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <button type="button" class="btn btn-outline-secondary" onclick="refreshDemandes()">
+                            <i data-feather="refresh-cw" class="me-2"></i>
+                            Actualiser
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-sofatelcom-secondary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="bar-chart" class="me-2"></i>
+                    Statistiques
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6 mb-3">
+                        <h4 class="text-danger">{{ demandes.total }}</h4>
+                        <small>À affecter</small>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <h4 class="text-success">{{ techniciens|length }}</h4>
+                        <small>Techniciens</small>
+                    </div>
+                    <div class="col-6">
+                        <h4 class="text-info">{{ equipes|length }}</h4>
+                        <small>Équipes</small>
+                    </div>
+                    <div class="col-6">
+                        <h4 class="text-warning" id="selectCount">0</h4>
+                        <small>Sélectionnées</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Liste des demandes -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i data-feather="list" class="me-2"></i>
+                        Demandes en attente d'affectation
+                    </h5>
+                    <div>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAll()">
+                            <i data-feather="check-square" class="me-1"></i>
+                            Tout sélectionner
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearSelection()">
+                            <i data-feather="square" class="me-1"></i>
+                            Désélectionner
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                {% if demandes.items %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="demandesTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th width="50">
+                                    <input type="checkbox" class="form-check-input" id="selectAllCheckbox"
+                                        onchange="toggleSelectAll()">
+                                </th>
+                                <th class="sortable">
+                                    Client
+                                    <i data-feather="filter" class="filter-icon" onclick="toggleFilter(this, 1)"></i>
+                                </th>
+                                <th class="sortable">
+                                    ND
+                                    <i data-feather="filter" class="filter-icon" onclick="toggleFilter(this, 2)"></i>
+                                </th>
+                                <th class="sortable">
+                                    Rep SRP
+                                    <i data-feather="filter" class="filter-icon" onclick="toggleFilter(this, 3)"></i>
+                                </th>
+                                <th class="sortable">
+                                    Technologie
+                                    <i data-feather="filter" class="filter-icon" onclick="toggleFilter(this, 4)"></i>
+                                </th>
+                                <th class="sortable">
+                                    Prestataire
+                                    <i data-feather="filter" class="filter-icon" onclick="toggleFilter(this, 5)"></i>
+                                </th>
+                                <th class="sortable">
+                                    Priorité
+                                    <i data-feather="filter" class="filter-icon" onclick="toggleFilter(this, 6)"></i>
+                                </th>
+                                <th class="sortable">
+                                    Date demande
+                                    <i data-feather="filter" class="filter-icon" onclick="toggleFilter(this, 7)"></i>
+                                </th>
+                                <th class="sortable">
+                                    Âge
+                                    <i data-feather="filter" class="filter-icon" onclick="toggleFilter(this, 8)"></i>
+                                </th>
+                                <th class="sortable">
+                                    Offre
+                                    <i data-feather="filter" class="filter-icon" onclick="toggleFilter(this, 9)"></i>
+                                </th>
+                                <th class="sortable">
+                                    Compteur
+                                    <i data-feather="filter" class="filter-icon" onclick="toggleFilter(this, 10)"></i>
+                                </th>
+                                <th class="sortable">
+                                    Quartier
+                                    <i data-feather="filter" class="filter-icon" onclick="toggleFilter(this, 11)"></i>
+                                </th>
+                                <th class="sortable">
+                                    Commentaire
+                                    <i data-feather="filter" class="filter-icon" onclick="toggleFilter(this, 12)"></i>
+                                </th>
+                                <th width="200">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set demandes_a_reaffecter = demandes.items|selectattr('statut', 'equalto',
+                            'a_reaffecter')|list %}
+                            {% set autres_demandes = demandes.items|rejectattr('statut', 'equalto', 'a_reaffecter')|list
+                            %}
+
+                            {% for demande in demandes_a_reaffecter %}
+                            <tr class="table-danger urgent-row animate-urgent" data-demande-id="{{ demande.id }}"
+                                data-technologie="{{ demande.type_techno }}" data-zone="{{ demande.zone }}"
+                                data-priorite="{{ demande.priorite_traitement }}" data-age="{{ demande.age or '-' }}"
+                                data-offre="{{ demande.offre or '-' }}"
+                                data-prestataire="{{ demande.prestataire or '' }}">
+                                <td>
+                                    <input type="checkbox" class="form-check-input demande-checkbox"
+                                        value="{{ demande.id }}" onchange="updateSelectCount()">
+                                    <i data-feather="alert-triangle" class="text-danger ms-1"></i>
+                                </td>
+                                <td>
+                                    <strong>{{ demande.nom_client }} {{ demande.prenom_client }}</strong>
+                                    <br>
+                                    <small class="text-muted">
+                                        {{ demande.libelle_commune }}{% if demande.libelle_quartier %}, {{
+                                        demande.libelle_quartier }}{% endif %}
+                                        {% if demande.contact_client %}, {{ demande.contact_client }}{% endif %}
+                                    </small>
+                                </td>
+                                <td>
+                                    <code>{{ demande.nd }}</code>
+                                </td>
+                                <td>{{ demande.rep_srp }}</td>
+                                <td>
+                                    <span
+                                        class="badge bg-{{ 'primary' if demande.type_techno == 'Fibre' else 'warning' if demande.type_techno == 'Cuivre' else 'info' }}">
+                                        {{ demande.type_techno }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if demande.prestataire %}
+                                    <span
+                                        class="badge {% if demande.prestataire == 'SAV' %}bg-warning{% elif demande.prestataire == 'Production' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                        {{ demande.prestataire }}
+                                    </span>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% set priorite_class = 'danger' if demande.priorite_traitement == 'Urgente' else
+                                    'warning' if demande.priorite_traitement == 'Haute' else 'success' %}
+                                    <span class="badge bg-{{ priorite_class }}">
+                                        {{ demande.priorite_traitement or 'Normale' }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <small>{{ demande.date_demande_intervention.strftime('%d/%m/%Y') }}</small>
+                                </td>
+                                <td>{{ demande.age or '-' }}</td>
+                                <td>{{ demande.offre or '-' }}</td>
+                                <td>{{ demande.compteur }}</td>
+                                <td>{{ demande.libelle_quartier or '-' }}</td>
+                                <td>{{ demande.commentaire_interv }}</td>
+                                <td>
+                                    <div class="d-flex flex-column gap-1">
+                                        <button type="button" class="btn btn-sm btn-primary w-100"
+                                            onclick="showDispatchModal('{{ demande.id }}')">
+                                            <i data-feather="user-plus" class="me-1"></i>
+                                            Affecter
+                                        </button>
+                                        {% if demande.statut in ['nouveau', 'a_reaffecter'] %}
+                                        <div class="d-flex gap-1">
+                                            <button class="btn btn-warning btn-sm flex-fill cloturer-btn"
+                                                data-demande-id="{{ demande.id }}" data-bs-toggle="modal"
+                                                data-bs-target="#clotureModal">
+                                                <i data-feather="x-circle"></i> Clôturer
+                                            </button>
+                                            <button class="btn btn-info btn-sm flex-fill reporter-btn"
+                                                data-demande-id="{{ demande.id }}" data-bs-toggle="modal"
+                                                data-bs-target="#reportModal">
+                                                <i data-feather="clock"></i> Reporter
+                                            </button>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </td>
+
+                            </tr>
+                            {% endfor %}
+
+                            {% for demande in autres_demandes %}
+                            <tr data-demande-id="{{ demande.id }}" data-technologie="{{ demande.type_techno }}"
+                                data-zone="{{ demande.zone }}" data-priorite="{{ demande.priorite_traitement }}"
+                                data-age="{{ demande.age or '-' }}" data-offre="{{ demande.offre or '-' }}"
+                                data-prestataire="{{ demande.prestataire or '' }}">
+                                <td>
+                                    <input type="checkbox" class="form-check-input" id="selectAllCheckbox"
+                                        onchange="toggleSelectAll()">
+                                </td>
+                                <td>
+                                    <strong>{{ demande.nom_client }} {{ demande.prenom_client }}</strong>
+                                    <br>
+                                    <small class="text-muted">
+                                        {{ demande.libelle_commune }}{% if demande.libelle_quartier %}, {{
+                                        demande.libelle_quartier }}{% endif %}
+                                        {% if demande.contact_client %}, {{ demande.contact_client }}{% endif %}
+                                    </small>
+                                </td>
+                                <td>
+                                    <code>{{ demande.nd }}</code>
+                                </td>
+                                <td>{{ demande.rep_srp }}</td>
+                                <td>
+                                    <span
+                                        class="badge bg-{{ 'primary' if demande.type_techno == 'Fibre' else 'warning' if demande.type_techno == 'Cuivre' else 'info' }}">
+                                        {{ demande.type_techno }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if demande.prestataire %}
+                                    <span
+                                        class="badge {% if demande.prestataire == 'SAV' %}bg-warning{% elif demande.prestataire == 'Production' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                        {{ demande.prestataire }}
+                                    </span>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% set priorite_class = 'danger' if demande.priorite_traitement == 'Urgente' else
+                                    'warning' if demande.priorite_traitement == 'Haute' else 'success' %}
+                                    <span class="badge bg-{{ priorite_class }}">
+                                        {{ demande.priorite_traitement or 'Normale' }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <small>{{ demande.date_demande_intervention.strftime('%d/%m/%Y') }}</small>
+                                </td>
+                                <td>{{ demande.age or '-' }}</td>
+                                <td>{{ demande.offre or '-' }}</td>
+                                <td>{{ demande.compteur }}</td>
+                                <td>{{ demande.libelle_quartier or '-' }}</td>
+                                <td>{{ demande.commentaire_interv }}</td>
+                                <td>
+                                    <div class="d-flex flex-column gap-1">
+                                        <button type="button" class="btn btn-sm btn-primary w-100"
+                                            onclick="showDispatchModal('{{ demande.id }}')">
+                                            <i data-feather="user-plus" class="me-1"></i>
+                                            Affecter
+                                        </button>
+                                        {% if demande.statut in ['nouveau', 'a_reaffecter'] %}
+                                        <div class="d-flex gap-1">
+                                            <button class="btn btn-warning btn-sm flex-fill cloturer-btn"
+                                                data-demande-id="{{ demande.id }}" data-bs-toggle="modal"
+                                                data-bs-target="#clotureModal">
+                                                <i data-feather="x-circle"></i> Clôturer
+                                            </button>
+                                            <button class="btn btn-info btn-sm flex-fill reporter-btn"
+                                                data-demande-id="{{ demande.id }}" data-bs-toggle="modal"
+                                                data-bs-target="#reportModal">
+                                                <i data-feather="clock"></i> Reporter
+                                            </button>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </td>
+
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i data-feather="check-circle" style="width: 64px; height: 64px;" class="text-success mb-3"></i>
+                    <h5 class="text-muted">Aucune demande en attente</h5>
+                    <p class="text-muted">Toutes les demandes ont été affectées aux techniciens.</p>
+                </div>
+                {% endif %}
+
+                <!-- Pagination et contrôles -->
+                {% if demandes.items %}
+                <div class="card-footer bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        {{ render_per_page_selector(request.args.get('per_page', '25'), 'dispatching') }}
+                        {{ render_pagination(demandes, 'dispatching') }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Actions groupées -->
+<div class="row mb-4">
+    {% if demandes.items %}
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-light">
+                <h6 class="mb-0">
+                    <i data-feather="users" class="me-2"></i>
+                    Affectation groupée
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label">Technicien</label>
+                        <select class="form-select" id="groupTechnicien">
+                            <option value="">Sélectionner un technicien</option>
+                            {% for technicien in techniciens %}
+                            <option value="{{ technicien.id }}" data-technologies="{{ technicien.technologies }}"
+                                data-zone="{{ technicien.zone }}">
+                                {{ technicien.prenom }} {{ technicien.nom }}
+                                ({{ technicien.technologies }} - {{ technicien.zone }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Équipe (optionnel)</label>
+                        <select class="form-select" id="groupEquipe">
+                            <option value="">Aucune équipe</option>
+                            {% for equipe in equipes %}
+                            <option value="{{ equipe.id }}">
+                                {{ equipe.nom_equipe }} ({{ equipe.technologies }} - {{ equipe.zone }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="button" class="btn btn-success w-100" onclick="affecterSelection()">
+                            <i data-feather="check" class="me-2"></i>
+                            Affecter la sélection
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal d'affectation individuelle -->
+<div class="modal fade" id="dispatchModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i data-feather="user-plus" class="me-2"></i>
+                    Affecter la demande
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="modalContent">
+                    <!-- Contenu chargé dynamiquement -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Modal Clôture -->
+<div class="modal fade" id="clotureModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Clôturer la demande</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="clotureForm">
+                    <div class="mb-3">
+                        <label for="clotureComment" class="form-label">Commentaire de clôture</label>
+                        <textarea class="form-control" id="clotureComment" rows="3" required></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-warning" id="confirmCloture">Clôturer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Report -->
+<div class="modal fade" id="reportModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Reporter la demande</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="reportForm">
+                    <div class="mb-3">
+                        <label for="reportComment" class="form-label">Motif du report</label>
+                        <textarea class="form-control" id="reportComment" rows="3" required></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="reportDate" class="form-label">Date de report (optionnel)</label>
+                        <input type="date" class="form-control" id="reportDate">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-info" id="confirmReport">Reporter</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Variables globales pour stocker les IDs des demandes
+    let clotureDemandeId = null;
+    let reportDemandeId = null;
+
+    // Gestion de la clôture
+    document.getElementById('confirmCloture').addEventListener('click', function () {
+        const commentaire = document.getElementById('clotureComment').value.trim();
+
+        if (!commentaire) {
+            alert('Veuillez saisir un commentaire');
+            return;
+        }
+
+        if (!clotureDemandeId) {
+            alert('Erreur: ID de demande manquant');
+            return;
+        }
+
+        fetch('/cloturer-demande', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                demande_id: clotureDemandeId,
+                commentaire: commentaire
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Fermer la modal
+                    const modal = document.getElementById('clotureModal');
+                    const modalInstance = bootstrap.Modal.getInstance(modal);
+                    if (modalInstance) {
+                        modalInstance.hide();
+                    }
+                    location.reload();
+                } else {
+                    alert('Erreur: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                alert('Erreur lors de la clôture');
+            });
+    });
+
+    // Gestion du report
+    document.getElementById('confirmReport').addEventListener('click', function () {
+        const commentaire = document.getElementById('reportComment').value.trim();
+        const dateReport = document.getElementById('reportDate').value;
+
+        if (!commentaire) {
+            alert('Veuillez saisir un motif');
+            return;
+        }
+
+        if (!reportDemandeId) {
+            alert('Erreur: ID de demande manquant');
+            return;
+        }
+
+        fetch('/reporter-demande', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                demande_id: reportDemandeId,
+                commentaire: commentaire,
+                date_report: dateReport
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Fermer la modal
+                    const modal = document.getElementById('reportModal');
+                    const modalInstance = bootstrap.Modal.getInstance(modal);
+                    if (modalInstance) {
+                        modalInstance.hide();
+                    }
+                    location.reload();
+                } else {
+                    alert('Erreur: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                alert('Erreur lors du report');
+            });
+    });
+
+    // Gestion des boutons clôturer
+    document.querySelectorAll('.cloturer-btn').forEach(button => {
+        button.addEventListener('click', function () {
+            const demandeId = this.getAttribute('data-demande-id');
+            clotureDemandeId = demandeId;
+            document.getElementById('clotureComment').value = '';
+        });
+    });
+
+    // Gestion des boutons reporter
+    document.querySelectorAll('.reporter-btn').forEach(button => {
+        button.addEventListener('click', function () {
+            const demandeId = this.getAttribute('data-demande-id');
+            reportDemandeId = demandeId;
+            document.getElementById('reportComment').value = '';
+            document.getElementById('reportDate').value = '';
+        });
+    });
+
+
+    // État du module dispatching
+    const DispatchingModule = {
+        selectedDemandes: [],
+        techniciens: [],
+        equipes: [],
+        currentModal: null,
+
+        // Configuration
+        config: {
+            compatibilityMatrix: {
+                'Fibre': ['Fibre', 'Fibre,Cuivre', 'Fibre,5G', 'Fibre,Cuivre,5G'],
+                'Cuivre': ['Cuivre', 'Fibre,Cuivre', 'Cuivre,5G', 'Fibre,Cuivre,5G'],
+                '5G': ['5G', 'Fibre,5G', 'Cuivre,5G', 'Fibre,Cuivre,5G']
+            },
+            zoneCompatibility: {
+                'DAKAR': ['DAKAR', 'Toutes'],
+                'MBOUR': ['MBOUR', 'Toutes'],
+                'KAOLACK': ['KAOLACK', 'Toutes'],
+                'FATICK': ['FATICK', 'Toutes']
+            }
+        }
+    };
+
+    // Fonctions de normalisation
+    function normalizeZone(zone) {
+        if (!zone) return 'DAKAR';
+        const z = zone.toUpperCase();
+        if (z.includes('MBOUR')) return 'MBOUR';
+        if (z.includes('KAOLACK')) return 'KAOLACK';
+        if (z.includes('FATICK')) return 'FATICK';
+        return 'DAKAR';
+    }
+
+    function normalizeTech(tech) {
+        return tech ? tech.charAt(0).toUpperCase() + tech.slice(1).toLowerCase() : '';
+    }
+
+    // Fonction de vérification de compatibilité
+    function checkTechnicienCompatibility(techTechnologies, techZone, demandeTechno, demandeZone) {
+        if (!techTechnologies) return false;
+
+        // Normaliser les valeurs
+        const techNormalized = normalizeTech(demandeTechno);
+        const zoneNormalized = normalizeZone(demandeZone);
+        const techCompat = techTechnologies.split(',').map(t => normalizeTech(t.trim()));
+        const zoneCompat = techZone ? [normalizeZone(techZone)] : [];
+
+        // Vérifier la technologie
+        const techCompatible = DispatchingModule.config.compatibilityMatrix[techNormalized]?.some(compat =>
+            techCompat.includes(compat)
+        ) || false;
+
+        // Vérifier la zone
+        const zoneCompatible = DispatchingModule.config.zoneCompatibility[zoneNormalized]?.some(compat =>
+            zoneCompat.includes(compat)
+        ) || false;
+
+        return techCompatible && zoneCompatible;
+    }
+
+    // Initialisation
+    document.addEventListener('DOMContentLoaded', function () {
+        loadTechniciensData();
+        loadEquipesData();
+        setupDispatchingEventListeners();
+        updateSelectCount();
+        feather.replace();
+
+        // Initialiser les indicateurs de filtres actifs
+        filterValues.forEach((value, index) => {
+            if (value) {
+                const headers = document.querySelectorAll('th.sortable');
+                if (headers[index]) {
+                    headers[index].querySelector('.filter-icon').classList.add('filter-active');
+                }
+            }
+        });
+    });
+
+    // Chargement des données
+    function loadTechniciensData() {
+        const technicienSelect = document.getElementById('groupTechnicien');
+        if (!technicienSelect) return;
+
+        Array.from(technicienSelect.options).forEach(option => {
+            if (option.value) {
+                DispatchingModule.techniciens.push({
+                    id: option.value,
+                    nom: option.textContent,
+                    technologies: option.dataset.technologies || '',
+                    zone: option.dataset.zone || ''
+                });
+            }
+        });
+    }
+
+    function loadEquipesData() {
+        const equipeSelect = document.getElementById('groupEquipe');
+        if (!equipeSelect) return;
+
+        Array.from(equipeSelect.options).forEach(option => {
+            if (option.value) {
+                DispatchingModule.equipes.push({
+                    id: option.value,
+                    nom: option.textContent,
+                    technologies: option.dataset.technologies || '',
+                    zone: option.dataset.zone || ''
+                });
+            }
+        });
+    }
+
+    // Configuration des écouteurs d'événements
+    function setupDispatchingEventListeners() {
+        // Écouteur pour la sélection des demandes
+        document.querySelectorAll('.demande-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', () => {
+                updateSelectCount();
+                updateTechnicienCompatibility();
+            });
+        });
+
+        // Écouteur pour le select de technicien
+        const groupTechnicien = document.getElementById('groupTechnicien');
+        if (groupTechnicien) {
+            groupTechnicien.addEventListener('change', function (e) {
+                const technicienId = this.value;
+                if (technicienId) {
+                    updateDemandesCompatibility(technicienId);
+                } else {
+                    resetDemandesHighlight();
+                }
+            });
+        }
+    }
+
+    // Mise à jour de la compatibilité des techniciens
+    function updateTechnicienCompatibility() {
+        const technicienSelect = document.getElementById('groupTechnicien');
+        const selectedRows = Array.from(document.querySelectorAll('.demande-checkbox:checked')).map(cb => cb.closest('tr'));
+
+        if (!technicienSelect || selectedRows.length === 0) {
+            return;
+        }
+
+        Array.from(technicienSelect.options).forEach(option => {
+            if (!option.value) return;
+
+            const isCompatible = selectedRows.every(row => {
+                return checkTechnicienCompatibility(
+                    option.dataset.technologies,
+                    option.dataset.zone,
+                    row.dataset.technologie,
+                    row.dataset.zone
+                );
+            });
+
+            option.style.backgroundColor = isCompatible ? '#d4edda' : '#f8d7da';
+            option.style.color = isCompatible ? '#155724' : '#721c24';
+        });
+    }
+
+    // Mise à jour de la compatibilité des demandes
+    function updateDemandesCompatibility(technicienId) {
+        const technicien = DispatchingModule.techniciens.find(t => t.id == technicienId);
+        if (!technicien) return;
+
+        document.querySelectorAll('#demandesTable tbody tr').forEach(row => {
+            const isCompatible = checkTechnicienCompatibility(
+                technicien.technologies,
+                technicien.zone,
+                row.dataset.technologie,
+                row.dataset.zone
+            );
+
+            row.classList.remove('table-success', 'table-danger');
+            row.classList.add(isCompatible ? 'table-success' : 'table-danger');
+        });
+    }
+
+    // Réinitialisation de la mise en évidence des demandes
+    function resetDemandesHighlight() {
+        document.querySelectorAll('#demandesTable tbody tr').forEach(row => {
+            row.classList.remove('table-success', 'table-danger');
+        });
+    }
+
+    // Fonctions de filtrage existantes
+    function applyFilters() {
+        const params = new URLSearchParams();
+        const technologie = document.getElementById('filterTechnologie').value;
+        const zone = document.getElementById('filterZone').value;
+        const priorite = document.getElementById('filterPriorite').value;
+        const age = document.getElementById('filterAge').value;
+        const offre = document.getElementById('filterOffre').value;
+
+        if (technologie) params.append('technologie', technologie);
+        if (zone) params.append('zone', zone);
+        if (priorite) params.append('priorite_traitement', priorite);
+        if (age) params.append('age', age);
+        if (offre) params.append('offre', offre);
+
+        window.location.href = '/dispatching?' + params.toString();
+    }
+
+    // Écouteurs de filtres
+    document.getElementById('filterTechnologie').onchange = applyFilters;
+    document.getElementById('filterZone').onchange = applyFilters;
+    document.getElementById('filterPriorite').onchange = applyFilters;
+    document.getElementById('filterAge').onchange = applyFilters;
+    document.getElementById('filterOffre').onchange = applyFilters;
+
+    // Gestion des sélections
+    function updateSelectCount() {
+        const checkboxes = document.querySelectorAll('.demande-checkbox:checked');
+        document.getElementById('selectCount').textContent = checkboxes.length;
+        selectedDemandes = Array.from(checkboxes).map(cb => cb.value);
+        updateTechnicienCompatibility();
+    }
+
+    function selectAll() {
+        const checkboxes = document.querySelectorAll('.demande-checkbox');
+        checkboxes.forEach(cb => {
+            if (cb.closest('tr').style.display !== 'none') {
+                cb.checked = true;
+            }
+        });
+        updateSelectCount();
+    }
+
+    function clearSelection() {
+        document.querySelectorAll('.demande-checkbox').forEach(cb => cb.checked = false);
+        document.getElementById('selectAllCheckbox').checked = false;
+        updateSelectCount();
+        resetDemandesHighlight();
+    }
+
+    function toggleSelectAll() {
+        const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+        const checkboxes = document.querySelectorAll('.demande-checkbox');
+
+        checkboxes.forEach(cb => {
+            if (cb.closest('tr').style.display !== 'none') {
+                cb.checked = selectAllCheckbox.checked;
+            }
+        });
+        updateSelectCount();
+    }
+
+    // Gestion des modals
+    function showDispatchModal(demandeId) {
+        fetch(`/api/demande/${demandeId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('modalContent').innerHTML = generateModalContent(data.demande);
+                    DispatchingModule.currentModal = new bootstrap.Modal(document.getElementById('dispatchModal'));
+                    DispatchingModule.currentModal.show();
+                    feather.replace();
+                }
+            })
+            .catch(error => console.error('Erreur:', error));
+    }
+
+    function generateModalContent(demande) {
+        const techniciens = JSON.parse('{{ techniciens_json|tojson|safe }}');
+        const equipes = JSON.parse('{{ equipes_json|tojson|safe }}');
+
+    // Normaliser la zone de la demande
+    const demandeZoneNormalized = normalizeZone(demande.zone);
+
+    // Générer les options des techniciens avec compatibilité
+    let technicienOptions = '';
+    techniciens.forEach(function (technicien) {
+        const isCompatible = checkTechnicienCompatibility(
+            technicien.technologies,
+            technicien.zone,
+            demande.type_techno,
+            demande.zone
+        );
+
+        const style = isCompatible ?
+            'style="background-color: #d4edda; color: #155724;"' :
+            'style="background-color: #f8d7da; color: #721c24;"';
+
+        technicienOptions += `
+            <option value="${technicien.id}" ${style}
+                data-technologies="${technicien.technologies}"
+                data-zone="${technicien.zone}">
+                ${technicien.prenom} ${technicien.nom} (${technicien.technologies} - ${technicien.zone})
+            </option>
+        `;
+    });
+
+    // Filtrer les équipes selon la zone et la technologie
+    let equipeOptions = '';
+    equipes.forEach(function (equipe) {
+        if (equipe.zone.toLowerCase() === demandeZoneNormalized.toLowerCase()) {
+            equipeOptions += `<option value="${equipe.id}">${equipe.nom_equipe} (${equipe.technologies})</option>`;
+        }
+    });
+
+    return `
+        <div class="mb-3">
+            <h6>Détails de la demande</h6>
+            <p class="mb-1"><strong>Client:</strong> ${demande.nom_client} ${demande.prenom_client || ''}</p>
+            <p class="mb-1"><strong>ND:</strong> ${demande.nd || ''}</p>
+            <p class="mb-1"><strong>Technologie:</strong> ${demande.type_techno || ''}</p>
+            <p class="mb-3"><strong>Zone:</strong> ${demande.zone || ''}</p>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Technicien</label>
+            <select class="form-select" id="modalTechnicien" required onchange="updateCompatibilityHint()">
+                <option value="">Sélectionner un technicien</option>
+                ${technicienOptions}
+            </select>
+            <small class="form-text text-muted d-block mt-2">
+                <strong>⚙️ Légende:</strong> <span style="background-color: #d4edda; padding: 2px 6px; border-radius: 3px;">Vert = Compatible</span> | 
+                <span style="background-color: #f8d7da; padding: 2px 6px; border-radius: 3px;">Rouge = Incompatible</span>
+            </small>
+            <div id="compatibilityHint" class="alert alert-info mt-2" style="display:none;">
+                <small><strong>⚠️ </strong><span id="compatibilityMessage"></span></small>
+            </div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Équipe (optionnel)</label>
+            <select class="form-select" id="modalEquipe">
+                <option value="">Aucune équipe</option>
+                ${equipeOptions}
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Commentaire</label>
+            <textarea class="form-control" id="modalCommentaire" rows="3" placeholder="Commentaire d'affectation..."></textarea>
+        </div>
+        <div class="d-flex justify-content-end">
+            <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">Annuler</button>
+            <button type="button" class="btn btn-primary" onclick="confirmerAffectation(${demande.id})">
+                <i data-feather="check" class="me-2"></i>
+                Affecter
+            </button>
+        </div>
+    `;
+}
+
+    function updateCompatibilityHint() {
+        const technicienSelect = document.getElementById('modalTechnicien');
+        const hintDiv = document.getElementById('compatibilityHint');
+        const hintMessage = document.getElementById('compatibilityMessage');
+        
+        if (!technicienSelect.value) {
+            hintDiv.style.display = 'none';
+            return;
+        }
+
+        const selectedOption = technicienSelect.options[technicienSelect.selectedIndex];
+        const techs = selectedOption.dataset.technologies || 'Non spécifié';
+        const zone = selectedOption.dataset.zone || 'Non spécifié';
+        
+        // Récupérer les infos de la demande depuis le modal (chercher dans le contenu)
+        const modalContent = document.getElementById('modalContent').textContent;
+        
+        // Chercher les lignes de technologie et zone
+        const techRegex = /Technologie:\s*(.+)/;
+        const zoneRegex = /Zone:\s*(.+)/;
+        
+        const techMatch = modalContent.match(techRegex);
+        const zoneMatch = modalContent.match(zoneRegex);
+        
+        const demandeTech = techMatch ? techMatch[1].trim() : '';
+        const demandeZone = zoneMatch ? zoneMatch[1].trim() : '';
+
+        const isTechCompatible = techs === 'Non spécifié' ? false : techs.includes(demandeTech);
+        const isZoneCompatible = zone.toUpperCase() === demandeZone.toUpperCase();
+
+        if (!isTechCompatible || !isZoneCompatible) {
+            const issues = [];
+            if (!isTechCompatible) {
+                issues.push(`le technicien fait du <strong>${techs}</strong> mais la demande requiert du <strong>${demandeTech}</strong>`);
+            }
+            if (!isZoneCompatible) {
+                issues.push(`le technicien est en zone <strong>${zone}</strong> mais la demande est en zone <strong>${demandeZone}</strong>`);
+            }
+            hintMessage.innerHTML = `Cet affectage est <strong>incompatible</strong>: ${issues.join(' et ')}.`;
+            hintDiv.style.display = 'block';
+            hintDiv.className = 'alert alert-warning mt-2';
+        } else {
+            hintMessage.innerHTML = '✅ Ce technicien est compatible avec cette demande.';
+            hintDiv.style.display = 'block';
+            hintDiv.className = 'alert alert-success mt-2';
+        }
+    }
+
+    function confirmerAffectation(demandeId) {
+        const technicienSelect = document.getElementById('modalTechnicien');
+        const technicienId = technicienSelect.value;
+        const equipeId = document.getElementById('modalEquipe').value;
+        const commentaire = document.getElementById('modalCommentaire').value;
+
+        if (!technicienId) {
+            showAlert('warning', 'Veuillez sélectionner un technicien.');
+            return;
+        }
+
+        // Vérifier la compatibilité côté client AVANT d'envoyer au serveur
+        const selectedOption = technicienSelect.options[technicienSelect.selectedIndex];
+        const technicienTechs = selectedOption.dataset.technologies || '';
+        const technicienZone = selectedOption.dataset.zone || '';
+
+        // Récupérer la demande depuis le modal pour vérifier la compatibilité
+        const demandeText = document.querySelector('#modalContent h6 + p')?.textContent || '';
+        
+        // Les données de la demande sont déjà disponibles dans le générateur modal
+        // Nous allons faire la vérification au moment de la sélection du technicien
+        
+        affecterDemande(demandeId, technicienId, equipeId, commentaire);
+    }
+
+    // Fonction d'affectation améliorée
+    function affecterDemande(demandeId, technicienId, equipeId, commentaire, mode = 'manuel') {
+        console.log('Début de l\'affectation:', {demandeId, technicienId, equipeId, commentaire, mode});
+        
+        const data = {
+            demande_id: demandeId,
+            technicien_id: technicienId,
+            equipe_id: equipeId || null,
+            commentaire: commentaire || '',
+            mode: mode
+        };
+
+        // Désactiver le bouton d'affectation si présent
+        const affectButton = document.querySelector(`button[onclick*="${demandeId}"]`);
+        if (affectButton) {
+            affectButton.disabled = true;
+            affectButton.innerHTML = '<i data-feather="loader" class="me-2"></i>En cours...';
+            feather.replace();
+        }
+
+        // Récupérer le jeton CSRF depuis la balise meta - avec gestion d'erreur
+        let csrfToken = '';
+        const csrfMetaTag = document.querySelector('meta[name="csrf-token"]');
+        if (csrfMetaTag) {
+            csrfToken = csrfMetaTag.getAttribute('content');
+            console.log('CSRF Token trouvé:', csrfToken.substring(0, 20) + '...');
+        } else {
+            console.error('CSRF Token meta tag non trouvé!');
+            showAlert('danger', 'Erreur: Token CSRF manquant. Rechargez la page.');
+            throw new Error('CSRF token meta tag not found');
+        }
+        
+        return fetch('/affecter-demande', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(data)
+        })
+        .then(async response => {
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                console.error('Réponse non-JSON reçue:', text);
+                throw new Error(`Réponse inattendue du serveur (${response.status}): ${text.substring(0, 200)}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                // Fermer la modal si elle existe et que c'est une affectation manuelle individuelle
+                if (mode === 'manuel') {
+                    const modal = document.getElementById('dispatchModal');
+                    if (modal) {
+                        const modalInstance = bootstrap.Modal.getInstance(modal);
+                        if (modalInstance) {
+                            modalInstance.hide();
+                        }
+                    }
+
+                    // Supprimer la ligne avec animation
+                    const row = document.querySelector(`tr[data-demande-id="${demandeId}"]`);
+                    if (row) {
+                        row.style.transition = 'all 0.3s ease';
+                        row.style.opacity = '0';
+                        row.style.transform = 'translateX(-100%)';
+                        setTimeout(() => {
+                            row.remove();
+                            updateTableEmptyState();
+                        }, 300);
+                    }
+                }
+
+                showAlert('success', data.message);
+                updateStats();
+                return data;
+            } else {
+                showAlert('danger', 'Erreur: ' + data.error);
+                throw new Error(data.error);
+            }
+        })
+            .catch(error => {
+                console.error('Erreur:', error);
+                showAlert('danger', 'Erreur lors de l\'affectation');
+                throw error;
+            })
+            .finally(() => {
+                // Réactiver le bouton si nécessaire
+                if (affectButton) {
+                    affectButton.disabled = false;
+                    affectButton.innerHTML = '<i data-feather="user-plus" class="me-1"></i>Affecter';
+                    feather.replace();
+                }
+            });
+    }
+
+    function affecterSelection() {
+        const technicienSelect = document.getElementById('groupTechnicien');
+        const selectedOption = technicienSelect.options[technicienSelect.selectedIndex];
+        const technicienId = selectedOption.value;
+        const equipeId = document.getElementById('groupEquipe').value;
+
+        if (!technicienId) {
+            showAlert('warning', 'Veuillez sélectionner un technicien.');
+            return;
+        }
+
+        if (selectedDemandes.length === 0) {
+            showAlert('warning', 'Veuillez sélectionner au moins une demande.');
+            return;
+        }
+
+        // Vérifier la compatibilité de toutes les demandes sélectionnées
+        const incompatibleDemandes = selectedDemandes.filter(demandeId => {
+            const row = document.querySelector(`tr[data-demande-id="${demandeId}"]`);
+            return row && !checkTechnicienCompatibility(
+                selectedOption.dataset.technologies,
+                selectedOption.dataset.zone,
+                row.dataset.technologie,
+                row.dataset.zone
+            );
+        });
+
+        if (incompatibleDemandes.length > 0) {
+            if (!confirm(`${incompatibleDemandes.length} demande(s) ne sont pas compatibles avec ce technicien. Voulez-vous continuer ?`)) {
+                return;
+            }
+        }
+
+        showGroupAffectationProgress();
+
+        let completed = 0;
+        const total = selectedDemandes.length;
+
+        const promises = selectedDemandes.map((demandeId, index) => {
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    affecterDemande(demandeId, technicienId, equipeId, 'Affectation groupée', 'manuel_groupe')
+                        .then(result => {
+                            if (result.success) {
+                                completed++;
+                                updateGroupAffectationProgress(completed, total);
+                            }
+                            resolve(result);
+                        });
+                }, index * 200);
+            });
+        });
+
+        Promise.all(promises).then(() => {
+            hideGroupAffectationProgress();
+            clearSelection();
+            showAlert('success', `${completed} demande(s) affectée(s) avec succès`);
+            setTimeout(() => location.reload(), 1000);
+        });
+    }
+
+    // Fonctions d'interface
+    function showAlert(type, message) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+        alertDiv.style.top = '10px';
+        alertDiv.style.right = '10px';
+        alertDiv.style.zIndex = '9999';
+        alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+        document.body.appendChild(alertDiv);
+        setTimeout(() => alertDiv.remove(), 5000);
+    }
+
+    function showGroupAffectationProgress() {
+        const progressModal = document.createElement('div');
+        progressModal.id = 'groupProgressModal';
+        progressModal.className = 'modal fade';
+        progressModal.innerHTML = `
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i data-feather="send" class="me-2"></i>
+                        Affectation en cours
+                    </h5>
+                </div>
+                <div class="modal-body text-center">
+                    <div class="progress mb-3">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             id="groupProgress" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <p id="groupProgressText">Préparation...</p>
+                </div>
+            </div>
+        </div>
+    `;
+        document.body.appendChild(progressModal);
+        new bootstrap.Modal(progressModal).show();
+        feather.replace();
+    }
+
+    function updateGroupAffectationProgress(completed, total) {
+        const progressBar = document.getElementById('groupProgress');
+        const progressText = document.getElementById('groupProgressText');
+        if (progressBar && progressText) {
+            const percentage = (completed / total) * 100;
+            progressBar.style.width = percentage + '%';
+            progressText.textContent = `${completed} / ${total} demandes affectées`;
+        }
+    }
+
+    function hideGroupAffectationProgress() {
+        const modal = document.getElementById('groupProgressModal');
+        if (modal) {
+            const modalInstance = bootstrap.Modal.getInstance(modal);
+            if (modalInstance) {
+                setTimeout(() => {
+                    modalInstance.hide();
+                    modal.remove();
+                }, 500);
+            }
+        }
+    }
+
+    function updateTableEmptyState() {
+        const tbody = document.querySelector('#demandesTable tbody');
+        const visibleRows = tbody.querySelectorAll('tr:not([style*="none"])');
+
+        if (visibleRows.length === 0) {
+            tbody.innerHTML = `
+            <tr>
+                <td colspan="14" class="text-center py-5">
+                    <i data-feather="check-circle" style="width: 64px; height: 64px;" class="text-success mb-3"></i>
+                    <h5 class="text-muted">Toutes les demandes ont été affectées</h5>
+                    <p class="text-muted">Excellent travail ! Toutes les demandes sont maintenant prises en charge.</p>
+                </td>
+            </tr>
+        `;
+            feather.replace();
+        }
+    }
+
+    function updateStats() {
+        const demandesTotales = document.querySelector('.text-danger');
+        if (demandesTotales) {
+            const currentTotal = parseInt(demandesTotales.textContent);
+            demandesTotales.textContent = Math.max(0, currentTotal - 1);
+        }
+    }
+
+    function dispatchingAutomatique() {
+        if (!confirm('Lancer le dispatching automatique pour toutes les demandes en attente ?')) {
+            return;
+        }
+
+        const button = document.querySelector('button[onclick="dispatchingAutomatique()"]');
+        if (button) {
+            button.disabled = true;
+            button.innerHTML = '<i data-feather="loader" class="me-2"></i>Traitement en cours...';
+            feather.replace();
+        }
+
+        fetch('/dispatching-automatique', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('success', data.message);
+                    setTimeout(() => location.reload(), 2000);
+                } else {
+                    showAlert('danger', 'Erreur: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                showAlert('danger', 'Erreur lors du dispatching automatique');
+            })
+            .finally(() => {
+                if (button) {
+                    button.disabled = false;
+                    button.innerHTML = '<i data-feather="zap" class="me-2"></i>Dispatching automatique';
+                    feather.replace();
+                }
+            });
+    }
+
+    function refreshDemandes() {
+        location.reload();
+    }
+
+    // Variables et fonctions pour les filtres
+    let activeFilter = null;
+    let activeFilterIcon = null;
+    const filterValues = new Array(13).fill('');
+
+    function toggleFilter(icon, columnIndex) {
+        event.stopPropagation();
+
+        if (activeFilter) {
+            activeFilter.remove();
+            activeFilter = null;
+            if (activeFilterIcon) {
+                activeFilterIcon.classList.remove('filter-active');
+            }
+        }
+
+        if (activeFilterIcon === icon) {
+            activeFilterIcon = null;
+            return;
+        }
+
+        // Récupérer les valeurs uniques de la colonne
+        const table = document.getElementById('demandesTable');
+        const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+        const values = new Set();
+
+        Array.from(rows).forEach(row => {
+            const cell = row.cells[columnIndex];
+            const value = cell.textContent.trim();
+            if (value) values.add(value);
+        });
+
+        // Créer le popup
+        const popup = document.createElement('div');
+        popup.className = 'filter-popup';
+        popup.style.maxHeight = '400px';
+        popup.style.overflowY = 'auto';
+
+        let html = `
+        <div class="mb-2">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="selectAllValues" 
+                       onchange="toggleAllValues(this, ${columnIndex})">
+                <label class="form-check-label" for="selectAllValues">
+                    <strong>Tout sélectionner</strong>
+                </label>
+            </div>
+        </div>
+        <div class="filter-items">
+    `;
+
+        Array.from(values).sort().forEach((value, idx) => {
+            const checked = !filterValues[columnIndex] ||
+                filterValues[columnIndex].includes(value.toLowerCase());
+            html += `
+            <div class="form-check">
+                <input class="form-check-input filter-value-checkbox" type="checkbox" 
+                       id="filter${columnIndex}_${idx}" 
+                       value="${value}"
+                       ${checked ? 'checked' : ''}
+                       onchange="updateColumnFilter(${columnIndex})">
+                <label class="form-check-label" for="filter${columnIndex}_${idx}">
+                    ${value}
+                </label>
+            </div>
+        `;
+        });
+
+        html += `
+        </div>
+        <div class="btn-group w-100 mt-2">
+            <button class="btn btn-sm btn-secondary" onclick="clearColumnFilter(${columnIndex})">
+                Réinitialiser
+            </button>
+            <button class="btn btn-sm btn-primary" onclick="closeFilter()">
+                Appliquer
+            </button>
+        </div>
+    `;
+
+        popup.innerHTML = html;
+
+        // Positionner le popup
+        const rect = icon.getBoundingClientRect();
+        popup.style.top = (rect.bottom + window.scrollY) + 'px';
+        popup.style.left = (rect.left - 180) + 'px';
+
+        document.body.appendChild(popup);
+
+        activeFilter = popup;
+        activeFilterIcon = icon;
+        icon.classList.add('filter-active');
+    }
+
+    function toggleAllValues(checkbox, columnIndex) {
+        const checkboxes = activeFilter.querySelectorAll('.filter-value-checkbox');
+        checkboxes.forEach(cb => cb.checked = checkbox.checked);
+        updateColumnFilter(columnIndex);
+    }
+
+    function updateColumnFilter(columnIndex) {
+        const selectedValues = Array.from(activeFilter.querySelectorAll('.filter-value-checkbox:checked'))
+            .map(cb => cb.value.toLowerCase());
+
+        filterValues[columnIndex] = selectedValues;
+
+        const table = document.getElementById('demandesTable');
+        const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+
+        for (let row of rows) {
+            let show = true;
+            filterValues.forEach((values, idx) => {
+                if (values && values.length > 0) {
+                    const cellText = (row.cells[idx].textContent || row.cells[idx].innerText).toLowerCase();
+                    if (!values.some(val => cellText.includes(val))) {
+                        show = false;
+                    }
+                }
+            });
+            row.style.display = show ? '' : 'none';
+        }
+
+        updateSelectCount();
+
+        // Mettre à jour l'état du "Tout sélectionner"
+        const selectAllCheckbox = activeFilter.querySelector('#selectAllValues');
+        const checkboxes = activeFilter.querySelectorAll('.filter-value-checkbox');
+        selectAllCheckbox.checked = Array.from(checkboxes).every(cb => cb.checked);
+    }
+
+    function clearColumnFilter(columnIndex) {
+        filterValues[columnIndex] = '';
+        if (activeFilterIcon) {
+            activeFilterIcon.classList.remove('filter-active');
+        }
+        applyColumnFilter(columnIndex, '');
+        closeFilter();
+    }
+
+    function closeFilter() {
+        if (activeFilter) {
+            activeFilter.remove();
+            activeFilter = null;
+        }
+        if (activeFilterIcon) {
+            if (!filterValues[Array.from(activeFilterIcon.parentElement.parentElement.children).indexOf(activeFilterIcon.parentElement)]) {
+                activeFilterIcon.classList.remove('filter-active');
+            }
+            activeFilterIcon = null;
+        }
+    }
+
+    // Fermer le filtre si on clique en dehors
+    document.addEventListener('click', function (e) {
+        if (activeFilter && !activeFilter.contains(e.target) &&
+            !e.target.classList.contains('filter-icon')) {
+            closeFilter();
+        }
+    });
+
+</script>
+{% endblock %}

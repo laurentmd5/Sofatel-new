@@ -1,0 +1,80 @@
+{% extends "reservations/base.html" %}
+
+{% block reservation_content %}
+<div class="row justify-content-center">
+    <div class="col-xl-8 col-lg-9">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-danger">Annuler la réservation #{{ reservation.id }}</h6>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning">
+                    <h5 class="alert-heading">Êtes-vous sûr de vouloir annuler cette réservation ?</h5>
+                    <p class="mb-0">
+                        Cette action est irréversible. La réservation sera marquée comme annulée et ne pourra plus être
+                        utilisée.
+                    </p>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6 class="m-0 font-weight-bold text-primary">Détails de la réservation</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-md-4 font-weight-bold">Produit:</div>
+                            <div class="col-md-8">{{ reservation.produit.nom }} ({{ reservation.produit.reference }})
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-4 font-weight-bold">Quantité:</div>
+                            <div class="col-md-8">{{ reservation.quantite }} {{ reservation.produit.unite_mesure or
+                                'unité' }}</div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-4 font-weight-bold">Statut:</div>
+                            <div class="col-md-8">
+                                <span class="badge 
+                                    {% if reservation.statut == 'en_attente' %}bg-warning text-dark
+                                    {% elif reservation.statut == 'validee' %}bg-success text-white
+                                    {% elif reservation.statut == 'annulee' %}bg-danger text-white
+                                    {% elif reservation.statut == 'utilisee' %}bg-info text-white
+                                    %}">
+                                    {{ reservation.statut_libelle }}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 font-weight-bold">Créée le:</div>
+                            <div class="col-md-8">{{ reservation.date_creation|format_datetime }} par {{
+                                reservation.utilisateur.username }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <form method="POST"
+                    action="{{ url_for('reservations.annuler_reservation', reservation_id=reservation.id) }}">
+                    <div class="form-group">
+                        <label for="motif" class="font-weight-bold">Motif de l'annulation <span
+                                class="text-danger">*</span></label>
+                        <textarea class="form-control" id="motif" name="motif" rows="3" required
+                            placeholder="Veuillez indiquer la raison de l'annulation de cette réservation"></textarea>
+                        <small class="form-text text-muted">Ce champ est obligatoire pour enregistrer
+                            l'annulation.</small>
+                    </div>
+
+                    <div class="form-group mt-4">
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-ban"></i> Confirmer l'annulation
+                        </button>
+                        <a href="{{ url_for('reservations.liste_reservations', intervention_id=reservation.intervention_id) }}"
+                            class="btn btn-secondary">
+                            <i class="fas fa-arrow-left"></i> Retour à la liste
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

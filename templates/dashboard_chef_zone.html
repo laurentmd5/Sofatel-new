@@ -1,0 +1,1313 @@
+{% extends "base.html" %}
+
+{% block title %}Tableau de bord Chef de Zone - Sofatelcom{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="h3 mb-4">
+            <i data-feather="map-pin" class="me-2"></i>
+            Tableau de bord Chef de Zone
+            {% if user_zone %}
+            <span class="badge bg-primary ms-2">{{ user_zone }}</span>
+            {% elif fresh_user and fresh_user.zone %}
+            <span class="badge bg-primary ms-2">{{ fresh_user.zone }}</span>
+            {% elif current_user.zone %}
+            <span class="badge bg-primary ms-2">{{ current_user.zone }}</span>
+            {% endif %}
+        </h1>
+    </div>
+</div>
+
+<!-- Statistiques de la zone -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card bg-primary text-white clickable-card"
+            onclick="showZoneDetailsModal('equipes_jour', '{{ stats.equipes_jour }}', 'Équipes du jour')">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="mb-0" id="teams-published1">0</h4>
+                        <p class="mb-0">Équipes du jour</p>
+                    </div>
+                    <i data-feather="users" style="width: 32px; height: 32px;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-success text-white clickable-card"
+            onclick="showZoneDetailsModal('techniciens_zone', '{{ stats.techniciens_zone }}', 'Techniciens actifs')">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="mb-0">{{ stats.techniciens_zone }}</h4>
+                        <p class="mb-0">Techniciens actifs</p>
+                    </div>
+                    <i data-feather="user-check" style="width: 32px; height: 32px;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-warning text-white clickable-card"
+            onclick="showZoneDetailsModal('interventions_cours', '{{ stats.interventions_cours }}', 'Interventions en cours')">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="mb-0">{{ stats.interventions_cours }}</h4>
+                        <p class="mb-0">En cours</p>
+                    </div>
+                    <i data-feather="activity" style="width: 32px; height: 32px;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-info text-white clickable-card"
+            onclick="showZoneDetailsModal('interventions_terminees_jour', '{{ stats.interventions_terminees_jour }}', 'Terminées aujourd\'hui')">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="mb-0">{{ stats.interventions_terminees_jour }}</h4>
+                        <p class="mb-0">Terminées aujourd'hui</p>
+                    </div>
+                    <i data-feather="check-circle" style="width: 32px; height: 32px;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Publication quotidienne des équipes -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card" id="publication-section">
+            <div class="card-header d-flex justify-content-between align-items-center" id="publication-header">
+                <h5 class="mb-0">
+                    <i data-feather="clock" class="me-2"></i>
+                    Publication des équipes quotidiennes
+                    <span class="badge ms-2" id="time-status">En attente</span>
+                </h5>
+                <div id="current-time" class="small text-muted"></div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div id="publication-content">
+                            <div class="alert alert-warning" id="time-warning">
+                                <i data-feather="clock" class="me-2"></i>
+                                <strong>Délai de publication:</strong> Les équipes doivent être publiées avant 08h00
+                                chaque jour.
+                                <br>
+                                <span id="countdown-timer"></span>
+                            </div>
+
+                            <div class="d-flex gap-3 mb-3">
+                                <button class="btn btn-success" id="btn-publish-teams"
+                                    onclick="showPublicationSelection()">
+                                    <i data-feather="send" class="me-2"></i>
+                                    Publier les équipes sélectionnées
+                                </button>
+                                <button class="btn btn-outline-danger" onclick="showUnpublishSelection()">
+                                    <i data-feather="eye-off" class="me-2"></i>
+                                    Dépublier les équipes sélectionnées
+                                </button>
+                                <button class="btn btn-outline-primary" onclick="previewAllTeams()">
+                                    <i data-feather="eye" class="me-2"></i>
+                                    Voir toutes les équipes
+                                </button>
+                            </div>
+
+                            <div id="publication-status" class="mb-3"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="publication-stats">
+                            <h6 class="text-muted mb-3">Statistiques du jour</h6>
+                            <div class="row text-center">
+                                <div class="col-4">
+                                    <div class="border rounded p-2">
+                                        <h5 class="mb-0 text-primary" id="teams-total">0</h5>
+                                        <small>Total équipes</small>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="border rounded p-2">
+                                        <h5 class="mb-0 text-success" id="teams-published">0</h5>
+                                        <small>Disponibles</small>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="border rounded p-2">
+                                        <h5 class="mb-0 text-secondary" id="teams-unpublished">0</h5>
+                                        <small>Non disponibles</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Gestion des équipes -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-sofatelcom-primary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="users" class="me-2"></i>
+                    Gestion des équipes
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <a href="{{ url_for('create_team') }}"
+                            class="btn btn-outline-success w-100 h-100 d-flex align-items-center justify-content-center">
+                            <div class="text-center">
+                                <i data-feather="plus-circle" class="mb-2" style="width: 32px; height: 32px;"></i>
+                                <br>
+                                <strong>Créer une équipe</strong>
+                                <br>
+                                <small>Nouvelle équipe d'intervention</small>
+                            </div>
+                        </a>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <button
+                            class="btn btn-outline-primary w-100 h-100 d-flex align-items-center justify-content-center"
+                            onclick="showEquipesJour()">
+                            <div class="text-center">
+                                <i data-feather="eye" class="mb-2" style="width: 32px; height: 32px;"></i>
+                                <br>
+                                <strong>Voir les équipes</strong>
+                                <br>
+                                <small>Équipes du jour</small>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header bg-sofatelcom-secondary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="settings" class="me-2"></i>
+                    Actions rapides
+                </h5>
+            </div>
+            <div class="card-body d-flex flex-column">
+                <div class="mb-3">
+                    <button class="btn btn-outline-warning w-100" onclick="reorganiserUrgence()">
+                        <i data-feather="alert-triangle" class="me-2"></i>
+                        Réorganisation d'urgence
+                    </button>
+                </div>
+                <div class="mb-3">
+                    <button class="btn btn-outline-secondary w-100" onclick="showEquipesInactives()">
+                        <i data-feather="eye-off" class="me-2"></i>
+                        Voir les équipes inactives
+                    </button>
+                </div>
+                <div class="mb-3">
+                    <a href="{{ url_for('legacy.intervention_history') }}" class="btn btn-outline-info w-100">
+                        <i data-feather="clock" class="me-2"></i>
+                        Historique interventions
+                    </a>
+                </div>
+
+                <div class="mt-auto">
+                    <button class="btn btn-outline-secondary w-100" onclick="exportRapport()">
+                        <i data-feather="download" class="me-2"></i>
+                        Export rapport
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- Liste des équipes du jour -->
+<div class="row" id="equipes-container" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i data-feather="calendar" class="me-2"></i>
+                    Équipes du jour
+                </h5>
+            </div>
+            <div class="card-body" id="equipes-list">
+                <!-- Contenu chargé dynamiquement -->
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Liste des équipes inactives -->
+<div class="row" id="equipes-inactives-container" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i data-feather="eye-off" class="me-2"></i>
+                    Équipes inactives
+                </h5>
+            </div>
+            <div class="card-body" id="equipes-inactives-list">
+                <!-- Contenu chargé dynamiquement -->
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Modal pour détails statistiques de la zone -->
+<div class="modal fade" id="zoneStatsModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="zoneStatsModalLabel">Détails</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="zoneStatsDetails">
+                <!-- Contenu dynamique -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/teams.js') }}"></script>
+<script>
+    // Daily team publication functionality
+    let publicationTimer;
+
+    function initializePublication() {
+        updateCurrentTime();
+        updateTimeStatus();
+        loadPublicationData();
+
+        // Update time every minute
+        setInterval(updateCurrentTime, 60000);
+        setInterval(updateTimeStatus, 60000);
+    }
+
+    function updateCurrentTime() {
+        const now = new Date();
+        const timeString = now.toLocaleTimeString('fr-FR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+        document.getElementById('current-time').textContent = timeString;
+    }
+
+    function updateTimeStatus() {
+        const now = new Date();
+        const currentHour = now.getHours();
+        const currentMinutes = now.getMinutes();
+        const currentTime = currentHour * 60 + currentMinutes;
+        const deadline = 8 * 60; // 8:00 AM in minutes
+
+        const statusBadge = document.getElementById('time-status');
+        const warningAlert = document.getElementById('time-warning');
+        const publishBtn = document.getElementById('btn-publish-teams');
+        const countdownTimer = document.getElementById('countdown-timer');
+
+        publishBtn.disabled = false; // Toujours permettre la publication
+
+        if (currentTime < deadline) {
+            const remainingMinutes = deadline - currentTime;
+            const hours = Math.floor(remainingMinutes / 60);
+            const minutes = remainingMinutes % 60;
+
+            statusBadge.textContent = 'Dans les temps';
+            statusBadge.className = 'badge ms-2 bg-success';
+            warningAlert.className = 'alert alert-info';
+            publishBtn.innerHTML = '<i data-feather="send" class="me-2"></i>Publier les équipes du jour';
+
+            countdownTimer.innerHTML = `<strong>Temps restant: ${hours}h ${minutes}min</strong>`;
+        } else {
+            statusBadge.textContent = 'Hors délai';
+            statusBadge.className = 'badge ms-2 bg-warning';
+            warningAlert.className = 'alert alert-warning';
+            publishBtn.innerHTML = '<i data-feather="send" class="me-2"></i>Publier les équipes du jour (hors délai)';
+
+            countdownTimer.innerHTML = '<strong class="text-warning">Délai de publication dépassé - Publication toujours possible</strong>';
+        }
+
+        // Re-initialize feather icons
+        if (typeof feather !== 'undefined') {
+            feather.replace();
+        }
+    }
+
+    function loadPublicationData() {
+        fetch('/api/publication-stats')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('teams-total').textContent = data.stats.total;
+                    document.getElementById('teams-published1').textContent = data.stats.published;
+                    document.getElementById('teams-published').textContent = data.stats.published;
+                    document.getElementById('teams-unpublished').textContent = data.stats.unpublished;
+
+                    // Update publication status
+                    const statusDiv = document.getElementById('publication-status');
+                    if (data.stats.published > 0) {
+                        statusDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <i data-feather="check-circle" class="me-2"></i>
+                            Équipes disponibles: <strong>${data.stats.published}</strong> sur ${data.stats.total}
+                            <br><small>Dernière mise à jour: ${data.stats.last_publication || 'N/A'}</small>
+                        </div>
+                    `;
+                    } else if (data.stats.total > 0) {
+                        statusDiv.innerHTML = `
+                        <div class="alert alert-warning">
+                            <i data-feather="alert-triangle" class="me-2"></i>
+                            Aucune équipe disponible - ${data.stats.total} équipe(s) créée(s)
+                        </div>
+                    `;
+                    } else {
+                        statusDiv.innerHTML = `
+                        <div class="alert alert-info">
+                            <i data-feather="info" class="me-2"></i>
+                            Aucune équipe créée
+                        </div>
+                    `;
+                    }
+
+                    if (typeof feather !== 'undefined') {
+                        feather.replace();
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error loading publication data:', error);
+            });
+    }
+
+    function showPublicationSelection() {
+        fetch('/api/all-teams')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showTeamsSelectionModal(data.teams, 'publish');
+                } else {
+                    alert('Erreur lors du chargement: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Erreur: ' + error.message);
+            });
+    }
+
+    function showUnpublishSelection() {
+        fetch('/api/all-teams')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showTeamsSelectionModal(data.teams, 'unpublish');
+                } else {
+                    alert('Erreur lors du chargement: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Erreur: ' + error.message);
+            });
+    }
+
+    function previewAllTeams() {
+        fetch('/api/all-teams')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showTeamsPreviewModal(data.teams);
+                } else {
+                    alert('Erreur lors du chargement: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Erreur: ' + error.message);
+            });
+    }
+
+    function showTeamsSelectionModal(teams, action = 'publish') {
+        let modalHtml = `
+        <div class="modal fade" id="teamsSelectionModal" tabindex="-1">
+            <div class="modal-dialog modal-xl">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            ${action === 'publish' ? 'Sélectionner les équipes à publier' : 'Sélectionner les équipes à dépublier'}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+    `;
+
+        if (teams.length === 0) {
+            modalHtml += '<p class="text-muted">Aucune équipe créée.</p>';
+        } else {
+            // Filtrer selon l'action
+            const filteredTeams = action === 'publish'
+                ? teams.filter(team => !team.publie)
+                : teams.filter(team => team.publie);
+
+            if (filteredTeams.length === 0) {
+                const message = action === 'publish'
+                    ? 'Toutes les équipes sont déjà publiées.'
+                    : 'Aucune équipe n\'est actuellement publiée.';
+                modalHtml += `<p class="text-info">${message}</p>`;
+            } else {
+                modalHtml += `
+                <div class="mb-3">
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllTeams(true)">
+                        <i data-feather="check-square"></i> Tout sélectionner
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary ms-2" onclick="selectAllTeams(false)">
+                        <i data-feather="square"></i> Tout désélectionner
+                    </button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th width="40">
+                                    <input type="checkbox" id="selectAllCheckbox" onchange="toggleAllTeams(this)">
+                                </th>
+                                <th>Équipe</th>
+                                <th>Zone</th>
+                                <th>Service</th>
+                                <th>Technologies</th>
+                                <th>Membres</th>
+                                <th>Statut</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+                filteredTeams.forEach(team => {
+                    const statusBadge = team.publie
+                        ? '<span class="badge bg-success">Disponible</span>'
+                        : '<span class="badge bg-secondary">Non disponible</span>';
+
+                    modalHtml += `
+                    <tr>
+                        <td>
+                            <input type="checkbox" class="team-checkbox" value="${team.id}" data-team-name="${team.nom_equipe}">
+                        </td>
+                        <td><strong>${team.nom_equipe}</strong></td>
+                        <td>${team.zone}</td>
+                        <td><span class="badge bg-primary">${team.service}</span></td>
+                        <td><span class="badge bg-secondary">${team.technologies}</span></td>
+                        <td>${team.nb_membres}</td>
+                        <td>${statusBadge}</td>
+                    </tr>
+                `;
+                });
+
+                modalHtml += '</tbody></table></div>';
+            }
+        }
+
+        modalHtml += `
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+    `;
+
+        const hasActionableTeams = action === 'publish'
+            ? teams.some(team => !team.publie)
+            : teams.some(team => team.publie);
+
+        if (hasActionableTeams) {
+            const buttonClass = action === 'publish' ? 'btn-success' : 'btn-danger';
+            const buttonText = action === 'publish' ? 'Publier les équipes sélectionnées' : 'Dépublier les équipes sélectionnées';
+            const buttonIcon = action === 'publish' ? 'send' : 'eye-off';
+            const buttonAction = action === 'publish' ? 'publishSelectedTeams()' : 'unpublishSelectedTeams()';
+
+            modalHtml += `
+                        <button type="button" class="btn ${buttonClass}" onclick="${buttonAction}" data-action="${action}">
+                            <i data-feather="${buttonIcon}" class="me-2"></i>
+                            ${buttonText}
+                        </button>
+        `;
+        }
+
+        modalHtml += `
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+        // Remove existing modal if any
+        const existingModal = document.getElementById('teamsSelectionModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        // Add new modal to body
+        if (document.body) {
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('teamsSelectionModal'));
+        modal.show();
+
+        // Re-initialize feather icons
+        if (typeof feather !== 'undefined') {
+            feather.replace();
+        }
+    }
+
+    function toggleAllTeams(masterCheckbox) {
+        const checkboxes = document.querySelectorAll('.team-checkbox');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = masterCheckbox.checked;
+        });
+    }
+
+    function selectAllTeams(select) {
+        const checkboxes = document.querySelectorAll('.team-checkbox');
+        const masterCheckbox = document.getElementById('selectAllCheckbox');
+
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = select;
+        });
+
+        if (masterCheckbox) {
+            masterCheckbox.checked = select;
+        }
+    }
+
+    function publishSelectedTeams() {
+        const selectedCheckboxes = document.querySelectorAll('.team-checkbox:checked');
+
+        if (selectedCheckboxes.length === 0) {
+            alert('Veuillez sélectionner au moins une équipe à publier.');
+            return;
+        }
+
+        const now = new Date();
+        const currentHour = now.getHours();
+
+        // Avertissement si hors délai
+        if (currentHour >= 8) {
+            if (!confirm('ATTENTION: Le délai de publication recommandé (8h00) est dépassé.\n\nVoulez-vous quand même publier les équipes sélectionnées?')) {
+                return;
+            }
+        }
+
+        const selectedTeams = Array.from(selectedCheckboxes).map(cb => ({
+            id: parseInt(cb.value),
+            name: cb.dataset.teamName
+        }));
+
+        const teamNames = selectedTeams.map(t => t.name).join(', ');
+        if (!confirm(`Êtes-vous sûr de vouloir publier les équipes suivantes?\n\n${teamNames}`)) {
+            return;
+        }
+
+        const publishBtn = document.querySelector('#teamsSelectionModal .btn-success');
+        const originalText = publishBtn.innerHTML;
+        publishBtn.disabled = true;
+        publishBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Publication en cours...';
+
+        fetch('/api/publish-selected-teams', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                team_ids: selectedTeams.map(t => t.id)
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`${data.published_count} équipe(s) publiée(s) avec succès!`);
+                    // Fermer le modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('teamsSelectionModal'));
+                    modal.hide();
+                    // Recharger les stats
+                    loadPublicationData();
+                    showEquipesJour()
+                } else {
+                    alert('Erreur lors de la publication: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Erreur de communication: ' + error.message);
+            })
+            .finally(() => {
+                publishBtn.disabled = false;
+                publishBtn.innerHTML = originalText;
+                if (typeof feather !== 'undefined') {
+                    feather.replace();
+                }
+            });
+    }
+
+    function publishAllTeams() {
+        const now = new Date();
+        const currentHour = now.getHours();
+
+        // Avertissement si hors délai
+        if (currentHour >= 8) {
+            if (!confirm('ATTENTION: Le délai de publication recommandé (8h00) est dépassé.\n\nVoulez-vous quand même publier toutes les équipes?')) {
+                return;
+            }
+        }
+
+        if (!confirm('Êtes-vous sûr de vouloir publier TOUTES les équipes créées aujourd\'hui?')) {
+            return;
+        }
+
+        const publishBtn = document.querySelector('.btn-outline-warning');
+        const originalText = publishBtn.innerHTML;
+        publishBtn.disabled = true;
+        publishBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Publication en cours...';
+
+        fetch('/api/publish-daily-teams', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`${data.published_count} équipe(s) publiée(s) avec succès!`);
+                    loadPublicationData(); // Recharger les stats
+                    showEquipesJour()
+                } else {
+                    alert('Erreur lors de la publication: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Erreur de communication: ' + error.message);
+            })
+            .finally(() => {
+                publishBtn.disabled = false;
+                publishBtn.innerHTML = originalText;
+                if (typeof feather !== 'undefined') {
+                    feather.replace();
+                }
+            });
+    }
+
+    function previewTeams() {
+        fetch('/api/preview-teams')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showTeamsPreviewModal(data.teams);
+                } else {
+                    alert('Erreur lors du chargement: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Erreur: ' + error.message);
+            });
+    }
+
+    function showTeamsPreviewModal(teams) {
+        let modalHtml = `
+        <div class="modal fade" id="teamsPreviewModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Prévisualisation des équipes</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+    `;
+
+        if (teams.length === 0) {
+            modalHtml += '<p class="text-muted">Aucune équipe à publier.</p>';
+        } else {
+            modalHtml += '<div class="table-responsive"><table class="table table-striped"><thead><tr><th>Équipe</th><th>Zone</th><th>Service</th><th>Technologies</th><th>Membres</th><th>Statut</th></tr></thead><tbody>';
+            teams.forEach(team => {
+                modalHtml += `
+                <tr>
+                    <td><strong>${team.nom_equipe}</strong></td>
+                    <td>${team.zone}</td>
+                    <td><span class="badge bg-primary">${team.service}</span></td>
+                    <td><span class="badge bg-secondary">${team.technologies}</span></td>
+                    <td>${team.nb_membres}</td>
+                    <td><span class="badge bg-${team.publie ? 'success' : 'warning'}">${team.publie ? 'Publiée' : 'Brouillon'}</span></td>
+                </tr>
+            `;
+            });
+            modalHtml += '</tbody></table></div>';
+        }
+
+        modalHtml += `
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+        // Remove existing modal if any
+        const existingModal = document.getElementById('teamsPreviewModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        // Add new modal to body
+        if (document.body) {
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('teamsPreviewModal'));
+        modal.show();
+    }
+
+    function saveAsDraft() {
+        alert('Les équipes sont automatiquement sauvegardées comme brouillons lors de leur création.');
+    }
+
+    // Initialize when page loads
+    document.addEventListener('DOMContentLoaded', function () {
+        initializePublication();
+    });
+
+    function showEquipesJour() {
+        const container = document.getElementById('equipes-container');
+        const list = document.getElementById('equipes-list');
+        const inactivesContainer = document.getElementById('equipes-inactives-container');
+
+        if (container.style.display === 'none') {
+            // Masquer l'autre section
+            if (inactivesContainer) inactivesContainer.style.display = 'none';
+            // Charger les équipes via AJAX
+            fetch('/api/equipes-jour')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        let html = '';
+                        if (data.equipes.length === 0) {
+                            html = '<p class="text-muted">Aucune équipe créée pour aujourd\'hui.</p>';
+                        } else {
+                            html = '<div class="row">';
+                            data.equipes.forEach(equipe => {
+                                html += `
+                                <div class="col-md-6 mb-3">
+                                    <div class="card border-primary">
+                                        <div class="card-header">
+                                            <strong>${equipe.nom_equipe}</strong>
+                                            <span class="badge bg-primary ms-2">${equipe.service}</span>
+                                            <span class="badge bg-secondary ms-1">${equipe.technologies}</span>
+                                        </div>
+                                        <div class="card-body">
+                                            <p class="mb-2"><strong>Zone:</strong> ${equipe.zone}</p>
+                                            <p class="mb-2"><strong>Membres:</strong> ${equipe.nb_membres}</p>
+                                            <a href="/manage_team/${equipe.id}" class="btn btn-sm btn-outline-primary">
+                                                <i data-feather="edit-2" class="me-1"></i>
+                                                Gérer
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                            });
+                            html += '</div>';
+                        }
+                        list.innerHTML = html;
+                        feather.replace();
+                    }
+                    container.style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Erreur:', error);
+                    list.innerHTML = '<p class="text-danger">Erreur lors du chargement des équipes.</p>';
+                    container.style.display = 'block';
+                });
+        } else {
+            container.style.display = 'none';
+        }
+    }
+
+    function reorganiserUrgence() {
+        if (confirm('Voulez-vous vraiment réorganiser les affectations en urgence ?')) {
+            // Ici on peut implémenter la logique de réorganisation
+            alert('Fonction de réorganisation d\'urgence à implémenter');
+        }
+    }
+
+    function exportRapport() {
+        // Implémenter l'export de rapport
+        alert('Export de rapport à implémenter');
+    }
+    function showEquipesInactives() {
+        console.log('DEBUG: showEquipesInactives appelé');
+        const container = document.getElementById('equipes-inactives-container');
+        const list = document.getElementById('equipes-inactives-list');
+        const jourContainer = document.getElementById('equipes-container');
+
+        console.log('DEBUG: container:', container);
+        console.log('DEBUG: list:', list);
+        console.log('DEBUG: container.style.display:', container ? container.style.display : 'container not found');
+
+        if (container.style.display === 'none' || container.style.display === '') {
+            console.log('DEBUG: Affichage des équipes inactives');
+            // Masquer l'autre section
+            if (jourContainer) jourContainer.style.display = 'none';
+
+            // Afficher un message de chargement
+            list.innerHTML = '<p class="text-muted">Chargement des équipes inactives...</p>';
+            container.style.display = 'block';
+
+            fetch('/api/equipes-inactives')
+                .then(response => {
+                    console.log('DEBUG: Response status:', response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('DEBUG: Data reçue:', data);
+                    if (data.success) {
+                        let html = '';
+                        if (data.equipes.length === 0) {
+                            html = '<p class="text-muted">Aucune équipe inactive.</p>';
+                        } else {
+                            html = '<div class="row">';
+                            data.equipes.forEach(equipe => {
+                                html += `
+                                <div class="col-md-6 mb-3">
+                                    <div class="card border-secondary">
+                                        <div class="card-header">
+                                            <strong>${equipe.nom_equipe}</strong>
+                                            <span class="badge bg-secondary ms-2">${equipe.service}</span>
+                                            <span class="badge bg-secondary ms-1">${equipe.technologies}</span>
+                                        </div>
+                                        <div class="card-body">
+                                            <p class="mb-2"><strong>Zone:</strong> ${equipe.zone}</p>
+                                            <p class="mb-2"><strong>Membres:</strong> ${equipe.nb_membres}</p>
+                                            <a href="/manage_team/${equipe.id}" class="btn btn-sm btn-primary">
+                                                <i data-feather='edit-2'></i> Gérer
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                            });
+                            html += '</div>';
+                        }
+                        list.innerHTML = html;
+                        feather.replace();
+                        console.log('DEBUG: Équipes inactives affichées');
+                    } else {
+                        list.innerHTML = '<p class="text-danger">Erreur: ' + (data.error || 'Erreur inconnue') + '</p>';
+                    }
+                })
+                .catch(error => {
+                    console.error('DEBUG: Erreur fetch:', error);
+                    list.innerHTML = '<p class="text-danger">Erreur lors du chargement des équipes inactives.</p>';
+                    container.style.display = 'block';
+                });
+        } else {
+            console.log('DEBUG: Masquage des équipes inactives');
+            container.style.display = 'none';
+        }
+    }
+
+    function unpublishSelectedTeams() {
+        const selectedCheckboxes = document.querySelectorAll('.team-checkbox:checked');
+
+        if (selectedCheckboxes.length === 0) {
+            alert('Veuillez sélectionner au moins une équipe à dépublier.');
+            return;
+        }
+
+        const selectedTeams = Array.from(selectedCheckboxes).map(cb => ({
+            id: parseInt(cb.value),
+            name: cb.dataset.teamName
+        }));
+
+        const teamNames = selectedTeams.map(t => t.name).join(', ');
+        if (!confirm(`Êtes-vous sûr de vouloir dépublier les équipes suivantes?\n\n${teamNames}\n\nElles ne seront plus disponibles pour les affectations.`)) {
+            return;
+        }
+
+        const publishBtn = document.querySelector('#teamsSelectionModal .btn-danger');
+        const originalText = publishBtn.innerHTML;
+        publishBtn.disabled = true;
+        publishBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Dépublication en cours...';
+
+        fetch('/api/unpublish-selected-teams', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                team_ids: selectedTeams.map(t => t.id)
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`${data.unpublished_count} équipe(s) dépubliée(s) avec succès!`);
+                    // Fermer le modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('teamsSelectionModal'));
+                    modal.hide();
+                    // Recharger les stats
+                    loadPublicationData();
+                    showEquipesJour()
+                } else {
+                    alert('Erreur lors de la dépublication: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Erreur de communication: ' + error.message);
+            })
+            .finally(() => {
+                publishBtn.disabled = false;
+                publishBtn.innerHTML = originalText;
+                if (typeof feather !== 'undefined') {
+                    feather.replace();
+                }
+            });
+    }
+
+    function showZoneDetailsModal(type, count, title) {
+        document.getElementById('zoneStatsModalLabel').textContent = title;
+        const modal = new bootstrap.Modal(document.getElementById('zoneStatsModal'));
+        modal.show();
+        fetch(`/api/zone_stats/details/${type}`)
+            .then(response => response.json())
+            .then(data => {
+                displayZoneStatsDetails(data, type);
+            })
+            .catch(error => {
+                document.getElementById('zoneStatsDetails').innerHTML =
+                    '<div class="alert alert-danger">Erreur lors du chargement des détails</div>';
+            });
+    }
+
+    function displayZoneStatsDetails(data, type) {
+        let html = '';
+        if (data.items && data.items.length > 0) {
+            html = '<div class="table-responsive"><table class="table table-striped">';
+            // Adapte les colonnes selon le type
+            if (type === 'equipes_jour') {
+                html += `
+                <thead>
+                    <tr>
+                        <th>Nom équipe</th>
+                        <th>Zone</th>
+                        <th>Service</th>
+                        <th>Technologies</th>
+                        <th>Membres</th>
+                        <th>Statut</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+                data.items.forEach(item => {
+                    html += `
+                    <tr>
+                        <td>${item.nom_equipe}</td>
+                        <td>${item.zone}</td>
+                        <td>${item.service}</td>
+                        <td>${item.technologies}</td>
+                        <td>${item.nb_membres}</td>
+                        <td><span class="badge bg-${item.publie ? 'success' : 'secondary'}">${item.publie ? 'Disponible' : 'Non disponible'}</span></td>
+                    </tr>`;
+                });
+            } else if (type === 'techniciens_zone') {
+                html += `
+                <thead>
+                    <tr>
+                        <th>Nom</th>
+                        <th>Zone</th>
+                        <th>Technologies</th>
+                        <th>Statut</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+                data.items.forEach(item => {
+                    html += `
+                    <tr>
+                        <td>${item.nom}</td>
+                        <td>${item.zone}</td>
+                        <td>${item.technologies}</td>
+                        <td><span class="badge bg-success">Actif</span></td>
+                    </tr>`;
+                });
+            } else if (type === 'interventions_cours' || type === 'interventions_terminees_jour') {
+                html += `
+                <thead>
+                    <tr>
+                        <th>N° Intervention</th>
+                        <th>Client</th>
+                        <th>Technicien</th>
+                        <th>Zone</th>
+                        <th>Date</th>
+                        <th>Statut</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+                data.items.forEach(item => {
+                    html += `
+                    <tr>
+                        <td>${item.numero_intervention}</td>
+                        <td>${item.nom_client}</td>
+                        <td>${item.technicien_nom}</td>
+                        <td>${item.zone}</td>
+                        <td>${item.date_planifiee ? new Date(item.date_planifiee).toLocaleDateString('fr-FR') : '-'}</td>
+                        <td><span class="badge bg-${item.statut === 'terminee' ? 'success' : 'warning'}">${item.statut}</span></td>
+                    </tr>`;
+                });
+            }
+            html += '</tbody></table></div>';
+            if (data.total > data.items.length) {
+                html += `<p class="text-muted text-center mt-3">Affichage de ${data.items.length} sur ${data.total} éléments</p>`;
+            }
+        } else {
+            html = '<div class="alert alert-info text-center">Aucune donnée disponible</div>';
+        }
+        document.getElementById('zoneStatsDetails').innerHTML = html;
+    }
+</script>
+
+<!-- Section Chef PUR - Limitée à la zone -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0">
+                    <i data-feather="shield" class="me-2"></i>
+                    Administration de Zone
+                    <span class="badge bg-primary ms-2">{{ current_user.zone }}</span>
+                    <small class="text-muted ms-2">Fonctionnalités avancées limitées à votre zone</small>
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- Statistiques Chef PUR pour la zone -->
+                <div class="row mb-4">
+                    <div class="col-md-2 mb-3">
+                        <div class="card bg-primary text-white clickable-card">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4 class="mb-0">{{ stats_pur.total_demandes }}</h4>
+                                        <p class="mb-0">Demandes zone</p>
+                                    </div>
+                                    <i data-feather="file-text" style="width: 24px; height: 24px;"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <div class="card bg-info text-white clickable-card">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4 class="mb-0">{{ stats_pur.interventions_cours }}</h4>
+                                        <p class="mb-0">En cours</p>
+                                    </div>
+                                    <i data-feather="activity" style="width: 24px; height: 24px;"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <div class="card bg-warning text-white clickable-card">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4 class="mb-0">{{ stats_pur.attente_validation }}</h4>
+                                        <p class="mb-0">À valider</p>
+                                    </div>
+                                    <i data-feather="clock" style="width: 24px; height: 24px;"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <div class="card bg-success text-white clickable-card">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4 class="mb-0">{{ stats_pur.interventions_validees }}</h4>
+                                        <p class="mb-0">Validées</p>
+                                    </div>
+                                    <i data-feather="check-circle" style="width: 24px; height: 24px;"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <div class="card bg-danger text-white clickable-card">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4 class="mb-0">{{ stats_pur.interventions_rejetees }}</h4>
+                                        <p class="mb-0">Rejetées</p>
+                                    </div>
+                                    <i data-feather="x-circle" style="width: 24px; height: 24px;"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <div class="card bg-secondary text-white clickable-card">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4 class="mb-0">{{ stats_pur.demandes_jour }}</h4>
+                                        <p class="mb-0">Import jour</p>
+                                    </div>
+                                    <i data-feather="calendar" style="width: 24px; height: 24px;"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions Chef PUR pour la zone -->
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <div class="card h-100">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="mb-0"><i data-feather="upload" class="me-2"></i>Import de demandes</h6>
+                            </div>
+                            <div class="card-body text-center">
+                                <p class="text-muted">Importer les demandes d'intervention pour votre zone</p>
+                                <a href="{{ url_for('dispatch.import_demandes') }}" class="btn btn-success">
+                                    <i data-feather="file-plus" class="me-2"></i>
+                                    Importer les demandes
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <div class="card h-100">
+                            <div class="card-header bg-primary text-white">
+                                <h6 class="mb-0"><i data-feather="send" class="me-2"></i>Dispatching</h6>
+                            </div>
+                            <div class="card-body text-center">
+                                <p class="text-muted">Affecter les interventions aux techniciens de votre zone</p>
+                                <a href="{{ url_for('dispatch.dispatching') }}" class="btn btn-primary">
+                                    <i data-feather="user-plus" class="me-2"></i>
+                                    Dispatcher interventions
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <div class="card h-100">
+                            <div class="card-header bg-info text-white">
+                                <h6 class="mb-0"><i data-feather="check-square" class="me-2"></i>Validation</h6>
+                            </div>
+                            <div class="card-body text-center">
+                                <p class="text-muted">Valider les interventions terminées dans votre zone</p>
+                                <a href="{{ url_for('legacy.validate_interventions') }}" class="btn btn-info">
+                                    <i data-feather="check-circle" class="me-2"></i>
+                                    Valider interventions
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Performance des équipes de la zone -->
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header bg-info text-white">
+                                <h6 class="mb-0"><i data-feather="bar-chart-2" class="me-2"></i>Performance des équipes
+                                    - Zone {{ current_user.zone }}</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Équipe / Technicien</th>
+                                                <th>Prestataire</th>
+                                                <th>Technologies</th>
+                                                <th>Interventions Réalisées</th>
+                                                <th>Taux de Réussite</th>
+                                                <th>Performance</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for equipe in stats_pur.performance_data.equipes %}
+                                            <tr>
+                                                <td>
+                                                    <strong>{{ equipe.nom_equipe }}</strong>
+                                                    <br><small class="text-muted">Équipe</small>
+                                                </td>
+                                                <td>
+                                                    {% if equipe.prestataire %}
+                                                    <span class="badge bg-warning">{{ equipe.prestataire }}</span>
+                                                    {% else %}
+                                                    <span class="badge bg-primary">Sofatelcom</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>{{ equipe.technologies }}</td>
+                                                <td>{{ equipe.interventions_realisees }}</td>
+                                                <td>{{ equipe.taux_reussite }}%</td>
+                                                <td>
+                                                    <div class="progress" style="height: 20px;">
+                                                        <div class="progress-bar {% if equipe.taux_reussite >= 80 %}bg-success{% elif equipe.taux_reussite >= 60 %}bg-warning{% else %}bg-danger{% endif %}"
+                                                            role="progressbar"
+                                                            style="width: {{ equipe.taux_reussite }}%">
+                                                            {{ equipe.taux_reussite }}%
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                            {% for technicien in stats_pur.performance_data.techniciens %}
+                                            <tr>
+                                                <td>
+                                                    <strong>{{ technicien.prenom }} {{ technicien.nom }}</strong>
+                                                    <br><small class="text-muted">Technicien principal</small>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-primary">Sofatelcom</span>
+                                                </td>
+                                                <td>{{ technicien.technologies }}</td>
+                                                <td>{{ technicien.interventions_realisees }}</td>
+                                                <td>{{ technicien.taux_reussite }}%</td>
+                                                <td>
+                                                    <div class="progress" style="height: 20px;">
+                                                        <div class="progress-bar {% if technicien.taux_reussite >= 80 %}bg-success{% elif technicien.taux_reussite >= 60 %}bg-warning{% else %}bg-danger{% endif %}"
+                                                            role="progressbar"
+                                                            style="width: {{ technicien.taux_reussite }}%">
+                                                            {{ technicien.taux_reussite }}%
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

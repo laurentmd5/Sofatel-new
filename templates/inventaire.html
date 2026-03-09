@@ -1,0 +1,744 @@
+{% extends "base.html" %}
+
+{% block title %}Inventaire Physique - Gestion des Stocks{% endblock %}
+
+{% block content %}
+<style>
+    .page-header {
+        background: linear-gradient(135deg, #17a2b8 0%, #20c997 100%);
+        color: white;
+        padding: 2rem 0;
+        margin-bottom: 2rem;
+        border-radius: 0 0 10px 10px;
+    }
+
+    .page-header h1 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 700;
+    }
+
+    .page-header p {
+        margin: 0.5rem 0 0 0;
+        opacity: 0.9;
+    }
+
+    .container-full {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    @media (max-width: 1200px) {
+        .container-full {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .card-section {
+        background: white;
+        border-radius: 10px;
+        padding: 2rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .card-section h3 {
+        margin-top: 0;
+        color: #333;
+        border-bottom: 2px solid #17a2b8;
+        padding-bottom: 1rem;
+    }
+
+    .upload-zone {
+        border: 2px dashed #17a2b8;
+        border-radius: 8px;
+        padding: 2rem;
+        text-align: center;
+        background: #f0f8ff;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .upload-zone:hover {
+        background: #e0f2ff;
+        border-color: #0c5460;
+    }
+
+    .upload-zone.dragover {
+        background: #c3e6ff;
+        border-color: #0c5460;
+        transform: scale(1.02);
+    }
+
+    .upload-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+
+    .upload-zone input {
+        display: none;
+    }
+
+    .scanner-section {
+        margin-top: 2rem;
+    }
+
+    .scanner-input {
+        width: 100%;
+        padding: 1rem;
+        border: 2px solid #ddd;
+        border-radius: 6px;
+        font-size: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .scanner-input:focus {
+        outline: none;
+        border-color: #17a2b8;
+        box-shadow: 0 0 0 3px rgba(23, 162, 184, 0.1);
+    }
+
+    .scan-results {
+        margin-top: 1.5rem;
+    }
+
+    .scan-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1rem;
+    }
+
+    .scan-table thead {
+        background: #f8f9fa;
+        border-bottom: 2px solid #dee2e6;
+    }
+
+    .scan-table th {
+        padding: 1rem;
+        text-align: left;
+        font-weight: 600;
+        color: #495057;
+    }
+
+    .scan-table td {
+        padding: 0.8rem 1rem;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .scan-table tr:hover {
+        background: #f8f9fa;
+    }
+
+    .quantite-input {
+        width: 100px;
+        padding: 0.5rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        text-align: center;
+    }
+
+    .status-ok {
+        background: #d4edda;
+        color: #155724;
+        padding: 0.4rem 0.8rem;
+        border-radius: 4px;
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+
+    .status-warning {
+        background: #fff3cd;
+        color: #856404;
+        padding: 0.4rem 0.8rem;
+        border-radius: 4px;
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+
+    .status-danger {
+        background: #f8d7da;
+        color: #721c24;
+        padding: 0.4rem 0.8rem;
+        border-radius: 4px;
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+
+    .btn-group {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .btn {
+        padding: 0.8rem 1.5rem;
+        border: none;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+        flex: 1;
+        min-width: 150px;
+    }
+
+    .btn-primary {
+        background: #17a2b8;
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background: #0c5460;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(23, 162, 184, 0.3);
+    }
+
+    .btn-success {
+        background: #28a745;
+        color: white;
+    }
+
+    .btn-success:hover {
+        background: #218838;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+    }
+
+    .btn-secondary {
+        background: #6c757d;
+        color: white;
+    }
+
+    .btn-secondary:hover {
+        background: #5a6268;
+        transform: translateY(-2px);
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-item {
+        background: linear-gradient(135deg, #17a2b8 0%, #20c997 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    .stat-item .label {
+        font-size: 0.85rem;
+        opacity: 0.9;
+    }
+
+    .stat-item .value {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-top: 0.5rem;
+    }
+
+    .differences-section {
+        margin-top: 2rem;
+    }
+
+    .diff-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1rem;
+    }
+
+    .diff-table thead {
+        background: #f8f9fa;
+        border-bottom: 2px solid #dee2e6;
+    }
+
+    .diff-table th {
+        padding: 1rem;
+        text-align: left;
+        font-weight: 600;
+    }
+
+    .diff-table td {
+        padding: 0.8rem 1rem;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .diff-row-ok {
+        background: #d4edda;
+    }
+
+    .diff-row-warning {
+        background: #fff3cd;
+    }
+
+    .diff-row-danger {
+        background: #f8d7da;
+    }
+
+    .loading-spinner {
+        display: none;
+        text-align: center;
+        padding: 2rem;
+    }
+
+    .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #17a2b8;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem auto;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .alert {
+        padding: 1rem;
+        border-radius: 6px;
+        margin-bottom: 1rem;
+    }
+
+    .alert-success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+
+    .alert-warning {
+        background: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeaa7;
+    }
+
+    .alert-danger {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+
+    .no-data {
+        text-align: center;
+        padding: 2rem;
+        color: #999;
+    }
+</style>
+
+<div class="page-header">
+    <div class="container">
+        <h1>📦 Inventaire Physique</h1>
+        <p>Comparez votre stock physique avec le stock du système</p>
+    </div>
+</div>
+
+<div class="container-fluid mt-4">
+    <div id="alerts-container"></div>
+
+    <div class="container-full">
+        <!-- COLONNE 1: UPLOAD / SCANNER -->
+        <div class="card-section">
+            <h3>📥 Entrée des données</h3>
+
+            <!-- OPTION 1: Upload Excel -->
+            <div>
+                <h4>Option 1: Importer Excel</h4>
+                <div class="upload-zone" id="upload-zone">
+                    <div class="upload-icon">📊</div>
+                    <p><strong>Cliquez ou glissez votre fichier Excel</strong></p>
+                    <p style="color: #999; font-size: 0.9rem;">Format: REF | Nom Produit | Quantité</p>
+                    <input type="file" id="file-input" accept=".xlsx,.csv,.xls">
+                </div>
+            </div>
+
+            <!-- OPTION 2: Scanner -->
+            <div class="scanner-section">
+                <h4>Option 2: Scanner (Code-barres ou REF)</h4>
+                <input 
+                    type="text" 
+                    id="scanner-input"
+                    class="scanner-input"
+                    placeholder="📱 Scannez un code-barres ou tapez REF (ex: REF-001)"
+                    autocomplete="off"
+                />
+                <small style="color: #999;">Appuyer sur Entrée pour ajouter</small>
+            </div>
+
+            <!-- Boutons d'action -->
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="genererComparaison()">
+                    🔍 Générer Comparaison
+                </button>
+                <button class="btn btn-secondary" onclick="reinitialiser()">
+                    🔄 Recommencer
+                </button>
+            </div>
+        </div>
+
+        <!-- COLONNE 2: RÉSUMÉ -->
+        <div class="card-section">
+            <h3>📊 Résumé</h3>
+
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="label">📦 Scannés</div>
+                    <div class="value" id="stat-scanned">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="label">✅ OK</div>
+                    <div class="value" id="stat-ok">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="label">⚠️ Différences</div>
+                    <div class="value" id="stat-diff">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="label">❌ Manquants</div>
+                    <div class="value" id="stat-missing">0</div>
+                </div>
+            </div>
+
+            <div class="scan-results">
+                <h4>Articles scannés:</h4>
+                <table class="scan-table" id="scan-table">
+                    <thead>
+                        <tr>
+                            <th>Référence</th>
+                            <th>Produit</th>
+                            <th>Physique</th>
+                            <th>BD</th>
+                            <th>Écart</th>
+                            <th>Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody id="scan-tbody">
+                        <tr>
+                            <td colspan="6" class="no-data">Aucun article scanné</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECTION: RAPPORT COMPARAISON -->
+    <div class="card-section" id="rapport-section" style="display: none;">
+        <h3>🔍 Rapport Comparaison</h3>
+
+        <div class="differences-section">
+            <h4>Différences détectées</h4>
+            <table class="diff-table" id="diff-table">
+                <thead>
+                    <tr>
+                        <th>Référence</th>
+                        <th>Produit</th>
+                        <th>Stock BD</th>
+                        <th>Inventaire</th>
+                        <th>Écart</th>
+                        <th>%</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="diff-tbody">
+                </tbody>
+            </table>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-success" onclick="validerInventaire()">
+                ✅ Valider Inventaire
+            </button>
+            <button class="btn btn-secondary" onclick="exporterRapport()">
+                📥 Télécharger Rapport
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let scanned_articles = {};  // {ref: {nom, quantite_physique, quantite_bd, ...}}
+
+// === UPLOAD ZONE ===
+const uploadZone = document.getElementById('upload-zone');
+const fileInput = document.getElementById('file-input');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+
+uploadZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadZone.classList.add('dragover');
+});
+
+uploadZone.addEventListener('dragleave', () => {
+    uploadZone.classList.remove('dragover');
+});
+
+uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadZone.classList.remove('dragover');
+    const files = e.dataTransfer.files;
+    if (files.length) traiterFichier(files[0]);
+});
+
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length) traiterFichier(e.target.files[0]);
+});
+
+function traiterFichier(file) {
+    console.log('Fichier reçu:', file.name);
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+        try {
+            // Lecture simple CSV
+            const texte = e.target.result;
+            const lignes = texte.split('\n');
+            
+            for (let i = 1; i < lignes.length; i++) {  // Skip header
+                const ligne = lignes[i].trim();
+                if (!ligne) continue;
+                
+                const parts = ligne.split(',').map(p => p.trim());
+                if (parts.length >= 3) {
+                    const ref = parts[0];
+                    const nom = parts[1];
+                    const quantite = parseFloat(parts[2]);
+                    
+                    ajouterArticle(ref, nom, quantite);
+                }
+            }
+            
+            afficherAlerte(`✅ ${Object.keys(scanned_articles).length} articles importés`, 'success');
+            afficherScannedArticles();
+        } catch (err) {
+            afficherAlerte(`❌ Erreur lecture fichier: ${err.message}`, 'danger');
+        }
+    };
+    
+    reader.readAsText(file);
+}
+
+// === SCANNER ===
+document.getElementById('scanner-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        const ref = e.target.value.trim();
+        if (ref) {
+            rechercherProduit(ref);
+            e.target.value = '';
+        }
+    }
+});
+
+function rechercherProduit(ref) {
+    console.log('Recherche produit:', ref);
+    
+    fetch(`/gestion-stock/api/produits?search=${encodeURIComponent(ref)}`)
+        .then(r => r.json())
+        .then(data => {
+            const produits = data.produits || [];
+            if (produits.length === 0) {
+                afficherAlerte(`❌ Produit "${ref}" non trouvé`, 'danger');
+                return;
+            }
+            
+            const produit = produits[0];
+            
+            // Demander la quantité physique
+            const quantite = prompt(`Quantité physique de ${produit.nom}:`);
+            if (quantite === null) return;
+            
+            ajouterArticle(produit.reference, produit.nom, parseFloat(quantite));
+            afficherScannedArticles();
+        })
+        .catch(err => {
+            console.error('Erreur:', err);
+            afficherAlerte('❌ Erreur recherche produit', 'danger');
+        });
+}
+
+function ajouterArticle(ref, nom, quantite_physique) {
+    // Déjà une entrée? Ajouter à la quantité
+    if (scanned_articles[ref]) {
+        scanned_articles[ref].quantite_physique += quantite_physique;
+    } else {
+        scanned_articles[ref] = {
+            nom: nom,
+            quantite_physique: quantite_physique,
+            quantite_bd: 0,
+            ecart: 0,
+            statut: '?'
+        };
+    }
+}
+
+function afficherScannedArticles() {
+    const tbody = document.getElementById('scan-tbody');
+    const articles = Object.entries(scanned_articles);
+    
+    if (articles.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="no-data">Aucun article scanné</td></tr>';
+        updateStats();
+        return;
+    }
+    
+    tbody.innerHTML = articles.map(([ref, article]) => `
+        <tr>
+            <td><strong>${ref}</strong></td>
+            <td>${article.nom}</td>
+            <td>${article.quantite_physique}</td>
+            <td>${article.quantite_bd || '?'}</td>
+            <td>${article.ecart || '?'}</td>
+            <td><span class="status-${article.statut === '✅' ? 'ok' : article.statut === '?' ? 'warning' : 'danger'}">
+                ${article.statut}
+            </span></td>
+        </tr>
+    `).join('');
+    
+    updateStats();
+}
+
+function updateStats() {
+    const articles = Object.values(scanned_articles);
+    const ok = articles.filter(a => a.statut === '✅').length;
+    const diff = articles.filter(a => a.statut === '⚠️').length;
+    const missing = articles.filter(a => a.statut === '❌').length;
+    
+    document.getElementById('stat-scanned').textContent = articles.length;
+    document.getElementById('stat-ok').textContent = ok;
+    document.getElementById('stat-diff').textContent = diff;
+    document.getElementById('stat-missing').textContent = missing;
+}
+
+// === COMPARAISON ===
+async function genererComparaison() {
+    if (Object.keys(scanned_articles).length === 0) {
+        afficherAlerte('❌ Aucun article à comparer', 'warning');
+        return;
+    }
+    
+    console.log('Génération comparaison...', scanned_articles);
+    
+    const loading = document.querySelector('.loading-spinner');
+    if (loading) loading.style.display = 'block';
+    
+    try {
+        const response = await fetch('/gestion-stock/api/inventaire/compare', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ articles: scanned_articles })
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const result = await response.json();
+        console.log('Résultat comparaison:', result);
+        
+        // Mettre à jour les articles avec les infos BD
+        if (result.comparaison) {
+            result.comparaison.forEach(comp => {
+                if (scanned_articles[comp.reference]) {
+                    scanned_articles[comp.reference].quantite_bd = comp.quantite_bd;
+                    scanned_articles[comp.reference].ecart = comp.ecart;
+                    scanned_articles[comp.reference].statut = comp.statut;
+                }
+            });
+        }
+        
+        afficherScannedArticles();
+        afficherDifferences(result.comparaison);
+        
+        afficherAlerte(`✅ Comparaison générée: ${result.comparaison.length} articles`, 'success');
+        
+    } catch (err) {
+        console.error('Erreur:', err);
+        afficherAlerte('❌ Erreur comparaison', 'danger');
+    } finally {
+        if (loading) loading.style.display = 'none';
+    }
+}
+
+function afficherDifferences(comparaison) {
+    const rapport = document.getElementById('rapport-section');
+    const tbody = document.getElementById('diff-tbody');
+    
+    if (!comparaison || comparaison.length === 0) {
+        rapport.style.display = 'none';
+        return;
+    }
+    
+    // Filtrer pour afficher seulement les différences
+    const diffs = comparaison.filter(c => c.ecart !== 0);
+    
+    if (diffs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="no-data">✅ Aucune différence! Inventaire en accord.</td></tr>';
+        rapport.style.display = 'block';
+        return;
+    }
+    
+    tbody.innerHTML = diffs.map(comp => {
+        const pct = comp.quantite_bd ? ((Math.abs(comp.ecart) / comp.quantite_bd) * 100).toFixed(1) : '∞';
+        const cssClass = comp.statut === '✅' ? 'diff-row-ok' : comp.statut === '⚠️' ? 'diff-row-warning' : 'diff-row-danger';
+        
+        return `
+            <tr class="${cssClass}">
+                <td><strong>${comp.reference}</strong></td>
+                <td>${comp.nom}</td>
+                <td>${comp.quantite_bd}</td>
+                <td>${comp.quantite_physique}</td>
+                <td>${comp.ecart > 0 ? '+' : ''}${comp.ecart}</td>
+                <td>${pct}%</td>
+                <td>
+                    <button onclick="creerAjustement('${comp.reference}', ${comp.ecart})" 
+                        class="btn btn-sm" style="padding: 0.4rem 0.8rem;">
+                        Ajuster
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+    
+    rapport.style.display = 'block';
+}
+
+function creerAjustement(ref, ecart) {
+    console.log(`Créer ajustement pour ${ref}: ${ecart}`);
+    alert(`À FAIRE: Créer mouvement ajustement de ${ecart} pour ${ref}`);
+}
+
+function validerInventaire() {
+    alert('Inventaire validé!');
+}
+
+function exporterRapport() {
+    alert('Téléchargement rapport en cours...');
+}
+
+function reinitialiser() {
+    scanned_articles = {};
+    document.getElementById('file-input').value = '';
+    document.getElementById('scanner-input').value = '';
+    document.getElementById('rapport-section').style.display = 'none';
+    afficherScannedArticles();
+    afficherAlerte('🔄 Réinitialisé', 'success');
+}
+
+function afficherAlerte(message, type) {
+    const container = document.getElementById('alerts-container');
+    const alerte = document.createElement('div');
+    alerte.className = `alert alert-${type}`;
+    alerte.textContent = message;
+    container.appendChild(alerte);
+    
+    setTimeout(() => alerte.remove(), 5000);
+}
+
+console.log('Script inventaire chargé');
+</script>
+
+{% endblock %}

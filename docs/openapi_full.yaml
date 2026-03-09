@@ -1,0 +1,576 @@
+openapi: 3.0.3
+info:
+  title: SOFATELCOM SOFATELCOM-V2 API (Full Spec)
+  version: '1.0.0'
+  description: |-
+    Full API specification for SOFATELCOM app (web + mobile). Includes endpoints
+    for interventions, dispatching, stock, reservations, RH, tracking, auth
+    and exports. Mobile support includes token-based auth and tracking endpoints
+servers:
+  - url: http://localhost:4300
+    description: Local development server
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: session
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+        error:
+          type: string
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        nom:
+          type: string
+        prenom:
+          type: string
+        role:
+          type: string
+        zone:
+          type: string
+        email:
+          type: string
+    AuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+    DemandeIntervention:
+      type: object
+      properties:
+        id:
+          type: integer
+        nd:
+          type: string
+        nom_client:
+          type: string
+        zone:
+          type: string
+        service:
+          type: string
+        type_techno:
+          type: string
+        priorite_traitement:
+          type: string
+    Intervention:
+      type: object
+      properties:
+        id:
+          type: integer
+        demande_id:
+          type: integer
+        technicien_id:
+          type: integer
+        statut:
+          type: string
+        date_debut:
+          type: string
+          format: date-time
+        date_fin:
+          type: string
+          format: date-time
+        gps_lat:
+          type: string
+        gps_long:
+          type: string
+        photos_list:
+          type: array
+          items:
+            type: string
+        signature_client:
+          type: string
+    InterventionCreate:
+      type: object
+      required: [demande_id, technicien_id]
+      properties:
+        demande_id:
+          type: integer
+        technicien_id:
+          type: integer
+        date_debut:
+          type: string
+          format: date-time
+        gps_lat:
+          type: string
+        gps_long:
+          type: string
+        note:
+          type: string
+    TrackingPoint:
+      type: object
+      properties:
+        technicien_id:
+          type: integer
+        latitude:
+          type: number
+          format: float
+        longitude:
+          type: number
+          format: float
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: string
+    Produit:
+      type: object
+      properties:
+        id:
+          type: integer
+        reference:
+          type: string
+        nom:
+          type: string
+        quantite:
+          type: number
+        emplacement:
+          type: string
+    ReservationPiece:
+      type: object
+      properties:
+        id:
+          type: integer
+        intervention_id:
+          type: integer
+        produit_id:
+          type: integer
+        quantite:
+          type: number
+        statut:
+          type: string
+    LeaveRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        technicien_id:
+          type: integer
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        type:
+          type: string
+        status:
+          type: string
+paths:
+  /api/mobile/login:
+    post:
+      summary: Mobile login (returns JWT)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Authentication tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/mobile/refresh:
+    post:
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: New tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+  /api/mobile/logout:
+    post:
+      summary: Invalidate refresh token (mobile logout)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+  /api/interventions:
+    get:
+      summary: List interventions (filterable)
+      parameters:
+        - name: date_debut
+          in: query
+          schema:
+            type: string
+          required: false
+        - name: date_fin
+          in: query
+          schema:
+            type: string
+        - name: technicien_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: interventions list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Intervention'
+  /api/intervention:
+    post:
+      summary: Create an intervention (mobile / web)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InterventionCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Intervention'
+        '400':
+          $ref: '#/components/schemas/Error'
+  /api/intervention/{intervention_id}:
+    get:
+      summary: Get details for an intervention
+      parameters:
+        - name: intervention_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Intervention'
+    put:
+      summary: Update an intervention
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InterventionCreate'
+      responses:
+        '200':
+          description: Updated
+  /api/intervention/{intervention_id}/photos:
+    post:
+      summary: Upload a photo for an intervention
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: intervention_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Photo uploaded
+  /api/intervention/{intervention_id}/signature:
+    post:
+      summary: Upload a signature (base64 or file) for an intervention
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                signature_base64:
+                  type: string
+      responses:
+        '200':
+          description: Signature stored
+  /api/intervention/{intervention_id}/status:
+    post:
+      summary: Update status (start/finish/validate)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: intervention_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  type: string
+                  enum: [start, finish, validate, reject]
+                commentaire:
+                  type: string
+      responses:
+        '200':
+          description: Status updated
+  /api/tracking:
+    post:
+      summary: Submit a tracking point (mobile)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrackingPoint'
+      responses:
+        '200':
+          description: Stored
+  /api/technicians/locations:
+    get:
+      summary: Get latest locations for technicians (for dashboard)
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: list of locations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    technicien_id:
+                      type: integer
+                    latitude:
+                      type: number
+                    longitude:
+                      type: number
+                    timestamp:
+                      type: string
+  /ws/tracking:
+    summary: Optional WebSocket path for real-time tracking (WSS)
+    description: |-
+      WebSocket endpoint for push tracking (upgrade to wss in production). Not expressed in OpenAPI path methods but documented here.
+  /api/produit/{produit_id}:
+    get:
+      summary: Get product info
+      parameters:
+        - name: produit_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Produit'
+  /api/reservations:
+    post:
+      summary: Create a reservation for a product
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [intervention_id, produit_id, quantite]
+              properties:
+                intervention_id:
+                  type: integer
+                produit_id:
+                  type: integer
+                quantite:
+                  type: number
+                commentaire:
+                  type: string
+      responses:
+        '201':
+          description: Reservation created
+  /api/reservation/{reservation_id}/validate:
+    post:
+      summary: Validate reservation
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: reservation_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Validated
+  /api/reservation/{reservation_id}/use:
+    post:
+      summary: Mark reservation as used (creates stock sortie)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: reservation_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Reservation marked used
+  /api/survey/{intervention_id}:
+    post:
+      summary: Create or update survey / fiche technique for an intervention
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Stored
+  /api/rh/hours:
+    get:
+      summary: Get hours summary per technician (filters)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: technicien_id
+          in: query
+          schema:
+            type: integer
+        - name: start_date
+          in: query
+          schema:
+            type: string
+        - name: end_date
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: hours summary
+  /api/rh/leaves:
+    post:
+      summary: Create a leave request (RH MVP)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [technicien_id, start_date, end_date, type]
+              properties:
+                technicien_id:
+                  type: integer
+                start_date:
+                  type: string
+                end_date:
+                  type: string
+                type:
+                  type: string
+                commentaire:
+                  type: string
+      responses:
+        '201':
+          description: Created
+  /api/export/interventions:
+    get:
+      summary: Export interventions (CSV/Excel)
+      parameters:
+        - name: date_debut
+          in: query
+          schema:
+            type: string
+        - name: date_fin
+          in: query
+          schema:
+            type: string
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [csv, excel]
+      responses:
+        '200':
+          description: file download
+  /api/stats:
+    get:
+      summary: Dashboard stats (as currently implemented)
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Stats object
+  /api/openapi.json:
+    get:
+      summary: Return OpenAPI spec in JSON
+      responses:
+        '200':
+          description: OpenAPI JSON
+security:
+  - cookieAuth: []
+  - bearerAuth: []

@@ -1,0 +1,587 @@
+{% extends "base.html" %}
+
+{% block title %}Approbation des Mouvements - Gestion des Stocks{% endblock %}
+
+{% block content %}
+<style>
+    .page-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem 0;
+        margin-bottom: 2rem;
+        border-radius: 0 0 10px 10px;
+    }
+
+    .page-header h1 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 700;
+    }
+
+    .stat-boxes {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-box {
+        background: white;
+        border-radius: 8px;
+        padding: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        text-align: center;
+    }
+
+    .stat-box h3 {
+        margin: 0;
+        font-size: 0.8rem;
+        color: #666;
+        text-transform: uppercase;
+        font-weight: 500;
+    }
+
+    .stat-box .value {
+        font-size: 2rem;
+        font-weight: 700;
+        margin: 0.5rem 0 0 0;
+        color: #000;
+    }
+
+    .mouvement-card {
+        background: white;
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        border-left: 5px solid #ffc107;
+    }
+
+    .mouvement-card.entree {
+        border-left-color: #28a745;
+    }
+
+    .mouvement-card.sortie {
+        border-left-color: #dc3545;
+    }
+
+    .mouvement-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .mouvement-type {
+        display: inline-block;
+        padding: 0.3rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .mouvement-type.entree {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .mouvement-type.sortie {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .mouvement-date {
+        font-size: 0.85rem;
+        color: #999;
+    }
+
+    .mouvement-details {
+        margin: 1rem 0;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 6px;
+    }
+
+    .detail-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #eee;
+    }
+
+    .detail-row:last-child {
+        border-bottom: none;
+    }
+
+    .detail-label {
+        font-weight: 600;
+        color: #666;
+        flex: 1;
+    }
+
+    .detail-value {
+        text-align: right;
+        color: #000;
+        flex: 1;
+    }
+
+    .motif {
+        background: #e8f4f8;
+        border-left: 3px solid #17a2b8;
+        padding: 0.8rem;
+        margin: 1rem 0;
+        border-radius: 4px;
+        font-size: 0.9rem;
+    }
+
+    .motif strong {
+        color: #0c5460;
+    }
+
+    .actions {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .btn-approve {
+        background: #28a745;
+        color: white;
+        border: none;
+        padding: 0.7rem 1.5rem;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+        flex: 1;
+        min-width: 150px;
+    }
+
+    .btn-approve:hover {
+        background: #218838;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+    }
+
+    .btn-reject {
+        background: #dc3545;
+        color: white;
+        border: none;
+        padding: 0.7rem 1.5rem;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+        flex: 1;
+        min-width: 150px;
+    }
+
+    .btn-reject:hover {
+        background: #c82333;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+    }
+
+    .no-mouvements {
+        background: white;
+        border-radius: 10px;
+        padding: 3rem;
+        text-align: center;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+
+    .no-mouvements h3 {
+        color: #999;
+        margin: 0;
+    }
+
+    .filter-section {
+        background: white;
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+
+    .filter-section label {
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+
+    .filter-section select {
+        width: 100%;
+        padding: 0.5rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 0.95rem;
+    }
+
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal.show {
+        display: flex;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 10px;
+        padding: 2rem;
+        width: 90%;
+        max-width: 500px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+
+    .modal-header {
+        margin-bottom: 1.5rem;
+        border-bottom: 2px solid #eee;
+        padding-bottom: 1rem;
+    }
+
+    .modal-body textarea {
+        width: 100%;
+        padding: 0.8rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 0.95rem;
+        margin-bottom: 1rem;
+        min-height: 100px;
+    }
+
+    .modal-footer {
+        display: flex;
+        gap: 1rem;
+        justify-content: flex-end;
+    }
+
+    .modal-footer button {
+        padding: 0.6rem 1.5rem;
+        border: none;
+        border-radius: 4px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .btn-cancel {
+        background: #eee;
+        color: #666;
+    }
+
+    .btn-confirm {
+        background: #dc3545;
+        color: white;
+    }
+
+    .loading {
+        display: none;
+        text-align: center;
+        padding: 2rem;
+    }
+
+    .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #667eea;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .alert {
+        padding: 1rem;
+        border-radius: 6px;
+        margin-bottom: 1rem;
+    }
+
+    .alert-success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+
+    .alert-danger {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+</style>
+
+<div class="container-fluid" style="padding: 0;">
+    <div class="page-header">
+        <div class="container">
+            <h1>📋 Approbation des Mouvements</h1>
+            <p>Validez les sorties et entrées en attente d'approbation</p>
+        </div>
+    </div>
+
+    <div class="container mt-4">
+        <!-- Statistiques -->
+        <div class="stat-boxes">
+            <div class="stat-box">
+                <h3>📦 En attente</h3>
+                <div class="value" id="count-total">0</div>
+            </div>
+            <div class="stat-box">
+                <h3>📤 Sorties</h3>
+                <div class="value" id="count-sorties">0</div>
+            </div>
+            <div class="stat-box">
+                <h3>📥 Entrées</h3>
+                <div class="value" id="count-entrees">0</div>
+            </div>
+        </div>
+
+        <!-- Filtres -->
+        <div class="filter-section">
+            <label>Filtrer par type:</label>
+            <select id="filter-type" onchange="filtrerMouvements()">
+                <option value="">Tous les mouvements</option>
+                <option value="sortie">Sorties uniquement</option>
+                <option value="entree">Entrées uniquement</option>
+            </select>
+        </div>
+
+        <!-- Messages d'alerte -->
+        <div id="alerts-container"></div>
+
+        <!-- Loading -->
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Chargement des mouvements...</p>
+        </div>
+
+        <!-- Liste des mouvements -->
+        <div id="mouvements-container">
+            <!-- Les mouvements seront chargés ici -->
+        </div>
+    </div>
+</div>
+
+<!-- Modal de rejet -->
+<div class="modal" id="rejet-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Rejeter le mouvement</h3>
+        </div>
+        <div class="modal-body">
+            <label>Motif du rejet:</label>
+            <textarea id="motif-rejet" placeholder="Explique pourquoi tu rejettes ce mouvement..."></textarea>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-cancel" onclick="fermerModal()">Annuler</button>
+            <button class="btn-confirm" onclick="confirmerRejet()">Confirmer rejet</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let mouvement_a_rejeter = null;
+let tous_les_mouvements = [];
+
+function chargerMouvements() {
+    console.log('Chargement des mouvements...');
+    document.getElementById('loading').style.display = 'block';
+
+    fetch('/gestion-stock/api/mouvements/en-attente')
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+        })
+        .then(data => {
+            console.log('Données reçues:', data);
+            tous_les_mouvements = data.mouvements || [];
+            afficherMouvements(tous_les_mouvements);
+            mettreAJourStats();
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            afficherAlerte('Erreur lors du chargement des mouvements', 'danger');
+        })
+        .finally(() => {
+            document.getElementById('loading').style.display = 'none';
+        });
+}
+
+function afficherMouvements(mouvements) {
+    const container = document.getElementById('mouvements-container');
+    
+    if (mouvements.length === 0) {
+        container.innerHTML = '<div class="no-mouvements"><h3>✅ Aucun mouvement en attente!</h3></div>';
+        return;
+    }
+
+    container.innerHTML = mouvements.map(m => `
+        <div class="mouvement-card ${m.type_mouvement}">
+            <div class="mouvement-header">
+                <div>
+                    <span class="mouvement-type ${m.type_mouvement}">
+                        ${m.type_mouvement === 'entree' ? '📥' : '📤'} ${m.type_mouvement.toUpperCase()}
+                    </span>
+                    <div class="mouvement-date">${new Date(m.date_mouvement).toLocaleString('fr-FR')}</div>
+                </div>
+            </div>
+
+            <div class="mouvement-details">
+                <div class="detail-row">
+                    <span class="detail-label">🏷️ Produit:</span>
+                    <span class="detail-value"><strong>${m.produit}</strong></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">📦 Quantité:</span>
+                    <span class="detail-value"><strong>${m.quantite} ${m.unite || 'u'}</strong></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">💰 Montant:</span>
+                    <span class="detail-value"><strong>${(m.montant || 0).toLocaleString('fr-FR', {style:'currency', currency:'XOF'})}</strong></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">👤 Créé par:</span>
+                    <span class="detail-value">${m.cree_par || 'N/A'}</span>
+                </div>
+            </div>
+
+            ${m.motif ? `<div class="motif"><strong>Motif:</strong> ${m.motif}</div>` : ''}
+            ${m.commentaire ? `<div class="motif" style="background: #fff3cd; border-left-color: #ffc107; color: #856404;"><strong>Détails:</strong> ${m.commentaire}</div>` : ''}
+
+            <div class="actions">
+                <button class="btn-approve" onclick="approuverMouvement(${m.id})">
+                    ✅ APPROUVER
+                </button>
+                <button class="btn-reject" onclick="ouvrirModalRejet(${m.id})">
+                    ❌ REJETER
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function mettreAJourStats() {
+    const total = tous_les_mouvements.length;
+    const sorties = tous_les_mouvements.filter(m => m.type_mouvement === 'sortie').length;
+    const entrees = tous_les_mouvements.filter(m => m.type_mouvement === 'entree').length;
+
+    document.getElementById('count-total').textContent = total;
+    document.getElementById('count-sorties').textContent = sorties;
+    document.getElementById('count-entrees').textContent = entrees;
+}
+
+function filtrerMouvements() {
+    const type = document.getElementById('filter-type').value;
+    const filtres = type ? tous_les_mouvements.filter(m => m.type_mouvement === type) : tous_les_mouvements;
+    afficherMouvements(filtres);
+}
+
+function approuverMouvement(mouvement_id) {
+    console.log(`Approbation du mouvement ${mouvement_id}...`);
+    
+    fetch(`/gestion-stock/api/mouvements/approuver/${mouvement_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            afficherAlerte(`✅ Mouvement #${mouvement_id} approuvé!`, 'success');
+            setTimeout(() => chargerMouvements(), 1000);
+        } else {
+            afficherAlerte(`❌ Erreur: ${data.error}`, 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        afficherAlerte(`Erreur lors de l'approbation`, 'danger');
+    });
+}
+
+function ouvrirModalRejet(mouvement_id) {
+    mouvement_a_rejeter = mouvement_id;
+    document.getElementById('rejet-modal').classList.add('show');
+    document.getElementById('motif-rejet').value = '';
+}
+
+function fermerModal() {
+    document.getElementById('rejet-modal').classList.remove('show');
+    mouvement_a_rejeter = null;
+}
+
+function confirmerRejet() {
+    if (!mouvement_a_rejeter) return;
+    
+    const motif = document.getElementById('motif-rejet').value.trim();
+    if (!motif) {
+        alert('Motif du rejet obligatoire');
+        return;
+    }
+
+    console.log(`Rejet du mouvement ${mouvement_a_rejeter}...`);
+
+    fetch(`/gestion-stock/api/mouvements/rejeter/${mouvement_a_rejeter}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motif_rejet: motif })
+    })
+    .then(response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            afficherAlerte(`✅ Mouvement #${mouvement_a_rejeter} rejeté`, 'success');
+            fermerModal();
+            setTimeout(() => chargerMouvements(), 1000);
+        } else {
+            afficherAlerte(`❌ Erreur: ${data.error}`, 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        afficherAlerte('Erreur lors du rejet', 'danger');
+    })
+    .finally(() => {
+        fermerModal();
+    });
+}
+
+function afficherAlerte(message, type) {
+    const container = document.getElementById('alerts-container');
+    const alerte = document.createElement('div');
+    alerte.className = `alert alert-${type}`;
+    alerte.textContent = message;
+    container.appendChild(alerte);
+    
+    setTimeout(() => alerte.remove(), 5000);
+}
+
+// Charger les mouvements au démarrage
+document.addEventListener('DOMContentLoaded', () => {
+    chargerMouvements();
+    // Rafraîchir tous les 30 secondes
+    setInterval(chargerMouvements, 30000);
+});
+</script>
+
+{% endblock %}

@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+
+{% block title %}Réservation de pièces - {{ intervention.demande.nom_client }} {{ intervention.demande.prenom_client
+}}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0">
+            <i data-feather="shopping-cart" class="me-2"></i>
+            Réservation de pièces
+        </h1>
+        <a href="{{ url_for('legacy.intervention_form', demande_id=intervention.demande_id) }}"
+            class="btn btn-outline-secondary">
+            <i data-feather="arrow-left" class="me-2"></i>
+            Retour à l'intervention
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i data-feather="package" class="me-2"></i>
+                        Pièces disponibles en stock
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if pieces %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Référence</th>
+                                    <th>Désignation</th>
+                                    <th>Quantité disponible</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for piece in pieces %}
+                                <tr>
+                                    <td>{{ piece.reference }}</td>
+                                    <td>{{ piece.nom }}</td>
+                                    <td>{{ piece.quantite }} {{ piece.unite_mesure or 'unité(s)' }}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary reserve-piece"
+                                            data-piece-id="{{ piece.id }}" data-piece-name="{{ piece.nom }}"
+                                            data-piece-quantity="{{ piece.quantite }}"
+                                            data-piece-unit="{{ piece.unite_mesure or 'unité' }}">
+                                            <i data-feather="plus" class="me-1"></i> Réserver
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info mb-0">
+                        <i data-feather="info" class="me-2"></i>
+                        Aucune pièce disponible en stock pour le moment.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i data-feather="shopping-bag" class="me-2"></i>
+                        Panier de réservation
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div id="reservation-summary">
+                        <p class="text-muted mb-3">Sélectionnez des pièces à réserver dans la liste de gauche.</p>
+                    </div>
+                    <div id="reservation-form" style="display: none;">
+                        <form id="reservationForm" method="POST"
+                            action="{{ url_for('legacy.save_reservation', intervention_id=intervention.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div id="reservation-items">
+                                <!-- Les éléments de réservation seront ajoutés ici dynamiquement -->
+                            </div>
+                            <div class="form-group mb-3">
+                                <label for="commentaire" class="form-label">Commentaire (optionnel)</label>
+                                <textarea class="form-control" id="commentaire" name="commentaire" rows="3"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i data-feather="save" class="me-2"></i>
+                                Enregistrer la réservation
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">
+                        <i data-feather="list" class="me-2"></i>
+                        Réservations existantes
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if reservations %}
+                    <div class="list-group">
+                        {% for reservation in reservations %}
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">{{ reservation.produit.nom }}</h6>
+                                <span class="badge {% if reservation.statut == 'en_attente' %}bg-warning text-dark
+                                                         {% elif reservation.statut == 'validee' %}bg-success text-white
+                                                         {% elif reservation.statut == 'annulee' %}bg-danger text-white
+                                                         {% elif reservation.statut == 'utilisee' %}bg-info text-white
+                                                         {% endif %}">
+                                    {{ reservation.statut_libelle }}
+                                </span>
+                            </div>
+                            <p class="mb-1">
+                                Quantité: {{ reservation.quantite }} {{ reservation.produit.unite_mesure or 'unité(s)'
+                                }}
+                            </p>
+                            {% if reservation.commentaire %}
+                            <small class="text-muted">{{ reservation.commentaire }}</small>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">Aucune réservation enregistrée pour cette intervention.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de confirmation de réservation -->
+<div class="modal fade" id="reservationModal" tabindex="-1" aria-labelledby="reservationModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="reservationModalLabel">Confirmer la réservation</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <p>Voulez-vous vraiment réserver <span id="piece-quantity">0</span> <span id="piece-unit">unités</span>
+                    de <strong id="piece-name"></strong> ?</p>
+                <div class="mb-3">
+                    <label for="reservation-quantity" class="form-label">Quantité à réserver</label>
+                    <input type="number" class="form-control" id="reservation-quantity" min="1" value="1">
+                    <div class="form-text">Quantité disponible: <span id="max-quantity">0</span> <span
+                            id="unit-display">unités</span></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" id="confirm-reservation">Confirmer</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Initialiser les tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+
+        // Variables pour la gestion de la réservation
+        let currentPiece = null;
+        const reservationItems = [];
+
+        // Gestion du clic sur le bouton "Réserver"
+        document.querySelectorAll('.reserve-piece').forEach(button => {
+            button.addEventListener('click', function () {
+                const pieceId = this.dataset.pieceId;
+                const pieceName = this.dataset.pieceName;
+                const maxQuantity = parseInt(this.dataset.pieceQuantity);
+                const unit = this.dataset.pieceUnit;
+
+                // Stocker les informations de la pièce sélectionnée
+                currentPiece = {
+                    id: pieceId,
+                    name: pieceName,
+                    maxQuantity: maxQuantity,
+                    unit: unit
+                };
+
+                // Mettre à jour le modal avec les informations de la pièce
+                document.getElementById('piece-name').textContent = pieceName;
+                document.getElementById('piece-quantity').textContent = '1';
+                document.getElementById('piece-unit').textContent = unit + (parseInt(1) > 1 ? 's' : '');
+                document.getElementById('reservation-quantity').value = '1';
+                document.getElementById('reservation-quantity').max = maxQuantity;
+                document.getElementById('max-quantity').textContent = maxQuantity;
+                document.getElementById('unit-display').textContent = unit + (maxQuantity > 1 ? 's' : '');
+
+                // Afficher le modal
+                const modal = new bootstrap.Modal(document.getElementById('reservationModal'));
+                modal.show();
+            });
+        });
+
+        // Mise à jour dynamique de la quantité dans le modal
+        document.getElementById('reservation-quantity').addEventListener('input', function () {
+            const quantity = parseInt(this.value) || 0;
+            const maxQuantity = currentPiece ? currentPiece.maxQuantity : 0;
+
+            // S'assurer que la quantité ne dépasse pas le maximum disponible
+            if (quantity > maxQuantity) {
+                this.value = maxQuantity;
+            }
+
+            document.getElementById('piece-quantity').textContent = this.value || '0';
+            document.getElementById('piece-unit').textContent = currentPiece.unit + (parseInt(this.value || 0) > 1 ? 's' : '');
+        });
+
+        // Gestion de la confirmation de réservation
+        document.getElementById('confirm-reservation').addEventListener('click', function () {
+            if (!currentPiece) return;
+
+            const quantity = parseInt(document.getElementById('reservation-quantity').value) || 0;
+
+            if (quantity <= 0) {
+                alert('Veuillez saisir une quantité valide.');
+                return;
+            }
+
+            // Ajouter l'article au panier
+            addToReservation({
+                id: currentPiece.id,
+                name: currentPiece.name,
+                quantity: quantity,
+                unit: currentPiece.unit
+            });
+
+            // Fermer le modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
+            modal.hide();
+        });
+
+        // Fonction pour ajouter un article au panier
+        function addToReservation(item) {
+            // Vérifier si l'article est déjà dans le panier
+            const existingItemIndex = reservationItems.findIndex(i => i.id === item.id);
+
+            if (existingItemIndex >= 0) {
+                // Mettre à jour la quantité si l'article existe déjà
+                reservationItems[existingItemIndex].quantity += item.quantity;
+            } else {
+                // Ajouter un nouvel article
+                reservationItems.push({
+                    id: item.id,
+                    name: item.name,
+                    quantity: item.quantity,
+                    unit: item.unit
+                });
+            }
+
+            updateReservationSummary();
+        }
+
+        // Fonction pour mettre à jour le récapitulatif de la réservation
+        function updateReservationSummary() {
+            const summaryContainer = document.getElementById('reservation-summary');
+            const itemsContainer = document.getElementById('reservation-items');
+            const reservationForm = document.getElementById('reservation-form');
+
+            if (reservationItems.length === 0) {
+                summaryContainer.innerHTML = '<p class="text-muted mb-3">Sélectionnez des pièces à réserver dans la liste de gauche.</p>';
+                reservationForm.style.display = 'none';
+                return;
+            }
+
+            // Mettre à jour le récapitulatif
+            let summaryHtml = '<h6 class="mb-3">Récapitulatif de la réservation</h6>';
+            let itemsHtml = '';
+
+            reservationItems.forEach((item, index) => {
+                summaryHtml += `
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span>${item.name}</span>
+                    <div>
+                        <span class="badge bg-primary">${item.quantity} ${item.unit}${item.quantity > 1 ? 's' : ''}</span>
+                        <button type="button" class="btn btn-sm btn-outline-danger ms-2 remove-item" data-index="${index}">
+                            <i data-feather="x" width="14" height="14"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+
+                itemsHtml += `
+                <input type="hidden" name="piece_${item.id}" value="${item.quantity}">
+            `;
+            });
+
+            summaryContainer.innerHTML = summaryHtml;
+            itemsContainer.innerHTML = itemsHtml;
+            reservationForm.style.display = 'block';
+
+            // Ajouter les gestionnaires d'événements pour les boutons de suppression
+            document.querySelectorAll('.remove-item').forEach(button => {
+                button.addEventListener('click', function () {
+                    const index = parseInt(this.dataset.index);
+                    reservationItems.splice(index, 1);
+                    updateReservationSummary();
+                });
+            });
+
+            // Réinitialiser les icônes Feather
+            if (window.feather) {
+                window.feather.replace();
+            }
+        }
+
+        // Gestion de la soumission du formulaire
+        document.getElementById('reservationForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            // Désactiver le bouton de soumission
+            const submitButton = this.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Enregistrement...';
+
+            // Envoyer le formulaire
+            this.submit();
+        });
+
+        // Réinitialiser les icônes Feather après le chargement du DOM
+        if (window.feather) {
+            window.feather.replace();
+        }
+    });
+</script>
+{% endblock %}

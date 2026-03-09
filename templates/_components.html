@@ -1,0 +1,451 @@
+{# Macro pour carte de statistiques avec variantes de couleur #}
+{% macro stat_card(title, value, icon='info', color='primary', trend=None, trend_value=None) %}
+<div class="card stat-card stat-card-{{ color }}" title="{{ title }}">
+    <div class="row g-0 align-items-center">
+        <div class="col-auto">
+            <div class="stat-icon text-{{ color }}">
+                <i data-feather="{{ icon }}" class="text-{{ color }}"></i>
+            </div>
+        </div>
+        <div class="col">
+            <div class="ps-3">
+                <div class="text-muted small fw-medium">{{ title }}</div>
+                <h4 class="mb-0 fw-bold">{{ value }}</h4>
+                {% if trend and trend_value %}
+                <small class="text-{{ 'success' if trend == 'up' else 'danger' }}">
+                    <i data-feather="{{ 'trending-up' if trend == 'up' else 'trending-down' }}" class="me-1" style="width: 14px; height: 14px;"></i>
+                    {{ trend_value }}
+                </small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+{# Macro pour champ de formulaire avec validation #}
+{% macro form_field(name, label, type='text', placeholder='', required=False, error=None, help_text=None, value=None, **kwargs) %}
+{#
+  Enhanced form_field macro:
+  - Adds ARIA attributes for accessibility
+  - Emits deterministic ids for help/error elements
+  - Keeps server-side validation primary; client-side attributes optional
+  - Non-destructive: classes compatible with existing CSS
+  #}
+{% set help_id = name ~ '_help' %}
+{% set error_id = name ~ '_error' %}
+<div class="form-group mb-3">
+    <label for="{{ name }}" class="form-label{% if required %} required{% endif %}">{{ label }}{% if required %} <span class="text-danger">*</span>{% endif %}</label>
+
+    {% if type == 'textarea' %}
+        <textarea 
+            id="{{ name }}" 
+            name="{{ name }}" 
+            class="form-control {% if error %}is-invalid{% endif %}"
+            placeholder="{{ placeholder }}"
+            aria-describedby="{{ help_id }} {% if error %}{{ error_id }}{% endif %}"
+            aria-invalid="{{ 'true' if error else 'false' }}"
+            {% if required %}required{% endif %}
+            {% for key, val in kwargs.items() %}{{ key }}="{{ val }}" {% endfor %}>{{ value or '' }}</textarea>
+    {% elif type == 'select' %}
+        <select 
+            id="{{ name }}" 
+            name="{{ name }}" 
+            class="form-select {% if error %}is-invalid{% endif %}"
+            aria-describedby="{{ help_id }} {% if error %}{{ error_id }}{% endif %}"
+            aria-invalid="{{ 'true' if error else 'false' }}"
+            {% if required %}required{% endif %}
+            {% for key, val in kwargs.items() %}{{ key }}="{{ val }}" {% endfor %}>
+            <option value="">-- Sélectionner --</option>
+            {% if 'options' in kwargs %}
+                {% for opt_val, opt_label in kwargs['options'] %}
+                    <option value="{{ opt_val }}"{% if opt_val == value %} selected{% endif %}>{{ opt_label }}</option>
+                {% endfor %}
+            {% endif %}
+        </select>
+    {% else %}
+        <input 
+            type="{{ type }}" 
+            id="{{ name }}" 
+            name="{{ name }}" 
+            class="form-control {% if error %}is-invalid{% endif %}"
+            placeholder="{{ placeholder }}"
+            value="{{ value or '' }}"
+            aria-describedby="{{ help_id }} {% if error %}{{ error_id }}{% endif %}"
+            aria-invalid="{{ 'true' if error else 'false' }}"
+            {% if required %}required{% endif %}
+            {% for key, val in kwargs.items() %}{{ key }}="{{ val }}" {% endfor %}>
+    {% endif %}
+
+    {% if error %}
+        <div id="{{ error_id }}" class="invalid-feedback d-block">{{ error }}</div>
+    {% endif %}
+
+    {% if help_text %}
+        <small id="{{ help_id }}" class="form-text text-muted">{{ help_text }}</small>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{# Macro pour bouton avec état de chargement #}
+{% macro button(text, type='button', variant='primary', icon=None, onclick=None, disabled=False, loading=False, **kwargs) %}
+{# Standardized button macro using brand tokens. Variants: primary, secondary, ghost, danger, link #}
+{% set classes = [] %}
+{% if variant == 'primary' %}
+    {% set _ = classes.append('btn-sofatelcom-primary') %}
+{% elif variant == 'secondary' %}
+    {% set _ = classes.append('btn btn-outline-secondary') %}
+{% elif variant == 'ghost' %}
+    {% set _ = classes.append('btn btn-light') %}
+{% elif variant == 'danger' %}
+    {% set _ = classes.append('btn btn-danger') %}
+{% else %}
+    {% set _ = classes.append('btn btn-secondary') %}
+{% endif %}
+
+<button 
+    type="{{ type }}"
+    class="{{ classes|join(' ') }}"
+    {% if onclick %}onclick="{{ onclick }}"{% endif %}
+    {% if disabled %}disabled{% endif %}
+    {% if loading %}data-loading="true" aria-busy="true"{% endif %}
+    {% for key, val in kwargs.items() %}{{ key }}="{{ val }}" {% endfor %}>
+    {% if loading %}
+        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+    {% elif icon %}
+        <i data-feather="{{ icon }}" class="me-2"></i>
+    {% endif %}
+    <span>{{ text }}</span>
+</button>
+{% endmacro %}
+
+{# Macro pour wrapper de modal avec en-tête #}
+{% macro modal(modal_id, title, size='lg') %}
+<div class="modal fade" id="{{ modal_id }}" tabindex="-1" aria-labelledby="{{ modal_id }}Label" aria-hidden="true">
+    <div class="modal-dialog modal-{{ size }}">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="{{ modal_id }}Label">{{ title }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                {{ caller() }}
+            </div>
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+{# Macro pour badge de statut #}
+{% macro status_badge(status, text=None) %}
+{% set status_map = {
+    'valide': {'bg': 'success', 'icon': 'check-circle'},
+    'en_attente': {'bg': 'warning', 'icon': 'clock'},
+    'rejet': {'bg': 'danger', 'icon': 'x-circle'},
+    'en_cours': {'bg': 'info', 'icon': 'activity'},
+    'actif': {'bg': 'success', 'icon': 'check-circle'},
+    'inactif': {'bg': 'secondary', 'icon': 'slash'}
+} %}
+{% set config = status_map.get(status, {'bg': 'secondary', 'icon': 'help-circle'}) %}
+<span class="badge bg-{{ config.bg }} d-inline-flex align-items-center gap-2">
+    <i data-feather="{{ config.icon }}" style="width: 14px; height: 14px;"></i>
+    {{ text or status|title }}
+</span>
+{% endmacro %}
+
+{# Macro pour pagination #}
+{% macro pagination(page, total_pages, endpoint, **kwargs) %}
+{% if total_pages > 1 %}
+<nav aria-label="pagination" class="d-flex justify-content-center my-4">
+    <ul class="pagination">
+        {% if page > 1 %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for(endpoint, page=1, **kwargs) }}" aria-label="First">
+                    <i data-feather="chevrons-left"></i>
+                </a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for(endpoint, page=page-1, **kwargs) }}" aria-label="Previous">
+                    <i data-feather="chevron-left"></i>
+                </a>
+            </li>
+        {% endif %}
+        
+        {% for p in range(max(1, page-2), min(total_pages+1, page+3)) %}
+            <li class="page-item {% if p == page %}active{% endif %}">
+                <a class="page-link" href="{{ url_for(endpoint, page=p, **kwargs) }}">{{ p }}</a>
+            </li>
+        {% endfor %}
+        
+        {% if page < total_pages %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for(endpoint, page=page+1, **kwargs) }}" aria-label="Next">
+                    <i data-feather="chevron-right"></i>
+                </a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for(endpoint, page=total_pages, **kwargs) }}" aria-label="Last">
+                    <i data-feather="chevrons-right"></i>
+                </a>
+            </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endmacro %}
+
+{# Macro pour en-tête de page avec titre et actions #}
+{% macro page_header(title, subtitle=None, actions=None) %}
+<div class="page-header mb-4">
+    <div class="row align-items-center">
+        <div class="col">
+            <h1 class="mb-2">{{ title }}</h1>
+            {% if subtitle %}<p class="text-muted mb-0">{{ subtitle }}</p>{% endif %}
+        </div>
+        {% if actions %}
+        <div class="col-auto">
+            <div class="btn-group" role="group">
+                {{ actions }}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endmacro %}
+
+{# Macro pour table responsive interactive avec tri, filtrage, recherche et actions en masse #}
+{% macro responsive_table(table_id, headers, rows, actions=None, filterable_columns=None, searchable=True, sortable_columns=None, bulkable=False) %}
+<div class="responsive-table-container">
+    <!-- Barre de contrôle: recherche et filtres -->
+    <div class="table-controls mb-3">
+        <div class="row g-2">
+            {% if searchable %}
+            <div class="col-md-6">
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i data-feather="search" style="width: 16px; height: 16px;"></i>
+                    </span>
+                    <input 
+                        type="text" 
+                        class="form-control" 
+                        placeholder="Rechercher..." 
+                        data-search-for="{{ table_id }}">
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if filterable_columns %}
+            {% for col_name, col_label in filterable_columns %}
+            <div class="col-md-3">
+                <select class="form-select form-select-sm" data-filter-column="{{ col_name }}" data-filter-for="{{ table_id }}">
+                    <option value="">Tous - {{ col_label }}</option>
+                </select>
+            </div>
+            {% endfor %}
+            {% endif %}
+            
+            {% if searchable or filterable_columns %}
+            <div class="col-md-auto">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-reset-for="{{ table_id }}">
+                    <i data-feather="x" style="width: 14px; height: 14px;" class="me-1"></i>Réinitialiser
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Actions en masse -->
+    {% if bulkable %}
+    <div class="bulk-actions-bar mb-3 d-none" data-bulk-actions-for="{{ table_id }}">
+        <div class="alert alert-info mb-0 d-flex align-items-center justify-content-between">
+            <span>
+                <strong><span data-count>0</span> ligne(s)</strong> sélectionnée(s)
+            </span>
+            <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-danger" data-bulk-action="delete">
+                    <i data-feather="trash-2" style="width: 14px; height: 14px;" class="me-1"></i>Supprimer
+                </button>
+                <button type="button" class="btn btn-outline-secondary" data-bulk-action="export-csv">
+                    <i data-feather="download" style="width: 14px; height: 14px;" class="me-1"></i>CSV
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Table interactive -->
+    <div class="table-responsive">
+        <table class="table table-hover table-interactive" id="{{ table_id }}" data-sortable="true">
+            <thead>
+                <tr>
+                    {% if bulkable %}
+                    <th scope="col" style="width: 40px;">
+                        <div class="form-check">
+                            <input class="form-check-input select-all" type="checkbox" id="select-all-{{ table_id }}">
+                            <label class="form-check-label" for="select-all-{{ table_id }}"></label>
+                        </div>
+                    </th>
+                    {% endif %}
+                    
+                    {% for header in headers %}
+                    <th scope="col" {% if sortable_columns and header in sortable_columns %}data-column="{{ loop.index0 }}" class="sortable"{% endif %}>
+                        {{ header }}
+                        {% if sortable_columns and header in sortable_columns %}
+                        <i data-feather="arrow-up-down" style="width: 14px; height: 14px; margin-left: 4px; opacity: 0.5;" class="sort-indicator"></i>
+                        {% endif %}
+                    </th>
+                    {% endfor %}
+                    
+                    {% if actions %}<th scope="col" style="width: 120px;">Actions</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr {% if bulkable %}data-row-id="{{ loop.index0 }}"{% endif %}>
+                    {% if bulkable %}
+                    <td>
+                        <div class="form-check">
+                            <input class="form-check-input row-checkbox" type="checkbox" name="row-select" value="{{ loop.index0 }}">
+                            <label class="form-check-label"></label>
+                        </div>
+                    </td>
+                    {% endif %}
+                    
+                    {% for cell in row %}
+                    <td>{{ cell }}</td>
+                    {% endfor %}
+                    
+                    {% if actions %}
+                    <td>
+                        <div class="btn-group btn-group-sm" role="group">
+                            {{ actions(loop.index0) }}
+                        </div>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- État vide -->
+    {% if not rows %}
+    <div class="alert alert-info text-center py-4">
+        <i data-feather="inbox" style="width: 24px; height: 24px;" class="text-muted mb-2"></i>
+        <p class="text-muted mb-0">Aucune donnée à afficher</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Initialisation du TableManager -->
+<script>
+(function() {
+    if (typeof TableManager !== 'undefined') {
+        const table = new TableManager('{{ table_id }}', {
+            sortable: {{ 'true' if sortable_columns else 'false' }},
+            searchable: {{ 'true' if searchable else 'false' }},
+            bulkable: {{ 'true' if bulkable else 'false' }}
+        });
+        
+        // Expose instance au contexte global pour accès en JavaScript
+        window.tableManager_{{ table_id }} = table;
+    }
+})();
+</script>
+{% endmacro %}
+
+{# Macro pour carte vide avec message #}
+{% macro empty_state(icon='inbox', title='Aucun résultat', message='Il n\'y a rien à afficher pour le moment') %}
+<div class="card text-center py-5">
+    <div class="text-muted mb-3">
+        <i data-feather="{{ icon }}" style="width: 3rem; height: 3rem;"></i>
+    </div>
+    <h5>{{ title }}</h5>
+    <p class="text-muted">{{ message }}</p>
+</div>
+{% endmacro %}
+
+{# Macro pour skeleton loader (placeholder) #}
+{% macro skeleton_loader(type='card', count=3) %}
+{% if type == 'card' %}
+    {% for i in range(count) %}
+    <div class="card mb-3 skeleton-card">
+        <div class="card-body">
+            <div class="skeleton-line mb-3" style="width: 60%;"></div>
+            <div class="skeleton-line mb-2" style="width: 80%;"></div>
+            <div class="skeleton-line" style="width: 40%;"></div>
+        </div>
+    </div>
+    {% endfor %}
+{% elif type == 'table' %}
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <td colspan="5">
+                        {% for i in range(3) %}
+                            <div class="skeleton-line mb-2"></div>
+                        {% endfor %}
+                    </td>
+                </tr>
+            </thead>
+        </table>
+    </div>
+{% endif %}
+<style>
+    .skeleton-card {
+        border: none;
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: loading 1.5s infinite;
+    }
+    
+    .skeleton-line {
+        height: 12px;
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: loading 1.5s infinite;
+        border-radius: 4px;
+    }
+    
+    @keyframes loading {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
+</style>
+{% endmacro %}
+
+{# Macro pour alert réactive #}
+{% macro alert(type='info', icon=None, dismissible=True) %}
+<div class="alert alert-{{ type }} {% if dismissible %}alert-dismissible fade show{% endif %}" role="alert">
+    {% if icon %}
+        <i data-feather="{{ icon }}" class="me-2"></i>
+    {% endif %}
+    {{ caller() }}
+    {% if dismissible %}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{# Collapsible panel macro using Alpine.js attributes if available; degrades gracefully #}
+{% macro collapsible_panel(panel_id, title='', open=False) %}
+<div class="collapsible-panel mb-3" data-alpine="1">
+    <div x-data="{ open: {{ 'true' if open else 'false' }} }" class="card metric-card">
+        <div class="card-header d-flex align-items-center justify-content-between" @click="open = !open" style="cursor:pointer;">
+            <div>
+                <strong>{{ title }}</strong>
+            </div>
+            <div>
+                <i x-show="!open" data-feather="chevron-down" class="icon-hover"></i>
+                <i x-show="open" data-feather="chevron-up" class="icon-hover"></i>
+            </div>
+        </div>
+        <div class="collapsible-body" x-ref="body" x-bind:style="open ? 'max-height: 1000px; opacity:1' : 'max-height:0; opacity:0'">
+            <div class="card-body">
+                {{ caller() }}
+            </div>
+        </div>
+    </div>
+</div>
+{% endmacro %}

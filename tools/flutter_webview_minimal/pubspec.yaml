@@ -1,0 +1,37 @@
+name: sofatelcom_webview
+description: Minimal Flutter WebView wrapper for Sofatelcom site
+publish_to: 'none'
+version: 0.0.1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  webview_flutter: ^4.13.1
+  webview_flutter_android: ^4.10.11
+  
+  # 📍 Geolocation & GPS
+  geolocator: ^14.0.2
+  permission_handler: ^12.0.1
+  
+  # 🌐 Networking
+  http: ^1.1.0
+  
+  # 🔒 Secure Storage
+  flutter_secure_storage: ^9.0.0
+  
+  # 📊 State Management
+  shared_preferences: ^2.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+
+build:
+  enable_native_assets: false

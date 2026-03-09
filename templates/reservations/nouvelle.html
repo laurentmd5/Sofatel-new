@@ -1,0 +1,127 @@
+{% extends "reservations/base.html" %}
+
+{% block reservation_content %}
+<div class="card shadow mb-4">
+    <div class="card-header py-3">
+        <h6 class="m-0 font-weight-bold text-primary">Nouvelle réservation</h6>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('reservations.nouvelle_reservation', intervention_id=intervention.id) }}" id="reservationForm">
+            {{ form.hidden_tag() }}
+            
+            <div class="form-group">
+                {{ form.produit_id.label(class="form-control-label") }}
+                {{ form.produit_id(class="form-control" + (" is-invalid" if form.produit_id.errors else "")) }}
+                {% if form.produit_id.errors %}
+                    <div class="invalid-feedback">
+                        {% for error in form.produit_id.errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                <small class="form-text text-muted">Sélectionnez un produit dans la liste</small>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group col-md-6">
+                    {{ form.quantite.label(class="form-control-label") }}
+                    <div class="input-group">
+                        {{ form.quantite(class="form-control" + (" is-invalid" if form.quantite.errors else ""), 
+                                      step="0.01", min="0.01") }}
+                        <div class="input-group-append">
+                            <span class="input-group-text" id="uniteMesure">unité</span>
+                        </div>
+                        {% if form.quantite.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.quantite.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    <small class="form-text text-muted" id="stockDisponible"></small>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                {{ form.commentaire.label(class="form-control-label") }}
+                {{ form.commentaire(class="form-control" + (" is-invalid" if form.commentaire.errors else ""), 
+                                  rows="3") }}
+                {% if form.commentaire.errors %}
+                    <div class="invalid-feedback">
+                        {% for error in form.commentaire.errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                <small class="form-text text-muted">Facultatif - Ajoutez un commentaire si nécessaire</small>
+            </div>
+            
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Enregistrer la réservation
+                </button>
+                <a href="{{ url_for('reservations.liste_reservations', intervention_id=intervention.id) }}" 
+                   class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Annuler
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+$(document).ready(function() {
+    // Mettre à jour l'unité de mesure et le stock disponible lors de la sélection d'un produit
+    $('#produit_id').on('change', function() {
+        var produitId = $(this).val();
+        if (produitId) {
+            // Récupérer les informations du produit via AJAX
+            $.getJSON(`/api/produit/${produitId}`, function(data) {
+                // Mettre à jour l'unité de mesure
+                $('#uniteMesure').text(data.unite_mesure || 'unité');
+                
+                // Mettre à jour le message de stock disponible
+                $('#stockDisponible').text(`Stock disponible: ${data.quantite_disponible} ${data.unite_mesure || 'unité'}`);
+                
+                // Mettre à jour la quantité maximale autorisée
+                $('input[name="quantite"]').attr('max', data.quantite_disponible);
+            }).fail(function() {
+                console.error('Erreur lors de la récupération des informations du produit');
+            });
+        } else {
+            $('#uniteMesure').text('unité');
+            $('#stockDisponible').text('');
+        }
+    });
+    
+    // Valider la quantité avant soumission du formulaire
+    $('#reservationForm').on('submit', function(e) {
+        var quantite = parseFloat($('input[name="quantite"]').val());
+        var quantiteMax = parseFloat($('input[name="quantite"]').attr('max'));
+        
+        if (quantite <= 0) {
+            alert('La quantité doit être supérieure à zéro');
+            e.preventDefault();
+            return false;
+        }
+        
+        if (quantite > quantiteMax) {
+            alert(`La quantité demandée (${quantite}) dépasse le stock disponible (${quantiteMax})`);
+            e.preventDefault();
+            return false;
+        }
+        
+        return true;
+    });
+    
+    // Déclencher l'événement change au chargement de la page si un produit est déjà sélectionné
+    if ($('#produit_id').val()) {
+        $('#produit_id').trigger('change');
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="fr-SN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{% block title %}Sofatelcom PUR{% endblock %}</title>
+    <link rel="icon" href="data:,">
+    <!-- Pour la géolocalisation -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Feather Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/feather-icons@4.29.0/dist/feather.min.css">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Flatpickr Date Picker (avec support français) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    
+    <!-- Design System (Consolidated) - VAGUE 1 & 2 -->
+    <link rel="preload" as="style" href="{{ url_for('static', filename='css/design-system.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-system.css') }}">
+    
+    <!-- Chart Modal Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chart-modal.css') }}">
+    
+    <!-- Navbar Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/navbar.css') }}">
+    
+    <!-- Form Steps Styles (VAGUE 2 - Multi-step forms) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/form-steps.css') }}">
+    
+    <!-- Magasinier Branding & Styling -->
+    <!-- <link rel="stylesheet" href="{{ url_for('static', filename='css/magasinier/magasinier-brand.css') }}"> -->
+
+    <style>
+        body {
+            padding-top: 70px;
+        }
+        
+        /* Ensure proper navbar z-index for drawer */
+        .navbar {
+            z-index: 1000;
+        }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+
+<body class="{% if current_user.is_authenticated %}logged-in{% endif %}">
+    <a class="skip-link visually-hidden-focusable" href="#main-content">Aller au contenu</a>
+    <!-- Navigation -->
+    {% if current_user.is_authenticated %}
+    <nav class="navbar navbar-expand-lg navbar-dark bg-sofatelcom-primary fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold" href="{{ url_for('dashboard') }}">
+                <i data-feather="wifi" class="me-2"></i>
+                Sofatelcom PUR
+            </a>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    {% if current_user.role == 'gestionnaire_stock' %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('stock.gestion_stock') }}#dashboard">
+                            <i data-feather="home" class="me-1"></i>
+                            Tableau de Bord
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('stock.gestion_stock') }}#produits">
+                            <i data-feather="package" class="me-1"></i>
+                            Gestion des Produits
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('stock.gestion_stock') }}#mouvements">
+                            <i data-feather="activity" class="me-1"></i>
+                            Journal des Mouvements
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('stock.gestion_stock') }}#categories">
+                            <i data-feather="tag" class="me-1"></i>
+                            Catégories
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('stock.liste_fournisseurs') }}">
+                            <i data-feather="truck" class="me-1"></i>
+                            Fournisseurs
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('dashboard') }}">
+                            <i data-feather="home" class="me-1"></i>
+                            Tableau de bord
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% if current_user.role in ['chef_pur', 'chef_pilote'] and current_user.role != 'gestionnaire_stock'
+                    %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('import_demandes') }}">
+                            <i data-feather="upload" class="me-1"></i>
+                            Import demandes
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('dispatching') }}">
+                            <i data-feather="send" class="me-1"></i>
+                            Dispatching
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% if current_user.role in ['chef_pur', 'chef_zone', 'admin'] %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button"
+                            data-bs-toggle="dropdown" aria-expanded="false" data-mobile-dropdown>
+                            <i data-feather="settings" class="me-1"></i>
+                            Administration
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="adminDropdown">
+                            <li><a class="dropdown-item" href="{{ url_for('create_user') }}">
+                                    <i data-feather="user-plus" class="me-1"></i>
+                                    Créer utilisateur
+                                </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('manage_users') }}">
+                                    <i data-feather="users" class="me-1"></i>
+                                    Gérer utilisateurs
+                                </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('connection_history') }}">
+                                    <i data-feather="clock" class="me-1"></i>
+                                    Historique connexions
+                                </a></li>
+                        </ul>
+                    </li>
+                    {% endif %}
+
+                    {% if current_user.role == 'chef_zone' and current_user.role != 'gestionnaire_stock' %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('create_team') }}">
+                            <i data-feather="users" class="me-1"></i>
+                            Créer équipe
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% if current_user.role == 'magasinier' %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('stock.inventaire_physique') }}">
+                            <i data-feather="list" class="me-1"></i>
+                            Inventaire
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% if current_user.role not in ['gestionnaire_stock', 'rh'] %}
+                    <li class="nav-item">
+                        {% if current_user.role == 'magasinier' %}
+                        {# PHASE 3 FIX: Magainiers see stock movements history #}
+                        <a class="nav-link" href="{{ url_for('stock.historique_mouvements_zone') }}">
+                            <i data-feather="clock" class="me-1"></i>
+                            Historique Stock
+                        </a>
+                        {% else %}
+                        {# Other roles see intervention history #}
+                        <a class="nav-link" href="{{ url_for('intervention_history') }}">
+                            <i data-feather="clock" class="me-1"></i>
+                            Historique
+                        </a>
+                        {% endif %}
+                    </li>
+                </ul>
+                {% else %}
+                </ul>
+                {% endif %}
+
+                <ul class="navbar-nav ms-auto">
+                    <!-- Notifications Dropdown -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="notificationsDropdown" role="button"
+                            data-bs-toggle="dropdown" aria-expanded="false" data-mobile-dropdown>
+                            <i data-feather="bell" class="me-1"></i>
+                            <span class="badge bg-danger rounded-pill notification-count"
+                                style="display: none;">0</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end notification-dropdown"
+                            aria-labelledby="notificationsDropdown" style="min-width: 350px; max-width: 400px;">
+                            <li>
+                                <h6 class="dropdown-header">Notifications</h6>
+                            </li>
+                            <li>
+                                <div class="notification-list px-3" style="max-height: 300px; overflow-y: auto;"></div>
+                            </li>
+                            <li>
+                                <hr class="dropdown-divider">
+                            </li>
+                            <li><a class="dropdown-item text-center" href="#" id="markAllRead">Marquer tout comme lu</a>
+                            </li>
+                        </ul>
+                    </li>
+
+                    <!-- User Dropdown -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button"
+                            data-bs-toggle="dropdown" data-mobile-dropdown>
+                            <i data-feather="user" class="me-1"></i>
+                            {{ current_user.prenom }} {{ current_user.nom }}
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><span class="dropdown-item-text small">{{ current_user.role|title }}</span></li>
+                            <li>
+                                <hr class="dropdown-divider">
+                            </li>
+                            <li><a class="dropdown-item" href="{{ url_for('logout') }}">
+                                    <i data-feather="log-out" class="me-1"></i>
+                                    Déconnexion
+                                </a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+
+    <!-- Flash Messages -->
+    <div class="container-fluid mt-3">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ 'danger' if category == 'error' else 'success' if category == 'success' else 'info' }} alert-dismissible fade show"
+            role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+    </div>
+
+    <!-- Main Content -->
+    <main id="main-content" class="container-fluid">
+        {% block content %}{% endblock %}
+    </main>
+    <!-- jQuery doit être chargé en premier -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <!-- Puis jQuery UI et ses dépendances -->
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery-ui-timepicker-addon/1.6.3/jquery-ui-timepicker-addon.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-ui-timepicker-addon/1.6.3/jquery-ui-timepicker-addon.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-ui-timepicker-addon/1.6.3/i18n/jquery-ui-timepicker-fr.js"></script>
+    
+    <!-- Ensuite Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- IMPORTANT: Feather icons FIX - Must load BEFORE feather.min.js -->
+    <script src="{{ url_for('static', filename='js/feather-fix.js') }}"></script>
+    
+    <!-- IMPORTANT: Chart Modal Script - Load EARLY before dashboard content -->
+    <script src="{{ url_for('static', filename='js/chart-modal-simple.js') }}"></script>
+    
+    <!-- Puis les autres bibliothèques -->
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons@4.29.0/dist/feather.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/signature-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+    <!-- Form Manager (VAGUE 2 - Multi-step forms) -->
+    <script src="{{ url_for('static', filename='js/form-manager.js') }}"></script>
+    <!-- Auto-Pagination (Client-side pagination for tables) -->
+    <script src="{{ url_for('static', filename='js/auto-pagination.js') }}"></script>
+    <!-- CSRF Configuration -->
+    <script>
+        // Configuration CSRF pour les requêtes AJAX
+        $.ajaxSetup({
+            beforeSend: function (xhr, settings) {
+                if (!/^(GET|HEAD|OPTIONS|TRACE)$/i.test(settings.type) && !this.crossDomain) {
+                    xhr.setRequestHeader("X-CSRFToken", $('meta[name="csrf-token"]').attr('content'));
+                }
+            }
+        });
+    </script>
+
+    {% block scripts %}{% endblock %}
+    <script>
+        // After Feather replaces icons, mark decorative icons as aria-hidden
+        (function () {
+            try {
+                if (window.feather) {
+                    // ensure icons are replaced
+                    feather.replace();
+                }
+            } catch (e) {}
+
+            // small delay to allow replacement
+            setTimeout(function () {
+                document.querySelectorAll('svg').forEach(function (svg) {
+                    // if the svg already has aria-label or role explicit, keep it
+                    if (svg.hasAttribute('aria-label') || svg.getAttribute('role')) return;
+                    // mark as decorative
+                    svg.setAttribute('aria-hidden', 'true');
+                    svg.setAttribute('focusable', 'false');
+                });
+            }, 60);
+        })();
+    </script>
+    <script>
+        let inactivityTime = function () {
+            let timer;
+            let warningModal;
+            let warningTimeout;
+            let countdownInterval;
+
+            // Créer la modal d'avertissement
+            function createWarningModal() {
+                if (document.getElementById('sessionWarningModal')) {
+                    warningModal = new bootstrap.Modal(document.getElementById('sessionWarningModal'));
+                    return;
+                }
+
+                const modal = document.createElement('div');
+                modal.className = 'modal fade';
+                modal.id = 'sessionWarningModal';
+                modal.innerHTML = `
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i data-feather="alert-triangle" class="text-warning me-2"></i>
+                                Session sur le point d'expirer
+                            </h5>
+                        </div>
+                        <div class="modal-body">
+                            <p>Votre session va expirer dans <span id="sessionCountdown">120</span> secondes.</p>
+                            <p>Voulez-vous rester connecté ?</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" onclick="logout()">
+                                Se déconnecter
+                            </button>
+                            <button type="button" class="btn btn-primary" onclick="extendSession()">
+                                Rester connecté
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+                document.body.appendChild(modal);
+                warningModal = new bootstrap.Modal(modal);
+                feather.replace();
+            }
+
+            // Réinitialiser le timer d'inactivité
+            function resetTimer() {
+                clearTimeout(timer);
+                clearTimeout(warningTimeout);
+                clearInterval(countdownInterval);
+
+                // Redémarrer le timer d'inactivité (20 minutes)
+                timer = setTimeout(logout, 20 * 60 * 1000); // 20 minutes
+                // Démarrer le timer d'avertissement (18 minutes)
+                warningTimeout = setTimeout(showWarningModal, 18 * 60 * 1000);
+            }
+
+            // Fonction de déconnexion
+            function logout() {
+                window.location.href = "{{ url_for('logout') }}";
+            }
+
+            // Afficher la modal d'avertissement avec compte à rebours
+            function showWarningModal() {
+                if (!warningModal) {
+                    createWarningModal();
+                } else {
+                    warningModal.show();
+                }
+
+                let countdown = 120;
+                const countdownElement = document.getElementById('sessionCountdown');
+                if (countdownElement) {
+                    countdownElement.textContent = countdown;
+                }
+
+                clearInterval(countdownInterval);
+                countdownInterval = setInterval(() => {
+                    countdown--;
+                    if (countdownElement) {
+                        countdownElement.textContent = countdown;
+                    }
+
+                    if (countdown <= 0) {
+                        clearInterval(countdownInterval);
+                        logout();
+                    }
+                }, 1000);
+            }
+
+            // Fonction pour prolonger la session
+            async function extendSession() {
+                try {
+                    const response = await fetch('/api/extend-session', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        credentials: 'same-origin'
+                    });
+
+                    if (response.ok) {
+                        if (warningModal) {
+                            warningModal.hide();
+                        }
+                        resetTimer();
+                    } else {
+                        logout();
+                    }
+                } catch (error) {
+                    console.error('Erreur prolongation session:', error);
+                    logout();
+                }
+            }
+
+            // Exposer les fonctions globalement
+            window.logout = logout;
+            window.extendSession = extendSession;
+
+            // Démarrer le timer
+            resetTimer();
+
+            // Réinitialiser le timer lors d'événements utilisateur
+            const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+            events.forEach(event => {
+                document.addEventListener(event, resetTimer, false);
+            });
+
+            return {
+                resetTimer,
+                logout,
+                extendSession
+            };
+        }();
+
+        // Démarrer le gestionnaire d'inactivité si l'utilisateur est connecté
+        if (document.body.classList.contains('logged-in')) {
+            inactivityTime;
+        }
+
+    </script>
+    <script>
+
+        function filterTable() {
+            const filters = document.querySelectorAll('.column-filter');
+            const rows = document.querySelectorAll('#demandesTable tbody tr');
+
+            rows.forEach(row => {
+                let shouldShow = true;
+                filters.forEach((filter, index) => {
+                    if (!filter.value) return;
+
+                    const cell = row.cells[index];
+                    const value = cell.textContent.toLowerCase();
+                    const filterValue = filter.value.toLowerCase();
+
+                    if (!value.includes(filterValue)) {
+                        shouldShow = false;
+                    }
+                });
+
+                row.style.display = shouldShow ? '' : 'none';
+            });
+
+            updateSelectCount();
+        }
+
+        // Ajouter les événements de filtrage
+        document.addEventListener('DOMContentLoaded', function () {
+            const filters = document.querySelectorAll('.column-filter');
+            filters.forEach(filter => {
+                filter.addEventListener('keyup', filterTable);
+            });
+        });
+
+        // Fonction pour réinitialiser les filtres
+        function resetFilters() {
+            document.querySelectorAll('.column-filter').forEach(filter => {
+                filter.value = '';
+            });
+            filterTable();
+        }
+
+        // Ajouter un bouton pour réinitialiser les filtres
+        const headerElement = document.querySelector('.card-header .d-flex');
+        if (headerElement) {
+            headerElement.insertAdjacentHTML('beforeend', `
+        <button type="button" class="btn btn-sm btn-outline-secondary ms-2" onclick="resetFilters()">
+            <i data-feather="x" class="me-1"></i>
+            Réinitialiser les filtres
+        </button>
+    `);
+        }
+    </script>
+
+    <script>
+        // Initialize Feather icons
+        feather.replace();
+
+        // Fonction pour afficher des alertes
+        function showAlert(type, message) {
+            const alertHtml = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+
+            // Supprime les anciennes alertes
+            $('.alert').alert('close');
+
+            // Affiche la nouvelle alerte
+            $('main.container').prepend(alertHtml);
+        }
+    </script>
+
+    <!-- Notification System JavaScript -->
+    <script>
+        // Notification system
+        class NotificationManager {
+            constructor() {
+                this.notifications = [];
+                this.unreadCount = 0;
+                this.init();
+            }
+
+            init() {
+                this.loadNotifications();
+                // Refresh notifications every 30 seconds
+                setInterval(() => this.loadNotifications(), 30000);
+            }
+
+            async loadNotifications() {
+                try {
+                    const response = await fetch('/api/notifications?per_page=10');
+                    const data = await response.json();
+
+                    if (data.success) {
+                        this.notifications = data.notifications;
+                        this.updateNotificationCount();
+                        this.renderNotifications();
+                    }
+                } catch (error) {
+                    console.error('Erreur lors du chargement des notifications:', error);
+                }
+            }
+
+            updateNotificationCount() {
+                this.unreadCount = this.notifications.filter(n => !n.envoye).length;
+                const badge = document.querySelector('.notification-count');
+
+                if (this.unreadCount > 0) {
+                    badge.textContent = this.unreadCount > 99 ? '99+' : this.unreadCount;
+                    badge.style.display = 'inline';
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+
+            renderNotifications() {
+                const container = document.querySelector('.notification-list');
+                if (!container) return;
+
+                if (this.notifications.length === 0) {
+                    container.innerHTML = '<div class="text-center text-muted py-3">Aucune notification</div>';
+                    return;
+                }
+
+                const html = this.notifications.map(notification => `
+                    <a href="#" class="dropdown-item notification-item ${!notification.envoye ? 'unread' : ''}"
+                       data-id="${notification.id}" onclick="notificationManager.markAsRead(${notification.id})">
+                        <div class="d-flex align-items-start">
+                            <div class="flex-grow-1">
+                                <div class="notification-message">${notification.message}</div>
+                                <small class="text-muted">${notification.date_creation}</small>
+                                ${notification.demande_nd ? `<div class="text-primary small">ND: ${notification.demande_nd}</div>` : ''}
+                            </div>
+                            ${!notification.envoye ? '<div class="notification-dot bg-danger rounded-circle ms-2" style="width: 8px; height: 8px; flex-shrink: 0;"></div>' : ''}
+                        </div>
+                    </a>
+                `).join('');
+
+                container.innerHTML = html;
+            }
+
+            async markAsRead(notificationId) {
+                try {
+                    const response = await fetch(`/api/notifications/${notificationId}/mark-read`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+
+                    if (response.ok) {
+                        // Update local state
+                        const notification = this.notifications.find(n => n.id === notificationId);
+                        if (notification) {
+                            notification.envoye = true;
+                            this.updateNotificationCount();
+                            this.renderNotifications();
+                        }
+                    }
+                } catch (error) {
+                    console.error('Erreur lors du marquage comme lu:', error);
+                }
+            }
+
+            async markAllAsRead() {
+                try {
+                    const response = await fetch('/api/notifications/mark-all-read', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+
+                    if (response.ok) {
+                        // Update local state
+                        this.notifications.forEach(n => n.envoye = true);
+                        this.updateNotificationCount();
+                        this.renderNotifications();
+                    }
+                } catch (error) {
+                    console.error('Erreur lors du marquage de toutes les notifications comme lues:', error);
+                }
+            }
+        }
+
+        // Initialize notification manager when DOM is loaded
+        let notificationManager;
+        document.addEventListener('DOMContentLoaded', function () {
+            notificationManager = new NotificationManager();
+
+            // Handle mark all as read button
+            const markAllReadBtn = document.getElementById('markAllRead');
+            if (markAllReadBtn) {
+                markAllReadBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    notificationManager.markAllAsRead();
+                });
+            }
+        });
+    </script>
+
+    <!-- Mobile Navigation Manager -->
+    <script src="{{ url_for('static', filename='js/mobile-nav.js') }}"></script>
+
+    <!-- Flutter Geolocation Integration -->
+    <script>
+        /**
+         * Initialize Flutter geolocation integration by obtaining and passing JWT token
+         * to the Flutter app via JavaScript channel bridge.
+         */
+        async function initializeFlutterGeolocation() {
+            try {
+                // Check if we're running in Flutter WebView
+                if (!window.SofatelcomGeo) {
+                    console.log('ℹ️ Flutter Geolocation interface not available (not in WebView or Flutter not loaded yet)');
+                    return;
+                }
+
+                // Request JWT token from backend for session-authenticated users
+                const response = await fetch('/api/mobile/get-token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (!response.ok) {
+                    console.warn('⚠️ Failed to get JWT token for geolocation:', response.statusText);
+                    return;
+                }
+
+                const data = await response.json();
+                if (!data.success || !data.access_token) {
+                    console.warn('⚠️ No token received from server:', data);
+                    return;
+                }
+
+                // Pass the token to Flutter's GeolocationService
+                window.SofatelcomGeo.setAuthToken(data.access_token);
+                console.log('✅ JWT token passed to Flutter Geolocation Service');
+                console.log('👤 User:', data.user.prenom, data.user.nom);
+                
+            } catch (error) {
+                console.error('❌ Error initializing Flutter geolocation:', error);
+            }
+        }
+
+        // Initialize on DOMContentLoaded
+        document.addEventListener('DOMContentLoaded', function () {
+            // Wait a moment for Flutter interface to be ready
+            setTimeout(initializeFlutterGeolocation, 500);
+        });
+
+        // Also initialize on page navigation (in case page reloads)
+        window.addEventListener('load', function () {
+            // Check again for late initialization
+            setTimeout(initializeFlutterGeolocation, 500);
+        });
+    </script>
+
+    <!-- Zone Check for Magasinier (Stock Form Validation) -->
+    <!-- <script src="{{ url_for('static', filename='js/magasinier/zone-check.js') }}"></script> -->
+
+    <!-- Flatpickr Date Picker JS (avec support français) -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/fr.js"></script>
+    
+    <script>
+        /**
+         * Initialiser Flatpickr en français pour tous les inputs de type date
+         * Les dates sont stockées en format ISO (YYYY-MM-DD) pour compatibilité avec les formulaires
+         * Mais s'affichent en français (DD/MM/YYYY) à l'utilisateur
+         */
+        document.addEventListener('DOMContentLoaded', function() {
+            // Configuration Flatpickr en français avec format ISO
+            const flatpickrConfig = {
+                dateFormat: 'Y-m-d',       // Stockage en ISO
+                locale: 'fr',              // Interface en français
+                enableTime: false,
+                minDate: new Date(),
+                monthSelectorType: 'dropdown'
+            };
+            
+            // Initialiser les inputs spécifiques des demandes de congés
+            const dateInputs = document.querySelectorAll('#date-start, #date-end, #heures-debut, #heures-fin');
+            dateInputs.forEach(element => {
+                if (element) {
+                    flatpickr(element, flatpickrConfig);
+                }
+            });
+        });
+    </script>
+
+</body>
+
+</html>

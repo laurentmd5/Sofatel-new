@@ -1,0 +1,378 @@
+{% extends "base.html" %}
+{% from "_design-system.html" import stat_card, button, badge, modal %}
+
+{% block title %}Tableau de bord Chef PUR - Sofatelcom{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <div class="row align-items-center">
+        <div class="col-12">
+            <h1 class="mb-2">
+                <i data-feather="monitor" class="me-2"></i>
+                Tableau de bord Chef PUR
+            </h1>
+            <p class="text-muted mb-0">Vue synthétique des opérations et KPIs clés</p>
+        </div>
+    </div>
+</div>
+
+<!-- KPI HERO: 4 cartes principales -->
+<section class="kpi-hero mb-4">
+    <div class="row g-3 mb-4">
+        <div class="col-md-6 col-lg-3">
+            {{ stat_card('Total Instances', stats.total_demandes, 
+                        icon='file-text', color='primary',
+                        onclick="showDetailsModal('total_demandes', " ~ stats.total_demandes ~ ")") }}
+        </div>
+        <div class="col-md-6 col-lg-3">
+            {{ stat_card('Instances/Jour SAV', stats.demandes_jour_sav, 
+                        icon='calendar', color='danger',
+                        onclick="showDetailsModal('demandes_jour_sav', " ~ stats.demandes_jour_sav ~ ")") }}
+        </div>
+        <div class="col-md-6 col-lg-3">
+            {{ stat_card('Instances/Jour Prod', stats.demandes_jour_production, 
+                        icon='calendar', color='danger',
+                        onclick="showDetailsModal('demandes_jour_production', " ~ stats.demandes_jour_production ~ ")") }}
+        </div>
+        <div class="col-md-6 col-lg-3">
+            {{ stat_card('En cours', stats.interventions_cours, 
+                        icon='activity', color='warning') }}
+        </div>
+    </div>
+
+    <!-- Status bar -->
+    <div class="row g-3">
+        <div class="col-md-6 col-lg-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-muted mb-0">Attente validation</h6>
+                        {{ badge(stats.attente_validation, 'info') }}
+                    </div>
+                    <div class="progress" style="height: 6px;">
+                        <div class="progress-bar bg-info" role="progressbar" 
+                             style="width: {% if stats.total_demandes > 0 %}{{ (stats.attente_validation / stats.total_demandes) * 100 }}{% else %}0{% endif %}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-muted mb-0">Validées (SAV)</h6>
+                        {{ badge(stats.interventions_validees_sav, 'success') }}
+                    </div>
+                    <div class="progress" style="height: 6px;">
+                        <div class="progress-bar bg-success" role="progressbar" 
+                             style="width: {% if stats.total_demandes > 0 %}{{ (stats.interventions_validees_sav / stats.total_demandes) * 100 }}{% else %}0{% endif %}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-muted mb-0">Validées (Prod)</h6>
+                        {{ badge(stats.interventions_validees_production, 'success') }}
+                    </div>
+                    <div class="progress" style="height: 6px;">
+                        <div class="progress-bar bg-success" role="progressbar" 
+                             style="width: {% if stats.total_demandes > 0 %}{{ (stats.interventions_validees_production / stats.total_demandes) * 100 }}{% else %}0{% endif %}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- PERFORMANCE SECTION: Chart + Team Details -->
+<section class="performance-section mb-4">
+    <div class="row g-3">
+        <!-- Left: Charts (70% width) -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-md h-100">
+                <div class="card-header bg-primary text-white py-3">
+                    <h5 class="mb-0">
+                        <i data-feather="bar-chart-2" class="me-2" style="width: 20px; height: 20px;"></i>
+                        Performance des équipes
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="performanceChart" style="max-height: 300px;"></canvas>
+                    <div class="mt-4 pt-3 border-top">
+                        <p class="text-muted small mb-2">Dernière mise à jour: <span id="lastUpdate">--</span></p>
+                        <div class="d-flex gap-2">
+                            {{ button('Rafraîchir', onclick='location.reload()', variant='outline-secondary', size='sm', icon='refresh-cw') }}
+                            {{ button('Exporter', onclick='exportChart()', variant='outline-primary', size='sm', icon='download') }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Team Performance Details (30% width) -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-md h-100 d-flex flex-column">
+                <div class="card-header bg-secondary text-white py-3">
+                    <h5 class="mb-0">
+                        <i data-feather="users" class="me-2" style="width: 20px; height: 20px;"></i>
+                        Détails Performance
+                    </h5>
+                </div>
+                <div class="card-body flex-grow-1 d-flex flex-column" style="min-height: 300px;">
+                    <!-- Team list limited to 5 items -->
+                    <div class="team-list" style="flex-grow: 1; overflow-y: auto;">
+                        {% if teams %}
+                            {% for team_member in teams[:5] %}
+                            <div class="team-item py-2 border-bottom">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="flex-grow-1 min-w-0">
+                                        <p class="mb-1 fw-semibold text-truncate">{{ team_member.name }}</p>
+                                        <small class="text-muted">{{ team_member.type or 'Technicien' }}</small>
+                                    </div>
+                                    <div class="text-end ms-2">
+                                        <span class="badge bg-success fw-bold">{{ team_member.completion_rate or 0 }}%</span>
+                                    </div>
+                                </div>
+                                <div class="progress mt-1" style="height: 4px;">
+                                    <div class="progress-bar" role="progressbar" 
+                                         style="width: {{ team_member.completion_rate or 0 }}%"></div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-center py-4 text-muted">
+                                <i data-feather="inbox" style="width: 40px; height: 40px; opacity: 0.5;"></i>
+                                <p class="mt-2 small">Aucune équipe disponible</p>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- See More Button -->
+                    {% if teams and teams|length > 5 %}
+                    <div class="mt-auto pt-3">
+                        {{ button('Voir tous les techniciens', 
+                                 onclick='openTeamModal()', 
+                                 variant='primary', 
+                                 size='sm',
+                                 icon='arrow-right',
+                                 full_width=True) }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ACTIONS RAPIDES -->
+<section class="quick-actions mb-4">
+    <div class="row g-3">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100 text-center py-4 cursor-not-allowed" 
+                 title="Créer une intervention via l'import" onclick="alert('Veuillez utiliser l\'import de demandes');">
+                <i data-feather="plus-circle" style="width: 40px; height: 40px; color: #ccc;" class="mx-auto mb-2"></i>
+                <h6 style="color: #999;">Créer intervention</h6>
+                <small class="text-muted">Nouvelle demande</small>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100 text-center py-4 cursor-pointer hover-lift" 
+                 onclick="window.location.href='{{ url_for('dispatch.import_demandes') }}'">
+                <i data-feather="upload" style="width: 40px; height: 40px; color: var(--color-secondary);" class="mx-auto mb-2"></i>
+                <h6>Importer demandes</h6>
+                <small class="text-muted">Fichier CSV</small>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100 text-center py-4 cursor-pointer hover-lift"
+                 onclick="window.location.href='{{ url_for('dispatch.dispatching') }}'">
+                <i data-feather="send" style="width: 40px; height: 40px; color: var(--color-accent);" class="mx-auto mb-2"></i>
+                <h6>Dispatching</h6>
+                <small class="text-muted">Assigner interventions</small>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- MODALE: Tous les techniciens -->
+<div class="modal fade" id="teamModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i data-feather="users" class="me-2"></i>
+                    Performance de tous les techniciens
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="team-list-full">
+                    {% if teams %}
+                        {% for team_member in teams %}
+                        <div class="team-item-full py-3 border-bottom">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1">{{ team_member.name }}</h6>
+                                    <small class="text-muted">{{ team_member.type or 'Technicien' }}</small>
+                                </div>
+                                <span class="badge bg-success fw-bold fs-6">{{ team_member.completion_rate or 0 }}%</span>
+                            </div>
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar" role="progressbar" 
+                                     style="width: {{ team_member.completion_rate or 0 }}%"></div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- STYLES ADDITIONNELS -->
+<style>
+    .hover-lift {
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+    .hover-lift:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15) !important;
+    }
+
+    .team-list {
+        max-height: 250px;
+    }
+
+    .team-item {
+        animation: slideIn 0.3s ease;
+    }
+
+    .team-item:last-child {
+        border-bottom: none !important;
+    }
+
+    .progress {
+        border-radius: var(--radius-full);
+        background-color: var(--color-neutral-200);
+    }
+
+    .progress-bar {
+        border-radius: var(--radius-full);
+        transition: width 0.6s ease;
+    }
+
+    .card-header {
+        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    }
+
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateX(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    @media (max-width: 991px) {
+        .performance-section .col-lg-8 {
+            order: 2;
+        }
+        .performance-section .col-lg-4 {
+            order: 1;
+        }
+    }
+
+    .shadow-md {
+        box-shadow: var(--shadow-md);
+    }
+</style>
+
+<!-- SCRIPTS -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script>
+    function openTeamModal() {
+        const modal = new bootstrap.Modal(document.getElementById('teamModal'));
+        modal.show();
+    }
+
+    function showDetailsModal(type, value, title) {
+        // Placeholder for details modal
+        console.log(`Details: ${type} = ${value}`);
+    }
+
+    function exportChart() {
+        const canvas = document.getElementById('performanceChart');
+        const link = document.createElement('a');
+        link.href = canvas.toDataURL('image/png');
+        link.download = 'performance-chart.png';
+        link.click();
+    }
+
+    // Initialize chart
+    document.addEventListener('DOMContentLoaded', function() {
+        const ctx = document.getElementById('performanceChart')?.getContext('2d');
+        if (ctx) {
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Équipe SAV', 'Équipe Prod', 'Équipe Zone'],
+                    datasets: [{
+                        label: 'Interventions validées',
+                        data: [{{ stats.interventions_validees_sav or 0 }}, 
+                               {{ stats.interventions_validees_production or 0 }},
+                               {{ stats.interventions_rejetees or 0 }}],
+                        backgroundColor: [
+                            'rgba(25, 135, 84, 0.7)',
+                            'rgba(13, 110, 253, 0.7)',
+                            'rgba(255, 193, 7, 0.7)'
+                        ],
+                        borderColor: [
+                            'rgba(25, 135, 84, 1)',
+                            'rgba(13, 110, 253, 1)',
+                            'rgba(255, 193, 7, 1)'
+                        ],
+                        borderRadius: 6,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: true, position: 'top' },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            padding: 12,
+                            borderRadius: 6
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(0, 0, 0, 0.05)' }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update last refresh time
+        document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('fr-SN');
+    });
+</script>
+{% endblock %}

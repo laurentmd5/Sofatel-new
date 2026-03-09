@@ -1,0 +1,52 @@
+{
+  "HTML Structure": {
+    "status": "PASS",
+    "tests": {
+      "form_id_present": true,
+      "form_steps_container": true,
+      "progress_indicator": true,
+      "step_indicators": true,
+      "form_steps": true,
+      "form_actions": true,
+      "form_manager_init": true,
+      "form_labels": true,
+      "client_info": true
+    },
+    "details": {
+      "total_lines": 991,
+      "form_fields": 26,
+      "required_fields": 19
+    }
+  },
+  "CSS Resources": {
+    "status": "PASS",
+    "tests": {
+      "css_exists": true,
+      "css_minified_exists": true,
+      "css_size_valid": true,
+      "css_minified_size_valid": true
+    }
+  },
+  "JavaScript Resources": {
+    "status": "PASS",
+    "tests": {
+      "form_manager_class": true,
+      "next_step_method": true,
+      "previous_step_method": true,
+      "validate_method": true,
+      "save_progress_method": true,
+      "form_manager_export": true
+    },
+    "details": {
+      "file_size": 22204,
+      "total_lines": 643
+    }
+  },
+  "Base Template Includes": {
+    "status": "PASS",
+    "tests": {
+      "form_steps_css_included": true,
+      "form_manager_js_included": true
+    }
+  }
+}

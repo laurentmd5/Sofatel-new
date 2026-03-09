@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+
+{% block title %}📦 Mon Magasin - Dashboard Magasinier | Sofatelcom PUR{% endblock %}
+
+{% block head %}
+<style>
+    body {
+        background-color: #f5f7fa;
+    }
+
+    .magasinier-hero {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        color: white;
+        padding: 40px 20px;
+        border-radius: 0;
+        margin-bottom: 40px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .magasinier-hero::before {
+        content: '📦';
+        position: absolute;
+        right: 30px;
+        top: 20px;
+        font-size: 60px;
+        opacity: 0.1;
+    }
+
+    .magasinier-hero h1 {
+        margin: 0;
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+
+    .magasinier-hero .zone-info {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin-top: 15px;
+    }
+
+    .magasinier-hero .zone-badge {
+        background: rgba(255, 255, 255, 0.2);
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: 600;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .magasinier-hero .user-info {
+        font-size: 1.1rem;
+        opacity: 0.95;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin-bottom: 40px;
+        /* stylelint-disable-next-line property-no-unknown */
+        grid-auto-rows: 1fr;
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 10px;
+        padding: 25px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+        transition: all 0.3s ease;
+        border: none;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: stretch;
+        min-height: 150px;
+        height: 100%;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    }
+
+    /* Dégradés gérés par ::before du tokens-enhanced.css */
+    .stat-card.alert::before {
+        background: linear-gradient(90deg, #dc3545, #ff6b6b) !important;
+    }
+
+    .stat-card.info::before {
+        background: linear-gradient(90deg, #0dcaf0, #0d6efd) !important;
+    }
+
+    .stat-card.success::before {
+        background: linear-gradient(90deg, #198754, #20c997) !important;
+    }
+
+    .stat-icon {
+        position: absolute;
+        right: 20px;
+        top: 20px;
+        font-size: 32px;
+        opacity: 0.2;
+    }
+
+    .stat-number {
+        font-size: 2.2rem;
+        font-weight: 700;
+        color: #2a5298;
+        margin-bottom: 8px;
+    }
+
+    .stat-card.alert .stat-number {
+        color: #dc3545;
+    }
+
+    .stat-card.info .stat-number {
+        color: #17a2b8;
+    }
+
+    .stat-card.success .stat-number {
+        color: #28a745;
+    }
+
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.95rem;
+        font-weight: 500;
+        min-height: 35px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .quick-actions {
+        background: white;
+        border-radius: 10px;
+        padding: 30px;
+        margin-bottom: 40px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    }
+
+    .quick-actions h3 {
+        margin-top: 0;
+        color: #333;
+        font-weight: 600;
+        margin-bottom: 20px;
+        font-size: 1.3rem;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .quick-actions .btn {
+        margin-right: 10px;
+        margin-bottom: 10px;
+        font-weight: 500;
+        padding: 12px 24px;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .quick-actions .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .mouvements-section {
+        background: white;
+        border-radius: 10px;
+        padding: 30px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+        margin-bottom: 40px;
+    }
+
+    .mouvements-section h3 {
+        margin-top: 0;
+        color: #333;
+        font-weight: 600;
+        margin-bottom: 20px;
+        font-size: 1.3rem;
+    }
+
+    .movement-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+
+    .movement-badge.entree {
+        background-color: #d4edda;
+        color: #155724;
+    }
+
+    .movement-badge.sortie {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+
+    .no-data {
+        text-align: center;
+        padding: 40px 20px;
+        color: #6c757d;
+    }
+
+    .no-data .icon {
+        font-size: 48px;
+        margin-bottom: 15px;
+    }
+
+    .breadcrumb-custom {
+        background: transparent;
+        padding: 10px 0;
+        margin-bottom: 30px;
+    }
+
+    .breadcrumb-custom .breadcrumb-item {
+        color: #666;
+    }
+
+    .breadcrumb-custom .breadcrumb-item.active {
+        color: #2a5298;
+        font-weight: 600;
+    }
+
+    @media (max-width: 768px) {
+        .magasinier-hero h1 {
+            font-size: 1.8rem;
+        }
+
+        .magasinier-hero .zone-info {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .stat-card {
+            padding: 20px;
+        }
+
+        .stat-number {
+            font-size: 1.8rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="magasinier-dashboard">
+    <!-- HERO HEADER -->
+    <div class="magasinier-hero">
+        <h1>📦 Mon Magasin</h1>
+        <div class="zone-info">
+            <div class="user-info">
+                Bienvenue, <strong>{{ current_user.prenom }} {{ current_user.nom }}</strong>
+            </div>
+            {% if zone %}
+            <div class="zone-badge">
+                📍 {{ zone.nom }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <!-- BREADCRUMBS -->
+        <nav aria-label="breadcrumb" class="breadcrumb-custom">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Accueil</a></li>
+                <li class="breadcrumb-item active">📦 Mon Magasin</li>
+            </ol>
+        </nav>
+
+        <!-- STATS GRID -->
+        <div class="stats-grid">
+            <!-- Total Articles -->
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-number">{{ total_articles }}</div>
+                <div class="stat-label">Articles en Stock</div>
+            </div>
+
+            <!-- Valeur Totale Stock -->
+            <div class="stat-card success">
+                <div class="stat-icon">💰</div>
+                <div class="stat-number">{{ "%.0f"|format(total_value) }}</div>
+                <div class="stat-label">Valeur Totale (FCFA)</div>
+            </div>
+
+            <!-- Articles en Alerte -->
+            <div class="stat-card alert">
+                <div class="stat-icon">⚠️</div>
+                <div class="stat-number">{{ articles_low_stock }}</div>
+                <div class="stat-label">Articles en Stock Faible</div>
+            </div>
+
+            <!-- Mouvements 7 Jours -->
+            <div class="stat-card info">
+                <div class="stat-icon">📈</div>
+                <div class="stat-number">{{ entrees_7j + sorties_7j }}</div>
+                <div class="stat-label">Mouvements (7 jours)</div>
+            </div>
+        </div>
+
+        <!-- QUICK ACTIONS -->
+        <div class="quick-actions">
+            <h3>⚡ Actions Rapides</h3>
+            <a href="{{ url_for('stock.liste_produits_zone') }}" class="btn btn-primary">
+                <i data-feather="box"></i> Voir Tous les Produits
+            </a>
+            <a href="{{ url_for('stock.historique_mouvements_zone') }}" class="btn btn-info">
+                <i data-feather="clock"></i> Historique des Mouvements
+            </a>
+            <a href="{{ url_for('stock.page_entrees_mois') }}" class="btn btn-success">
+                <i data-feather="arrow-down"></i> Entrées du Mois
+            </a>
+            <a href="{{ url_for('stock.page_sorties_mois') }}" class="btn btn-warning">
+                <i data-feather="arrow-up"></i> Sorties du Mois
+            </a>
+            {% if current_user.is_admin or current_user.role == 'chef_pur' %}
+            <a href="{{ url_for('stock.inventaire_physique') }}" class="btn btn-secondary">
+                <i data-feather="list"></i> Faire un Inventaire
+            </a>
+            {% endif %}
+        </div>
+
+        <!-- MOUVEMENTS RÉCENTS -->
+        <div class="mouvements-section">
+            <h3>📝 Mouvements Récents (7 Jours)</h3>
+            
+            {% if mouvements_zone and mouvements_zone|length > 0 %}
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <strong>Entrées:</strong>
+                    <span class="movement-badge entree">{{ entrees_7j }} mouvement{{ 's' if entrees_7j != 1 else '' }}</span>
+                </div>
+                <div class="col-md-6">
+                    <strong>Sorties:</strong>
+                    <span class="movement-badge sortie">{{ sorties_7j }} mouvement{{ 's' if sorties_7j != 1 else '' }}</span>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Type</th>
+                            <th>Date</th>
+                            <th>Produit</th>
+                            <th>Quantité</th>
+                            <th>Utilisateur</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for mouvement in mouvements_zone|sort(attribute='date_mouvement', reverse=True)|list|first(10) %}
+                        <tr>
+                            <td>
+                                {% if mouvement.type_mouvement == 'entree' %}
+                                <span class="movement-badge entree">Entrée</span>
+                                {% elif mouvement.type_mouvement == 'sortie' %}
+                                <span class="movement-badge sortie">Sortie</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ mouvement.type_mouvement|title }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ mouvement.date_mouvement.strftime('%d/%m/%Y %H:%M') if mouvement.date_mouvement else 'N/A' }}</td>
+                            <td>{{ mouvement.produit_relation.nom if mouvement.produit_relation else 'N/A' }}</td>
+                            <td><strong>{{ mouvement.quantite }}</strong></td>
+                            <td>{{ mouvement.utilisateur.nom if mouvement.utilisateur else 'Système' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if mouvements_zone|length > 10 %}
+            <div class="text-center mt-3">
+                <a href="{{ url_for('stock.historique_mouvements_zone') }}" class="btn btn-sm btn-outline-primary">
+                    Voir tous les mouvements →
+                </a>
+            </div>
+            {% endif %}
+
+            {% else %}
+            <div class="no-data">
+                <div class="icon">📭</div>
+                <p>Aucun mouvement enregistré dans les 7 derniers jours</p>
+                <small class="text-muted">Les mouvements apparaîtront ici lorsqu'ils seront créés</small>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- ALERT FAIBLE STOCK -->
+        {% if articles_low_stock > 0 %}
+        <div class="alert alert-warning d-flex align-items-center" role="alert">
+            <i data-feather="alert-triangle" class="me-2"></i>
+            <div>
+                <strong>Attention!</strong> Vous avez {{ articles_low_stock }} article{{ 's' if articles_low_stock != 1 else '' }} 
+                en stock faible. Veuillez prévoir un réapprovisionement.
+                <a href="{{ url_for('stock.page_produits_faibles_stocks') }}" class="alert-link ms-2">Voir les articles en alerte →</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    // Initialize feather icons
+    if (window.feather) {
+        // Initialize feather icons safely
+        if (typeof safeFeatherReplace === 'function') {
+            try {
+                safeFeatherReplace();
+            } catch (e) {
+                console.warn('Feather initialization:', e);
+            }
+        }
+    }
+
+    // Log dashboard view
+    console.log('✅ Magasinier Dashboard loaded');
+    console.log('👤 User:', {
+        name: '{{ current_user.nom }} {{ current_user.prenom }}',
+        zone: '{{ zone.nom if zone else "N/A" }}',
+        role: '{{ current_user.role }}'
+    });
+</script>
+{% endblock %}

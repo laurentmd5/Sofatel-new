@@ -1,0 +1,266 @@
+{# ========================================
+   SOFATELCOM - DESIGN SYSTEM MACROS (V1.0)
+   Composants réutilisables avec accessibilité WCAG AA
+   ======================================== #}
+
+{# ===== BUTTON MACRO ===== #}
+{% macro button(text, type='button', variant='primary', size='md', icon=None, loading=False, full_width=False, disabled=False, onclick=None, href=None) %}
+  {# Flexible button/link component with accessibility attributes #}
+  {% if href %}
+    <a href="{{ href }}" 
+       class="btn btn-{{ variant }} btn-{{ size }} {% if full_width %}w-100{% endif %}"
+       role="button"
+       {% if disabled %}aria-disabled="true"{% endif %}>
+      {% if icon %}<i data-feather="{{ icon }}" class="me-2" style="width: 18px; height: 18px;"></i>{% endif %}
+      {% if loading %}<span class="spinner-border spinner-border-sm me-2"></span>{% endif %}
+      {{ text }}
+    </a>
+  {% else %}
+    <button type="{{ type }}" 
+            class="btn btn-{{ variant }} btn-{{ size }} {% if full_width %}w-100{% endif %}"
+            {% if loading %}disabled{% endif %}
+            {% if disabled %}disabled{% endif %}
+            {% if onclick %}onclick="{{ onclick }}"{% endif %}>
+      {% if icon %}<i data-feather="{{ icon }}" class="me-2" style="width: 18px; height: 18px;"></i>{% endif %}
+      {% if loading %}<span class="spinner-border spinner-border-sm me-2"></span>{% endif %}
+      {{ text }}
+    </button>
+  {% endif %}
+{% endmacro %}
+
+{# ===== STAT CARD MACRO ===== #}
+{% macro stat_card(title, value, icon='info', color='primary', trend=None, trend_value=None, onclick=None, counter_id=None) %}
+  <div class="col-md-6 col-lg-3 d-flex">
+    <div class="card stat-card stat-card-{{ color }} shadow-lg w-100" 
+         role="status" 
+         aria-label="{{ title }}: {{ value }}{% if trend %}, {{ trend_value }}{% endif %}"
+         {% if onclick %}onclick="{{ onclick }}" style="cursor: pointer; transition: all 0.3s ease;" title="Cliquez pour plus de détails"{% endif %}>
+      <div class="card-body p-2">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+          <div class="stat-icon-wrapper">
+            <div class="stat-icon-bg bg-{{ color }} bg-opacity-10 rounded-3">
+              <i data-feather="{{ icon }}" class="text-{{ color }} stat-icon-large" aria-hidden="true"></i>
+            </div>
+          </div>
+          {% if trend %}
+          <small class="badge bg-{{ 'success' if '↑' in trend else 'danger' }} rounded-pill">{{ trend }}</small>
+          {% endif %}
+        </div>
+        <div class="stat-content">
+          <div class="text-muted small fw-medium text-uppercase letter-spacing">{{ title }}</div>
+          <h2 class="mb-2 fw-bold stat-value" data-testid="stat-value" {% if counter_id %}id="{{ counter_id }}"{% endif %}>{{ value }}</h2>
+          {% if trend_value %}
+          <small class="text-{{ 'success' if '↑' in trend else 'danger' }}">
+            <i data-feather="{{ 'trending-up' if '↑' in trend else 'trending-down' }}" class="me-1" style="width: 14px; height: 14px;" aria-hidden="true"></i>
+            {{ trend_value }}
+          </small>
+          {% endif %}
+        </div>
+      </div>
+      <div class="stat-card-overlay"></div>
+    </div>
+  </div>
+{% endmacro %}
+
+{# ===== FORM FIELD MACRO ===== #}
+{% macro form_field(name, label, type='text', placeholder='', required=False, error=None, help_text=None, value=None) %}
+  {# Accessible form field with ARIA attributes #}
+  {% set help_id = name ~ '_help' %}
+  {% set error_id = name ~ '_error' %}
+  <div class="form-group mb-3">
+    <label for="{{ name }}" class="form-label{% if required %} required{% endif %}">
+      {{ label }}{% if required %} <span class="text-danger" aria-label="requis">*</span>{% endif %}
+    </label>
+
+    {% if type == 'textarea' %}
+      <textarea 
+        id="{{ name }}" 
+        name="{{ name }}" 
+        class="form-control {% if error %}is-invalid{% endif %}"
+        placeholder="{{ placeholder }}"
+        aria-describedby="{% if help_text %}{{ help_id }}{% endif %} {% if error %}{{ error_id }}{% endif %}"
+        aria-invalid="{{ 'true' if error else 'false' }}"
+        {% if required %}required{% endif %}
+        {% for key, val in kwargs.items() %}{{ key }}="{{ val }}" {% endfor %}>{{ value or '' }}</textarea>
+    
+    {% elif type == 'select' %}
+      <select 
+        id="{{ name }}" 
+        name="{{ name }}" 
+        class="form-select {% if error %}is-invalid{% endif %}"
+        aria-describedby="{% if help_text %}{{ help_id }}{% endif %} {% if error %}{{ error_id }}{% endif %}"
+        aria-invalid="{{ 'true' if error else 'false' }}"
+        {% if required %}required{% endif %}
+        {% for key, val in kwargs.items() %}{{ key }}="{{ val }}" {% endfor %}>
+        <option value="">-- Sélectionner --</option>
+        {% if kwargs.get('options') %}
+          {% for opt_val, opt_label in kwargs.get('options', []) %}
+          <option value="{{ opt_val }}" {% if opt_val == value %}selected{% endif %}>{{ opt_label }}</option>
+          {% endfor %}
+        {% endif %}
+      </select>
+    
+    {% elif type == 'checkbox' %}
+      <div class="form-check">
+        <input 
+          type="checkbox" 
+          id="{{ name }}" 
+          name="{{ name }}" 
+          class="form-check-input {% if error %}is-invalid{% endif %}"
+          value="{{ value or '1' }}"
+          aria-describedby="{% if help_text %}{{ help_id }}{% endif %} {% if error %}{{ error_id }}{% endif %}"
+          aria-invalid="{{ 'true' if error else 'false' }}"
+          {% if kwargs.get('checked') %}checked{% endif %}
+          {% if required %}required{% endif %}>
+        <label class="form-check-label" for="{{ name }}">{{ label }}</label>
+      </div>
+    
+    {% elif type == 'radio' %}
+      <div class="form-check">
+        <input 
+          type="radio" 
+          id="{{ name }}" 
+          name="{{ name }}" 
+          class="form-check-input {% if error %}is-invalid{% endif %}"
+          value="{{ value or '1' }}"
+          aria-describedby="{% if help_text %}{{ help_id }}{% endif %} {% if error %}{{ error_id }}{% endif %}"
+          aria-invalid="{{ 'true' if error else 'false' }}"
+          {% if kwargs.get('checked') %}checked{% endif %}
+          {% if required %}required{% endif %}>
+        <label class="form-check-label" for="{{ name }}">{{ label }}</label>
+      </div>
+    
+    {% else %}
+      <input 
+        type="{{ type }}" 
+        id="{{ name }}" 
+        name="{{ name }}" 
+        class="form-control {% if error %}is-invalid{% endif %}"
+        placeholder="{{ placeholder }}"
+        value="{{ value or '' }}"
+        aria-describedby="{% if help_text %}{{ help_id }}{% endif %} {% if error %}{{ error_id }}{% endif %}"
+        aria-invalid="{{ 'true' if error else 'false' }}"
+        {% if required %}required{% endif %}
+        {% for key, val in kwargs.items() %}{{ key }}="{{ val }}" {% endfor %}>
+    {% endif %}
+
+    {% if help_text %}
+    <small id="{{ help_id }}" class="form-text text-muted d-block mt-2">{{ help_text }}</small>
+    {% endif %}
+    
+    {% if error %}
+    <div id="{{ error_id }}" class="invalid-feedback d-block mt-2">{{ error }}</div>
+    {% endif %}
+  </div>
+{% endmacro %}
+
+{# ===== ALERT BOX MACRO ===== #}
+{% macro alert_box(message, variant='info', dismissible=False, icon=None, title=None) %}
+  <div class="alert alert-{{ variant }} {% if dismissible %}alert-dismissible fade show{% endif %}" 
+       role="alert"
+       {% if variant == 'danger' or variant == 'warning' %}role="alert"{% else %}role="status"{% endif %}>
+    {% if icon %}<i data-feather="{{ icon }}" class="me-2"></i>{% endif %}
+    {% if title %}<strong>{{ title }}</strong><br>{% endif %}
+    {{ message }}
+    {% if dismissible %}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
+    {% endif %}
+  </div>
+{% endmacro %}
+
+{# ===== BADGE MACRO ===== #}
+{% macro badge(text, variant='primary', icon=None, pill=False) %}
+  <span class="badge bg-{{ variant }} {% if pill %}rounded-pill{% endif %}">
+    {% if icon %}<i data-feather="{{ icon }}" class="me-1" style="width: 14px; height: 14px;"></i>{% endif %}
+    {{ text }}
+  </span>
+{% endmacro %}
+
+{# ===== MODAL MACRO ===== #}
+{% macro modal(id, title, body, footer=None, size='md', centered=False, scrollable=False, static_backdrop=False) %}
+  <div class="modal fade" id="{{ id }}" tabindex="-1" aria-labelledby="{{ id }}_label" aria-hidden="true" aria-modal="true">
+    <div class="modal-dialog {% if size %}modal-{{ size }}{% endif %} {% if centered %}modal-dialog-centered{% endif %} {% if scrollable %}modal-dialog-scrollable{% endif %}">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="{{ id }}_label">{{ title }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+        </div>
+        <div class="modal-body">{{ body }}</div>
+        {% if footer %}
+        <div class="modal-footer">{{ footer }}</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% endmacro %}
+
+{# ===== LOADING SKELETON MACRO ===== #}
+{% macro loading_skeleton(variant='card', count=1, width='100%', height='100px') %}
+  {% for i in range(count) %}
+  {% if variant == 'card' %}
+    <div class="placeholder-glow">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">
+            <span class="placeholder col-6"></span>
+          </h5>
+          <p class="card-text">
+            <span class="placeholder col-7"></span>
+            <span class="placeholder col-4"></span>
+          </p>
+        </div>
+      </div>
+    </div>
+  {% elif variant == 'avatar' %}
+    <div class="placeholder-glow">
+      <span class="placeholder placeholder-lg rounded-circle" style="width: {{ height }}; height: {{ height }};"></span>
+    </div>
+  {% else %}
+    <div class="placeholder-glow">
+      <span class="placeholder" style="width: {{ width }}; height: {{ height }};"></span>
+    </div>
+  {% endif %}
+  {% endfor %}
+{% endmacro %}
+
+{# ===== EMPTY STATE MACRO ===== #}
+{% macro empty_state(icon, title, description, action_text=None, action_url=None, action_onclick=None) %}
+  <div class="text-center py-5">
+    <i data-feather="{{ icon }}" class="mb-3" style="width: 48px; height: 48px; color: #ccc;"></i>
+    <h5 class="text-muted">{{ title }}</h5>
+    <p class="text-muted small mb-3">{{ description }}</p>
+    {% if action_text %}
+      {% if action_url %}
+        {{ button(action_text, href=action_url, variant='primary', size='sm') }}
+      {% elif action_onclick %}
+        {{ button(action_text, onclick=action_onclick, variant='primary', size='sm') }}
+      {% endif %}
+    {% endif %}
+  </div>
+{% endmacro %}
+
+{# ===== CARD MACRO ===== #}
+{% macro card(title, body, footer=None, color_accent=None, clickable=False, onclick=None) %}
+  <div class="card {% if color_accent %}border-{{ color_accent }}{% endif %} {% if clickable %}shadow-md {% endif %}"
+       {% if clickable and onclick %}onclick="{{ onclick }}" style="cursor: pointer;"{% endif %}>
+    {% if title %}
+    <div class="card-header">
+      <h5 class="mb-0">{{ title }}</h5>
+    </div>
+    {% endif %}
+    <div class="card-body">{{ body }}</div>
+    {% if footer %}
+    <div class="card-footer">{{ footer }}</div>
+    {% endif %}
+  </div>
+{% endmacro %}
+
+{# ===== HELPER: NAV LINK WITH ARIA-CURRENT ===== #}
+{% macro nav_link(url, text, icon=None, is_active=False) %}
+  <a class="nav-link{% if is_active %} active{% endif %}" 
+     href="{{ url }}"
+     {% if is_active %}aria-current="page"{% endif %}>
+    {% if icon %}<i data-feather="{{ icon }}" class="me-1"></i>{% endif %}
+    {{ text }}
+  </a>
+{% endmacro %}

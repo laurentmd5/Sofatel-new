@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+{% from 'pagination_macro.html' import render_pagination, render_per_page_selector %}
+
+{% block title %}Gérer les utilisateurs - Sofatelcom{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3 mb-0">
+                <i data-feather="users" class="me-2"></i>
+                Gestion des utilisateurs
+                <span class="badge bg-primary ms-2">{{ users.total }} utilisateur(s)</span>
+            </h1>
+            <a href="{{ url_for('create_user') }}" class="btn btn-sofatelcom-primary">
+                <i data-feather="user-plus" class="me-2"></i>
+                Nouvel utilisateur
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Filtres -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-2">
+                        <select class="form-select" id="roleFilter">
+                            <option value="">Tous les rôles</option>
+                            <option value="chef_pur">Chef PUR</option>
+                            <option value="chef_pilote">Chef Pilote</option>
+                            <option value="chef_zone">Chef Zone</option>
+                            <option value="technicien">Technicien</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <select class="form-select" id="statusFilter">
+                            <option value="">Tous les statuts</option>
+                            <option value="actif">Actifs</option>
+                            <option value="inactif">Inactifs</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <input type="text" class="form-control" id="searchInput"
+                            placeholder="Rechercher par nom, prénom ou username...">
+                    </div>
+                    <div class="col-md-2 mb-2">
+                        <button class="btn btn-outline-secondary w-100" onclick="clearFilters()">
+                            <i data-feather="x" class="me-1"></i>
+                            Effacer
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Liste des utilisateurs -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-sofatelcom-primary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="list" class="me-2"></i>
+                    Liste des utilisateurs
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Utilisateur</th>
+                                <th>Rôle</th>
+                                <th>Contact</th>
+                                <th>Affectation</th>
+                                <th>Statut</th>
+                                <th>Créé le</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                            {% for user in users.items %}
+                            <tr class="user-row" data-role="{{ user.role }}"
+                                data-status="{{ 'actif' if user.actif else 'inactif' }}"
+                                data-search="{{ (user.nom + ' ' + user.prenom + ' ' + user.username)|lower }}">
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div
+                                            class="avatar-sm bg-sofatelcom-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3">
+                                            {{ user.prenom[0] if user.prenom else user.username[0] }}{{ user.nom[0] if
+                                            user.nom else '' }}
+                                        </div>
+                                        <div>
+                                            <div class="fw-bold">{{ user.prenom }} {{ user.nom }}</div>
+                                            <div class="text-muted small">@{{ user.username }}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge 
+                                        {% if user.role == 'chef_pur' %}bg-danger
+                                        {% elif user.role == 'chef_pilote' %}bg-warning
+                                        {% elif user.role == 'chef_zone' %}bg-info
+                                        {% else %}bg-success
+                                        {% endif %}">
+                                        {{ user.get_role_display() }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div>{{ user.email }}</div>
+                                    {% if user.telephone %}
+                                    <div class="text-muted small">{{ user.telephone }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if user.zone_relation %}
+                                    <div><strong>Zone:</strong> {{ user.zone_relation.nom }} ({{ user.zone_relation.code
+                                        }})</div>
+                                    {% endif %}
+                                    {% if user.service %}
+                                    <div><strong>Service:</strong> {{ user.service }}</div>
+                                    {% endif %}
+                                    {% if user.commune %}
+                                    <div><strong>Commune:</strong> {{ user.commune }}</div>
+                                    {% endif %}
+                                    {% if user.quartier %}
+                                    <div><strong>Quartier:</strong> {{ user.quartier }}</div>
+                                    {% endif %}
+                                    {% if user.technologies %}
+                                    <div><strong>Technologies:</strong> {{ user.technologies }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input status-toggle" type="checkbox" {% if user.actif
+                                            %}checked{% endif %} data-user-id="{{ user.id }}" {% if
+                                            user.id==current_user.id %}disabled{% endif %}>
+                                        <label class="form-check-label">
+                                            {{ 'Actif' if user.actif else 'Inactif' }}
+                                        </label>
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if user.date_creation %}
+                                    {{ user.date_creation.strftime('%d/%m/%Y') }}
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <a href="{{ url_for('edit_user', user_id=user.id) }}"
+                                            class="btn btn-outline-primary" title="Modifier">
+                                            <i data-feather="edit-2"></i>
+                                        </a>
+                                        {% if user.id != current_user.id %}
+                                        <button class="btn btn-outline-danger delete-user" data-user-id="{{ user.id }}"
+                                            data-username="{{ user.username }}" title="Supprimer">
+                                            <i data-feather="trash-2"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination et contrôles -->
+                <div class="card-footer bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        {{ render_per_page_selector(request.args.get('per_page', '25'), 'manage_users') }}
+                        {{ render_pagination(users, 'manage_users') }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de confirmation de suppression -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmer la suppression</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Êtes-vous sûr de vouloir supprimer l'utilisateur <strong id="deleteUsername"></strong> ?</p>
+                <p class="text-danger">Cette action est irréversible.</p>
+                <!-- Zone pour afficher des détails d'erreur/actions à effectuer si la suppression échoue -->
+                <div id="deleteErrorDetail" class="alert alert-warning d-none mt-3" role="alert" aria-live="polite">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-danger" id="confirmDelete">Supprimer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const roleFilter = document.getElementById('roleFilter');
+        const statusFilter = document.getElementById('statusFilter');
+        const searchInput = document.getElementById('searchInput');
+        const userRows = document.querySelectorAll('.user-row');
+
+        // Filtrage des utilisateurs
+        function filterUsers() {
+            const roleValue = roleFilter.value.toLowerCase();
+            const statusValue = statusFilter.value.toLowerCase();
+            const searchValue = searchInput.value.toLowerCase();
+
+            userRows.forEach(row => {
+                const userRole = row.dataset.role.toLowerCase();
+                const userStatus = row.dataset.status.toLowerCase();
+                const userSearch = row.dataset.search.toLowerCase();
+
+                const matchRole = !roleValue || userRole === roleValue;
+                const matchStatus = !statusValue || userStatus === statusValue;
+                const matchSearch = !searchValue || userSearch.includes(searchValue);
+
+                if (matchRole && matchStatus && matchSearch) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        roleFilter.addEventListener('change', filterUsers);
+        statusFilter.addEventListener('change', filterUsers);
+        searchInput.addEventListener('input', filterUsers);
+
+        // Effacer les filtres
+        window.clearFilters = function () {
+            roleFilter.value = '';
+            statusFilter.value = '';
+            searchInput.value = '';
+            filterUsers();
+        };
+
+        // Toggle du statut utilisateur
+        document.querySelectorAll('.status-toggle').forEach(toggle => {
+            toggle.addEventListener('change', function () {
+                const userId = this.dataset.userId;
+                const actif = this.checked;
+
+                fetch(`/toggle-user-status/${userId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ actif: actif })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Mettre à jour le label
+                            const label = this.nextElementSibling;
+                            label.textContent = actif ? 'Actif' : 'Inactif';
+
+                            // Mettre à jour l'attribut data-status pour le filtrage
+                            const row = this.closest('.user-row');
+                            row.dataset.status = actif ? 'actif' : 'inactif';
+
+                            // Afficher un message de succès
+                            showAlert(data.message, 'success');
+                        } else {
+                            // Restaurer l'état précédent en cas d'erreur
+                            this.checked = !actif;
+                            showAlert(data.error, 'danger');
+                        }
+                    })
+                    .catch(error => {
+                        // Restaurer l'état précédent en cas d'erreur
+                        this.checked = !actif;
+                        showAlert('Erreur de connexion', 'danger');
+                    });
+            });
+        });
+
+        // Suppression d'utilisateur
+        let userToDelete = null;
+
+        document.querySelectorAll('.delete-user').forEach(button => {
+            button.addEventListener('click', function () {
+                userToDelete = this.dataset.userId;
+                document.getElementById('deleteUsername').textContent = this.dataset.username;
+                new bootstrap.Modal(document.getElementById('deleteModal')).show();
+            });
+        });
+
+        document.getElementById('confirmDelete').addEventListener('click', function () {
+            const confirmBtn = this;
+            if (userToDelete) {
+                // Désactiver le bouton pendant la requête
+                confirmBtn.disabled = true;
+                // Cacher la zone de détail d'erreur
+                const errDiv = document.getElementById('deleteErrorDetail');
+                errDiv.classList.add('d-none');
+                errDiv.innerHTML = '';
+
+                fetch(`/delete-user/${userToDelete}`, {
+                    method: 'POST'
+                })
+                    .then(response => {
+                        // keep status for later
+                        return response.json().then(data => ({ status: response.status, ok: response.ok, data }));
+                    })
+                    .then(({ status, ok, data }) => {
+                        if (ok) {
+                            // Succès : supprimer la ligne et fermer
+                            document.querySelector(`[data-user-id="${userToDelete}"]`).closest('tr').remove();
+                            showAlert(data.message, 'success');
+                            bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
+                            userToDelete = null;
+                        } else {
+                            // Erreur : afficher message explicatif dans la modal (ne pas fermer)
+                            let message = data && data.error ? data.error : 'Erreur lors de la suppression.';
+
+                            if (status === 400) {
+                                // Dépendances bloquantes (interventions, imports, équipes, historique...) - guider l'utilisateur
+                                message += '<br><br><strong>Que faire :</strong><ul>' +
+                                    '<li>Réaffecter ou supprimer les interventions et demandes liées à cet utilisateur.</li>' +
+                                    '<li>Réassigner les équipes dont il est chef ou retirer sa participation aux équipes.</li>' +
+                                    '<li>Si l\'utilisateur possède un rôle élevé, vous pouvez d\'abord changer son rôle puis retenter la suppression.</li>' +
+                                    "<li>Si vous devez conserver l'historique, envisagez d'archiver plutôt que de supprimer l'utilisateur.</li>" +
+                                    '</ul>' +
+                                    `<div class="mt-2"><a href="/edit-user/${userToDelete}" class="btn btn-sm btn-outline-primary">Modifier l'utilisateur</a></div>`;
+                            } else if (status === 409) {
+                                // Contrainte d'intégrité (ex : activity_log non nullable)
+                                message += '<br><br><strong>Que faire :</strong><ul>' +
+                                    '<li>Réaffecter, archiver ou supprimer les enregistrements d\'activité liés à cet utilisateur (ces données empêchent la suppression).</li>' +
+                                    '<li>Contacter l\'administrateur si vous n\'avez pas les droits nécessaires pour modifier ces enregistrements.</li>' +
+                                    '</ul>' +
+                                    `<div class="mt-2"><a href="/edit-user/${userToDelete}" class="btn btn-sm btn-outline-primary">Modifier l'utilisateur</a></div>`;
+                            } else {
+                                message += '<br><br>Si le problème persiste, contactez l\'administrateur.';
+                            }
+
+                            errDiv.innerHTML = message;
+                            errDiv.classList.remove('d-none');
+                            // Also show a toast alert for visibility
+                            showAlert(data.error || 'Erreur lors de la suppression', 'danger');
+                        }
+                    })
+                    .catch(error => {
+                        showAlert('Erreur de connexion', 'danger');
+                        bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
+                        userToDelete = null;
+                    })
+                    .finally(() => {
+                        confirmBtn.disabled = false;
+                    });
+            }
+        });
+
+        // Fonction utilitaire pour afficher les alertes
+        function showAlert(message, type) {
+            const alertContainer = document.querySelector('.container-fluid.mt-3');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type} alert-dismissible fade show`;
+            alert.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+            alertContainer.appendChild(alert);
+
+            // Supprimer automatiquement après 8 secondes
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.remove();
+                }
+            }, 8000);
+        }
+    });
+</script>
+
+<style>
+    .avatar-sm {
+        width: 40px;
+        height: 40px;
+        font-size: 14px;
+        font-weight: bold;
+    }
+</style>
+{% endblock %}

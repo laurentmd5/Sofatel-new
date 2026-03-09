@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h1 class="mb-3">
+                <i class="fas fa-history"></i> Audit Trail Dashboard
+            </h1>
+            <p class="text-muted">System-wide audit log for compliance and debugging</p>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-primary">
+                <div class="card-body">
+                    <h6 class="card-title text-muted">Total Entries</h6>
+                    <h2 class="mb-0">{{ total }}</h2>
+                    <small class="text-muted">in last {{ filters.days }} days</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-success">
+                <div class="card-body">
+                    <h6 class="card-title text-muted">Unique Actors</h6>
+                    <h2 class="mb-0">{{ actors | length }}</h2>
+                    <small class="text-muted">Users making changes</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-info">
+                <div class="card-body">
+                    <h6 class="card-title text-muted">Action Types</h6>
+                    <h2 class="mb-0">{{ action_summary | length }}</h2>
+                    <small class="text-muted">Different actions logged</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-warning">
+                <div class="card-body">
+                    <h6 class="card-title text-muted">Entity Types</h6>
+                    <h2 class="mb-0">{{ entity_types | length }}</h2>
+                    <small class="text-muted">Resource types affected</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-filter"></i> Filters</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="form-inline">
+                <div class="form-group mr-3">
+                    <label for="action" class="mr-2">Action:</label>
+                    <input type="text" class="form-control" id="action" name="action" 
+                           value="{{ filters.action }}" placeholder="Filter by action...">
+                </div>
+                
+                <div class="form-group mr-3">
+                    <label for="entity_type" class="mr-2">Entity Type:</label>
+                    <select class="form-control" id="entity_type" name="entity_type">
+                        <option value="">All</option>
+                        {% for type in entity_types %}
+                            <option value="{{ type }}" {% if filters.entity_type == type %}selected{% endif %}>
+                                {{ type | upper }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group mr-3">
+                    <label for="actor_id" class="mr-2">Actor:</label>
+                    <select class="form-control" id="actor_id" name="actor_id">
+                        <option value="">All Users</option>
+                        {% for actor in actors %}
+                            <option value="{{ actor.id }}" {% if filters.actor_id == actor.id %}selected{% endif %}>
+                                {{ actor.prenom }} {{ actor.nom }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group mr-3">
+                    <label for="days" class="mr-2">Days:</label>
+                    <select class="form-control" id="days" name="days">
+                        <option value="1" {% if filters.days == 1 %}selected{% endif %}>Last 24h</option>
+                        <option value="7" {% if filters.days == 7 %}selected{% endif %}>Last 7 days</option>
+                        <option value="30" {% if filters.days == 30 %}selected{% endif %}>Last 30 days</option>
+                        <option value="90" {% if filters.days == 90 %}selected{% endif %}>Last 90 days</option>
+                    </select>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Filter</button>
+                <a href="{{ url_for('audit_admin.audit_dashboard') }}" class="btn btn-secondary ml-2">Clear</a>
+                <button type="button" class="btn btn-outline-secondary ml-2" id="exportBtn">
+                    <i class="fas fa-download"></i> Export
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Audit Logs Table -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-table"></i> Audit Entries</h5>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 180px;">Timestamp</th>
+                        <th style="width: 150px;">Actor</th>
+                        <th style="width: 200px;">Action</th>
+                        <th style="width: 120px;">Entity Type</th>
+                        <th style="width: 100px;">Entity ID</th>
+                        <th style="width: 200px;">Details</th>
+                        <th style="width: 120px;">IP Address</th>
+                        <th style="width: 80px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if logs %}
+                        {% for log in logs %}
+                            <tr>
+                                <td class="small">
+                                    <span title="{{ log.created_at }}">
+                                        {{ log.created_at[:10] if log.created_at else '' }}
+                                        <br>
+                                        {{ log.created_at[11:19] if log.created_at else '' }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if log.actor %}
+                                        <a href="{{ url_for('audit_admin.user_activity', user_id=log.actor.id) }}" 
+                                           class="text-primary">
+                                            {{ log.actor.full_name }}
+                                        </a>
+                                        <br><small class="text-muted">{{ log.actor.username }}</small>
+                                    {% else %}
+                                        <span class="text-muted">Unknown</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge badge-info">{{ log.action }}</span>
+                                </td>
+                                <td>
+                                    <code>{{ log.entity_type }}</code>
+                                </td>
+                                <td>
+                                    {% if log.entity_type and log.entity_id %}
+                                        <a href="{{ url_for('audit_admin.entity_history', entity_type=log.entity_type, entity_id=log.entity_id) }}"
+                                           class="text-primary">
+                                            #{{ log.entity_id }}
+                                        </a>
+                                    {% else %}
+                                        <code>#{{ log.entity_id }}</code>
+                                    {% endif %}
+                                </td>
+                                <td class="small">
+                                    {% if log.new_value or log.old_value %}
+                                        <button class="btn btn-xs btn-outline-secondary" 
+                                                onclick="toggleDetails(this, {{ loop.index0 }})">
+                                            Show
+                                        </button>
+                                        <div class="details-row" id="details-{{ loop.index0 }}" style="display: none; margin-top: 10px;">
+                                            {% if log.old_value %}
+                                                <p><strong>Before:</strong></p>
+                                                <pre class="bg-light p-2"><code>{{ log.old_value | tojson(indent=2) }}</code></pre>
+                                            {% endif %}
+                                            {% if log.new_value %}
+                                                <p><strong>After:</strong></p>
+                                                <pre class="bg-light p-2"><code>{{ log.new_value | tojson(indent=2) }}</code></pre>
+                                            {% endif %}
+                                        </div>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="small">
+                                    <code>{{ log.ip_address or '—' }}</code>
+                                </td>
+                                <td>
+                                    {% if log.entity_type and log.entity_id %}
+                                        <a href="{{ url_for('audit_admin.entity_history', entity_type=log.entity_type, entity_id=log.entity_id) }}"
+                                           class="btn btn-xs btn-outline-primary" title="View entity history">
+                                            <i class="fas fa-history"></i>
+                                        </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-3">
+                                No audit entries found
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if pagination.pages > 1 %}
+        <nav class="mt-3">
+            <ul class="pagination justify-content-center">
+                {% if pagination.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('audit_admin.audit_dashboard', page=1, **filters) }}">First</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('audit_admin.audit_dashboard', page=pagination.prev_num, **filters) }}">← Prev</a>
+                    </li>
+                {% endif %}
+                
+                <li class="page-item active">
+                    <span class="page-link">Page {{ pagination.page }} of {{ pagination.pages }}</span>
+                </li>
+                
+                {% if pagination.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('audit_admin.audit_dashboard', page=pagination.next_num, **filters) }}">Next →</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('audit_admin.audit_dashboard', page=pagination.pages, **filters) }}">Last</a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    {% endif %}
+
+    <!-- Action Summary -->
+    {% if action_summary %}
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-bar"></i> Action Summary (last {{ filters.days }} days)</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for action, count in action_summary.items() %}
+                        <div class="col-md-4 mb-3">
+                            <div class="card border-light">
+                                <div class="card-body">
+                                    <h6 class="card-title">{{ action }}</h6>
+                                    <h4 class="mb-0">{{ count }}</h4>
+                                    <small class="text-muted">occurrences</small>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<style>
+    .btn-xs {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+    }
+    
+    .details-row {
+        background-color: #f8f9fa;
+        border-left: 4px solid #007bff;
+        padding: 10px;
+        margin-top: 5px;
+    }
+    
+    .details-row pre {
+        margin: 0;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    
+    table.table-hover tbody tr:hover {
+        background-color: #f5f5f5;
+    }
+</style>
+
+<script>
+function toggleDetails(btn, index) {
+    const details = document.getElementById('details-' + index);
+    if (details.style.display === 'none') {
+        details.style.display = 'block';
+        btn.textContent = 'Hide';
+    } else {
+        details.style.display = 'none';
+        btn.textContent = 'Show';
+    }
+}
+
+document.getElementById('exportBtn').addEventListener('click', function() {
+    fetch('{{ url_for("audit_admin.api_export") }}?days={{ filters.days }}')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                downloadCSV(data.rows, 'audit_trail.csv');
+            }
+        });
+});
+
+function downloadCSV(rows, filename) {
+    let csv = rows.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+    let blob = new Blob([csv], { type: 'text/csv' });
+    let url = window.URL.createObjectURL(blob);
+    let a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+</script>
+{% endblock %}

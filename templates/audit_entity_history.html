@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h1 class="mb-3">
+                <i class="fas fa-history"></i> Entity Audit Trail
+            </h1>
+            <p class="text-muted">
+                Complete change history for
+                <code>{{ entity_type }}</code>
+                <span class="badge badge-primary">#{{ entity_id }}</span>
+            </p>
+            <a href="{{ url_for('audit_admin.audit_dashboard') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Audit Dashboard
+            </a>
+        </div>
+    </div>
+
+    {% if trail %}
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-timeline"></i> Timeline
+                    <span class="badge badge-secondary">{{ trail | length }} entries</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="timeline">
+                    {% for entry in trail %}
+                        <div class="timeline-item">
+                            <div class="timeline-marker">
+                                <span class="badge badge-info">{{ loop.revindex }}</span>
+                            </div>
+                            <div class="timeline-content">
+                                <div class="row mb-2">
+                                    <div class="col-md-8">
+                                        <h6 class="mb-1">
+                                            <strong>{{ entry.action }}</strong>
+                                            {% if entry.actor %}
+                                                by <a href="{{ url_for('audit_admin.user_activity', user_id=entry.actor.id) }}"
+                                                      class="text-primary">
+                                                    {{ entry.actor.full_name }}
+                                                </a>
+                                            {% endif %}
+                                        </h6>
+                                        <small class="text-muted">
+                                            {{ entry.created_at }}
+                                        </small>
+                                    </div>
+                                    <div class="col-md-4 text-right">
+                                        {% if entry.ip_address %}
+                                            <small class="text-muted">
+                                                <i class="fas fa-network-wired"></i> {{ entry.ip_address }}
+                                            </small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+
+                                <!-- Changes -->
+                                {% if entry.old_value or entry.new_value %}
+                                    <div class="card card-sm border-light mt-2">
+                                        <div class="card-body p-3">
+                                            <div class="row">
+                                                {% if entry.old_value %}
+                                                    <div class="col-md-6">
+                                                        <h6 class="text-danger mb-2">
+                                                            <i class="fas fa-minus-circle"></i> Previous Value
+                                                        </h6>
+                                                        <pre class="bg-danger bg-opacity-10 p-2 rounded"><code>{{ entry.old_value | tojson(indent=2) }}</code></pre>
+                                                    </div>
+                                                {% endif %}
+                                                {% if entry.new_value %}
+                                                    <div class="col-md-6">
+                                                        <h6 class="text-success mb-2">
+                                                            <i class="fas fa-plus-circle"></i> New Value
+                                                        </h6>
+                                                        <pre class="bg-success bg-opacity-10 p-2 rounded"><code>{{ entry.new_value | tojson(indent=2) }}</code></pre>
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endif %}
+
+                                <!-- Details -->
+                                {% if entry.details %}
+                                    <div class="mt-2">
+                                        <small class="text-muted">Details:</small>
+                                        <pre class="bg-light p-2 rounded"><code>{{ entry.details | tojson(indent=2) }}</code></pre>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i>
+            No audit trail entries found for this entity.
+        </div>
+    {% endif %}
+</div>
+
+<style>
+    .timeline {
+        position: relative;
+        padding: 20px 0;
+    }
+
+    .timeline-item {
+        display: flex;
+        margin-bottom: 40px;
+        position: relative;
+    }
+
+    .timeline-item:not(:last-child)::before {
+        content: '';
+        position: absolute;
+        left: 20px;
+        top: 40px;
+        height: 100%;
+        width: 2px;
+        background-color: #dee2e6;
+    }
+
+    .timeline-marker {
+        flex-shrink: 0;
+        margin-right: 20px;
+        margin-top: 5px;
+    }
+
+    .timeline-content {
+        flex-grow: 1;
+    }
+
+    .card-sm {
+        font-size: 0.875rem;
+    }
+
+    .card-sm .card-body {
+        padding: 0.5rem !important;
+    }
+
+    pre {
+        margin: 0;
+        font-size: 0.8rem;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    code {
+        color: #555;
+    }
+
+    .bg-danger {
+        background-color: #f8d7da !important;
+    }
+
+    .bg-success {
+        background-color: #d4edda !important;
+    }
+
+    .badge {
+        font-size: 0.8rem;
+    }
+</style>
+{% endblock %}

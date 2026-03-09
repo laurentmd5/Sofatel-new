@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+{% from 'pagination_macro.html' import render_pagination, render_per_page_selector %}
+
+{% block title %}Gérer l'équipe - Sofatelcom{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="h3 mb-4">
+            <i data-feather="users" class="me-2"></i>
+            Gestion de l'équipe : {{ equipe.nom_equipe }}
+        </h1>
+    </div>
+</div>
+
+<!-- Informations de l'équipe -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-sofatelcom-primary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="info" class="me-2"></i>
+                    Informations de l'équipe
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p class="mb-2">
+                            <strong>Nom:</strong> {{ equipe.nom_equipe }}
+                        </p>
+                        <p class="mb-2">
+                            <strong>Date:</strong> {{ equipe.date_creation.strftime('%d/%m/%Y') }}
+                        </p>
+                        <p class="mb-2">
+                            <strong>Zone:</strong> {{ equipe.zone }}
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-2">
+                            <strong>Technologies:</strong>
+                            <span class="badge bg-primary">{{ equipe.technologies }}</span>
+                        </p>
+                        <p class="mb-2">
+                            <strong>Service:</strong>
+                            <span class="badge bg-success">{{ equipe.service.replace(',', ' + ') }}</span>
+                        </p>
+                        {% if equipe.prestataire %}
+                        <p class="mb-2">
+                            <strong>Prestataire:</strong>
+                            <span class="badge bg-info">{{ equipe.prestataire }}</span>
+                        </p>
+                        {% endif %}
+                        <p class="mb-2">
+                            <strong>Statut:</strong>
+                            <span class="badge bg-{{ 'success' if equipe.actif else 'secondary' }}">
+                                {{ 'Active' if equipe.actif else 'Inactive' }}
+                            </span>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between mt-3">
+                    <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+                        <i data-feather="arrow-left" class="me-2"></i>
+                        Retour
+                    </a>
+
+                    <div>
+                        <a href="{{ url_for('teams.edit_team', equipe_id=equipe.id) }}" class="btn btn-primary me-2">
+                            <i data-feather="edit" class="me-2"></i>
+                            Modifier
+                        </a>
+                        {% if equipe.actif %}
+                        <button class="btn btn-warning" onclick="toggleEquipeStatus({{ equipe.id }}, false)">
+                            <i data-feather="pause" class="me-2"></i>
+                            Désactiver
+                        </button>
+                        {% else %}
+                        <button class="btn btn-success" onclick="toggleEquipeStatus({{ equipe.id }}, true)">
+                            <i data-feather="play" class="me-2"></i>
+                            Activer
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-sofatelcom-secondary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="bar-chart" class="me-2"></i>
+                    Statistiques
+                </h5>
+            </div>
+            <div class="card-body text-center">
+                <div class="row">
+                    <div class="col-6">
+                        <h4 class="text-primary">{{ equipe.membres|length }}</h4>
+                        <small>Total membres</small>
+                    </div>
+                    <div class="col-6">
+                        <h4 class="text-success">
+                            {{ equipe.membres|selectattr('type_membre', 'equalto', 'technicien')|list|length }}
+                        </h4>
+                        <small>Techniciens</small>
+                    </div>
+                </div>
+                <hr>
+                <div class="row">
+                    <div class="col-12">
+                        <h5 class="text-info">
+                            {{ equipe.membres|selectattr('type_membre', 'equalto', 'accompagnant')|list|length }}
+                        </h5>
+                        <small>Accompagnants</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Ajouter un membre -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i data-feather="user-plus" class="me-2"></i>
+                    Ajouter un membre
+                </h5>
+            </div>
+            <div class="card-body">
+                <form id="addMembreForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Nom</label>
+                            <input type="text" class="form-control" id="nom" required>
+                        </div>
+
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Prénom</label>
+                            <input type="text" class="form-control" id="prenom" required>
+                        </div>
+
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Téléphone</label>
+                            <input type="tel" class="form-control" id="telephone" required placeholder="221xxxxxxxx">
+                        </div>
+
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Type</label>
+                            <select class="form-select" id="type_membre" required onchange="toggleTechnicienSelect()">
+                                <option value="">Sélectionner</option>
+                                <option value="technicien">Technicien</option>
+                                <option value="accompagnant">Accompagnant</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row" id="technicienSelectContainer" style="display: none;">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Technicien référencé (optionnel)</label>
+                            <select class="form-select" id="technicien_id">
+                                <option value="">Nouveau technicien / Non référencé</option>
+                                {% for technicien in techniciens %}
+                                <option value="{{ technicien.id }}" data-nom="{{ technicien.nom }}"
+                                    data-prenom="{{ technicien.prenom }}" data-telephone="{{ technicien.telephone }}">
+                                    {{ technicien.prenom }} {{ technicien.nom }} ({{ technicien.technologies }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">Si sélectionné, les informations seront pré-remplies</small>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        <i data-feather="plus" class="me-2"></i>
+                        Ajouter le membre
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Liste des membres -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i data-feather="users" class="me-2"></i>
+                    Membres de l'équipe
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Nom</th>
+                                <th>Prénom</th>
+                                <th>Téléphone</th>
+                                <th>Type</th>
+                                <th>Statut</th>
+                                <th width="120">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="membresTableBody">
+                            {% if equipe.membres %}
+                            {% for membre in equipe.membres %}
+                            <tr id="membre-{{ membre.id }}">
+                                <td>{{ membre.nom }}</td>
+                                <td>{{ membre.prenom }}</td>
+                                <td>
+                                    <a href="tel:{{ membre.telephone }}" class="text-decoration-none">
+                                        <i data-feather="phone" class="me-1" style="width: 16px; height: 16px;"></i>
+                                        {{ membre.telephone }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <span
+                                        class="badge bg-{{ 'primary' if membre.type_membre == 'technicien' else 'secondary' }}">
+                                        {{ membre.type_membre|title }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if membre.technicien_id %}
+                                    <span class="badge bg-success">
+                                        <i data-feather="check" style="width: 12px; height: 12px;"></i>
+                                        Référencé
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-warning">
+                                        <i data-feather="user" style="width: 12px; height: 12px;"></i>
+                                        Externe
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-danger"
+                                        onclick="removeMembre({{ membre.id }})" title="Supprimer">
+                                        <i data-feather="trash-2" style="width: 16px; height: 16px;"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="text-center py-4">
+                                    <i data-feather="users" style="width: 48px; height: 48px;"
+                                        class="text-muted mb-3"></i>
+                                    <h6 class="text-muted">Aucun membre dans l'équipe</h6>
+                                    <p class="text-muted">Commencez par ajouter des techniciens et accompagnants</p>
+                                </td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    window.equipeId = {{ equipe.id }};
+</script>
+<script src="{{ url_for('static', filename='js/teams.js') }}"></script>
+{% endblock %}

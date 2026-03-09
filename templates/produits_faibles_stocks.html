@@ -1,0 +1,740 @@
+{% extends "base.html" %}
+
+{% block title %}Produits en Faible Stock - Gestion des Stocks{% endblock %}
+
+{% block content %}
+<style>
+    .page-header {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        color: white;
+        padding: 2rem 0;
+        margin-bottom: 2rem;
+        border-radius: 0 0 10px 10px;
+    }
+
+    .page-header h1 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 700;
+    }
+
+    .page-header p {
+        margin: 0.5rem 0 0 0;
+        opacity: 0.9;
+        font-size: 1rem;
+    }
+
+    .stat-boxes {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-box {
+        background: white;
+        border-radius: 10px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .stat-box-icon {
+        font-size: 2.5rem;
+        width: 60px;
+        height: 60px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .stat-box-icon.danger {
+        background: rgba(220, 53, 69, 0.1);
+        color: #dc3545;
+    }
+
+    .stat-box-icon.warning {
+        background: rgba(255, 193, 7, 0.1);
+        color: #ffc107;
+    }
+
+    .stat-box-icon.info {
+        background: rgba(23, 162, 184, 0.1);
+        color: #17a2b8;
+    }
+
+    .stat-box-content h3 {
+        margin: 0;
+        font-size: 0.9rem;
+        color: #666;
+        text-transform: uppercase;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+    }
+
+    .stat-box-content .value {
+        font-size: 2rem;
+        font-weight: 700;
+        margin: 0.5rem 0 0 0;
+        color: #000;
+    }
+
+    .filters-section {
+        background: white;
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+
+    .filters-section h5 {
+        margin-top: 0;
+        margin-bottom: 1rem;
+        font-weight: 600;
+        color: #333;
+    }
+
+    .filter-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+        align-items: end;
+    }
+
+    .form-group label {
+        font-weight: 500;
+        color: #555;
+        font-size: 0.9rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .form-control, .form-select {
+        border-radius: 6px;
+        border: 1px solid #ddd;
+        padding: 0.6rem 0.9rem;
+    }
+
+    .form-control:focus, .form-select:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .btn {
+        padding: 0.6rem 1.2rem;
+        border-radius: 6px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        border: none;
+        color: white;
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        color: white;
+    }
+
+    .btn-outline-secondary {
+        border: 1px solid #ddd;
+        color: #666;
+        background: transparent;
+    }
+
+    .btn-outline-secondary:hover {
+        background: #f8f9fa;
+        border-color: #999;
+    }
+
+    .btn-sm {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.85rem;
+    }
+
+    .btn-danger {
+        background: #dc3545;
+        border: none;
+        color: white;
+    }
+
+    .btn-danger:hover {
+        background: #c82333;
+        color: white;
+    }
+
+    .table-responsive {
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .table {
+        margin-bottom: 0;
+        width: 100%;
+    }
+
+    .table thead {
+        background: #f8f9fa;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+        letter-spacing: 0.5px;
+    }
+
+    .table th {
+        padding: 1.2rem;
+        border: none;
+        vertical-align: middle;
+        color: #555;
+    }
+
+    .table tbody tr {
+        border-bottom: 1px solid #f0f0f0;
+        transition: all 0.2s ease;
+    }
+
+    .table tbody tr:hover {
+        background: rgba(102, 126, 234, 0.03);
+    }
+
+    .table td {
+        padding: 1.2rem;
+        vertical-align: middle;
+    }
+
+    .badge {
+        padding: 0.5rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+
+    .badge-danger {
+        background: rgba(220, 53, 69, 0.1);
+        color: #dc3545;
+    }
+
+    .badge-warning {
+        background: rgba(255, 193, 7, 0.1);
+        color: #ffc107;
+    }
+
+    .badge-success {
+        background: rgba(40, 167, 69, 0.1);
+        color: #28a745;
+    }
+
+    .badge-info {
+        background: rgba(23, 162, 184, 0.1);
+        color: #17a2b8;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1.5rem;
+        color: #999;
+    }
+
+    .empty-state-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .empty-state h3 {
+        color: #666;
+        margin-bottom: 0.5rem;
+    }
+
+    .breadcrumb {
+        background: transparent;
+        padding: 0;
+        margin-bottom: 1.5rem;
+    }
+
+    .breadcrumb-item.active {
+        color: #667eea;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .loading-spinner {
+        display: none;
+        text-align: center;
+        padding: 2rem;
+    }
+
+    .loading-spinner.show {
+        display: block;
+    }
+
+    .spinner-border {
+        width: 2rem;
+        height: 2rem;
+        border-width: 0.2em;
+        color: #667eea;
+    }
+
+    .alert {
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+    }
+
+    .export-section {
+        margin-top: 2rem;
+        padding-top: 2rem;
+        border-top: 1px solid #f0f0f0;
+    }
+
+    .export-buttons {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+
+    @media (max-width: 768px) {
+        .page-header h1 {
+            font-size: 1.5rem;
+        }
+
+        .filter-row {
+            grid-template-columns: 1fr;
+        }
+
+        .stat-boxes {
+            grid-template-columns: 1fr;
+        }
+
+        .table {
+            font-size: 0.85rem;
+        }
+
+        .table th, .table td {
+            padding: 0.75rem;
+        }
+
+        .action-buttons {
+            flex-direction: column;
+        }
+
+        .action-buttons .btn {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+</style>
+
+<div class="container-fluid px-4 py-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('stock.liste_produits') }}">Tableau de bord</a></li>
+            <li class="breadcrumb-item active text-danger">Produits en Faible Stock</li>
+        </ol>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="container-fluid">
+            <h1><i class="fas fa-exclamation-triangle"></i> Produits en Faible Stock</h1>
+            <p>Gestion des produits ayant une quantité inférieure au seuil d'alerte</p>
+        </div>
+    </div>
+
+    <!-- Statistics Boxes -->
+    <div class="stat-boxes">
+        <div class="stat-box">
+            <div class="stat-box-icon danger">
+                <i class="fas fa-box"></i>
+            </div>
+            <div class="stat-box-content">
+                <h3>Produits en alerte</h3>
+                <div class="value" id="statTotalFaibles">0</div>
+            </div>
+        </div>
+
+        <div class="stat-box">
+            <div class="stat-box-icon warning">
+                <i class="fas fa-coins"></i>
+            </div>
+            <div class="stat-box-content">
+                <h3>Valeur à réapprovisionner</h3>
+                <div class="value" id="statValeurTotal">0 FCFA</div>
+            </div>
+        </div>
+        
+
+        <div class="stat-box">
+            <div class="stat-box-icon info">
+                <i class="fas fa-shopping-cart"></i>
+            </div>
+            <div class="stat-box-content">
+                <h3>Quantité manquante</h3>
+                <div class="value" id="statQtyManquante">0</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters Section -->
+    <div class="filters-section">
+        <h5><i class="fas fa-filter"></i> Filtres</h5>
+        <div class="filter-row">
+            <div class="form-group">
+                <label for="filterCategorie">Catégorie</label>
+                <select id="filterCategorie" class="form-select">
+                    <option value="">Toutes les catégories</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="filterEmplacement">Emplacement</label>
+                <select id="filterEmplacement" class="form-select">
+                    <option value="">Tous les emplacements</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="filterSeverity">Sévérité</label>
+                <select id="filterSeverity" class="form-select">
+                    <option value="">Tous les niveaux</option>
+                    <option value="danger">Critique (< 50% seuil)</option>
+                    <option value="warning">Moyen (50-100% seuil)</option>
+                </select>
+            </div>
+            <div>
+                <button id="btnReset" class="btn btn-outline-secondary w-100">
+                    <i class="fas fa-redo"></i> Réinitialiser
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="loading-spinner">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Chargement...</span>
+        </div>
+        <p class="mt-2">Chargement des données...</p>
+    </div>
+
+    <!-- Data Table -->
+    <div id="tableContainer" style="display: none;">
+        <div class="table-responsive">
+            <table id="produitsTable" class="table">
+                <thead>
+                    <tr>
+                        <th>Référence</th>
+                        <th>Désignation</th>
+                        <th>Catégorie</th>
+                        <th>Quantité</th>
+                        <th>Seuil</th>
+                        <th>Manquant</th>
+                        <th>Emplacement</th>
+                        <th>Sévérité</th>
+                        <th>Valeur achat</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="produitsBody">
+                    <!-- Data will be injected here -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div id="paginationContainer" class="mt-4 mb-4 d-flex justify-content-center">
+            <!-- Pagination controls will be injected here -->
+        </div>
+
+        <!-- Export Section -->
+        <div class="export-section">
+            <h5><i class="fas fa-download"></i> Exporter</h5>
+            <div class="export-buttons">
+                <button id="btnExportCSV" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-file-csv"></i> Exporter CSV
+                </button>
+                <button id="btnExportPDF" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-file-pdf"></i> Exporter PDF
+                </button>
+                <button id="btnPrint" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-print"></i> Imprimer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" style="display: none;">
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <h3>Tous les stocks sont suffisants</h3>
+            <p>Aucun produit n'est en dessous du seuil d'alerte.</p>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/pagination-client.js') }}"></script>
+<script>
+    // Variables globales
+    let allProduits = [];
+    let pagination;
+
+    // Initialisation
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialiser la pagination
+        pagination = new ClientPagination({
+            itemsPerPage: 10,
+            containerId: 'tableContainer',
+            tbodyId: 'produitsBody',
+            paginationContainerId: 'paginationContainer',
+            emptyStateId: 'emptyState',
+            renderRowCallback: renderProduitRow,
+            updateStatsCallback: updateStatistics
+        });
+
+        loadProduits();
+        initializeFilters();
+        attachEventListeners();
+    });
+
+    // Charger les données
+    function loadProduits() {
+        const spinner = document.getElementById('loadingSpinner');
+        const tableContainer = document.getElementById('tableContainer');
+        const emptyState = document.getElementById('emptyState');
+
+        spinner.classList.add('show');
+        tableContainer.style.display = 'none';
+        emptyState.style.display = 'none';
+
+        fetch('{{ url_for("stock.api_produits_faibles_stocks") }}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    allProduits = data.produits || [];
+                    pagination.setData(allProduits);
+                    populateFilters();
+                    pagination.displayTable();
+                } else {
+                    showError('Erreur: ' + (data.message || 'Impossible de charger les données'));
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                showError('Erreur de connexion: ' + error.message);
+            })
+            .finally(() => {
+                spinner.classList.remove('show');
+            });
+    }
+
+    // Remplir les filtres
+    function populateFilters() {
+        const categories = new Set();
+        const emplacements = new Set();
+
+        allProduits.forEach(p => {
+            if (p.categorie) categories.add(p.categorie);
+            if (p.emplacement) emplacements.add(p.emplacement);
+        });
+
+        const categorySelect = document.getElementById('filterCategorie');
+        const placementSelect = document.getElementById('filterEmplacement');
+
+        categories.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat;
+            option.textContent = cat;
+            categorySelect.appendChild(option);
+        });
+
+        emplacements.forEach(empl => {
+            const option = document.createElement('option');
+            option.value = empl;
+            option.textContent = empl;
+            placementSelect.appendChild(option);
+        });
+    }
+
+    // Créer une ligne de tableau
+    function renderProduitRow(produit) {
+        const manquant = Math.max(0, produit.seuil_alerte - produit.quantite);
+        const valeurManquante = manquant * produit.prix_achat;
+        const pourcentage = (produit.quantite / produit.seuil_alerte) * 100;
+        let badgeClass = pourcentage < 50 ? 'badge-danger' : 'badge-warning';
+        let severite = pourcentage < 50 ? 'Critique' : 'Moyen';
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td><strong>${escapeHtml(produit.reference)}</strong></td>
+            <td>${escapeHtml(produit.nom)}</td>
+            <td>${escapeHtml(produit.categorie || 'N/A')}</td>
+            <td>${parseFloat(produit.quantite).toFixed(2)} ${produit.unite_mesure}</td>
+            <td>${parseFloat(produit.seuil_alerte).toFixed(2)}</td>
+            <td><span class="badge badge-danger">${manquant.toFixed(2)}</span></td>
+            <td>${escapeHtml(produit.emplacement || 'N/A')}</td>
+            <td><span class="badge ${badgeClass}">${severite}</span></td>
+            <td>${parseFloat(valeurManquante).toFixed(0)} FCFA</td>
+            <td>
+                <div class="action-buttons">
+                    <a href="javascript:void(0)" 
+                       onclick="window.location.href = '/gestion-stock/produit/modifier/${produit.id}'"
+                       class="btn btn-sm btn-primary"
+                       title="Voir détails">
+                        <i class="fas fa-eye"></i>
+                    </a>
+                    <a href="javascript:void(0)" 
+                       onclick="window.location.href = '/gestion-stock/produit/modifier/${produit.id}'"
+                       class="btn btn-sm btn-outline-secondary"
+                       title="Modifier">
+                        <i class="fas fa-edit"></i>
+                    </a>
+                    <a href="javascript:void(0)" 
+                       onclick="window.location.href = '/gestion-stock/produit/entree/${produit.id}'"
+                       class="btn btn-sm btn-success"
+                       title="Ajouter entrée">
+                        <i class="fas fa-plus"></i>
+                    </a>
+                </div>
+            </td>
+        `;
+        return row;
+    }
+
+    // Mettre à jour les statistiques
+    function updateStatistics(filteredItems) {
+        const totalFaibles = filteredItems.length;
+        let valeurTotal = 0;
+        let qtyManquante = 0;
+
+        filteredItems.forEach(p => {
+            const manquant = Math.max(0, p.seuil_alerte - p.quantite);
+            valeurTotal += manquant * p.prix_achat;
+            qtyManquante += manquant;
+        });
+
+        document.getElementById('statTotalFaibles').textContent = totalFaibles;
+        document.getElementById('statValeurTotal').textContent = 
+            valeurTotal.toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' FCFA';
+        document.getElementById('statQtyManquante').textContent = qtyManquante.toFixed(2);
+    }
+
+    // Appliquer les filtres
+    function applyFilters() {
+        const categorie = document.getElementById('filterCategorie').value;
+        const emplacement = document.getElementById('filterEmplacement').value;
+        const severity = document.getElementById('filterSeverity').value;
+
+        pagination.applyFilter(p => {
+            // Filtre catégorie
+            if (categorie && p.categorie !== categorie) return false;
+
+            // Filtre emplacement
+            if (emplacement && p.emplacement !== emplacement) return false;
+
+            // Filtre sévérité
+            if (severity) {
+                const pourcentage = (p.quantite / p.seuil_alerte) * 100;
+                if (severity === 'danger' && pourcentage >= 50) return false;
+                if (severity === 'warning' && (pourcentage < 50 || pourcentage >= 100)) return false;
+            }
+
+            return true;
+        });
+
+        pagination.displayTable();
+    }
+
+    // Initialiser les écouteurs d'événements
+    function initializeFilters() {
+        document.getElementById('filterCategorie').addEventListener('change', applyFilters);
+        document.getElementById('filterEmplacement').addEventListener('change', applyFilters);
+        document.getElementById('filterSeverity').addEventListener('change', applyFilters);
+    }
+
+    function attachEventListeners() {
+        document.getElementById('btnReset').addEventListener('click', function() {
+            document.getElementById('filterCategorie').value = '';
+            document.getElementById('filterEmplacement').value = '';
+            document.getElementById('filterSeverity').value = '';
+            applyFilters();
+        });
+
+        document.getElementById('btnExportCSV').addEventListener('click', exportCSV);
+        document.getElementById('btnExportPDF').addEventListener('click', exportPDF);
+        document.getElementById('btnPrint').addEventListener('click', function() {
+            window.print();
+        });
+    }
+
+    // Export CSV
+    function exportCSV() {
+        let csv = 'Référence,Désignation,Catégorie,Quantité,Seuil,Manquant,Emplacement,Sévérité,Valeur achat\n';
+        
+        pagination.filteredItems.forEach(p => {
+            const manquant = Math.max(0, p.seuil_alerte - p.quantite);
+            const pourcentage = (p.quantite / p.seuil_alerte) * 100;
+            const severite = pourcentage < 50 ? 'Critique' : 'Moyen';
+            
+            csv += `"${p.reference}","${p.nom}","${p.categorie}","${p.quantite}","${p.seuil_alerte}","${manquant}","${p.emplacement}","${severite}","${manquant * p.prix_achat}"\n`;
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `produits_faibles_stocks_${new Date().toISOString().split('T')[0]}.csv`);
+        link.click();
+    }
+
+    // Export PDF (utiliser jsPDF si disponible)
+    function exportPDF() {
+        alert('Fonctionnalité PDF en cours d\'implémentation. Utilisez la fonction Imprimer pour l\'instant.');
+    }
+
+    // Utilitaires
+    function escapeHtml(text) {
+        if (!text) return '';
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        return text.replace(/[&<>"']/g, m => map[m]);
+    }
+
+    function showError(message) {
+        const container = document.querySelector('.container-fluid');
+        const alert = document.createElement('div');
+        alert.className = 'alert alert-danger alert-dismissible fade show';
+        alert.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        container.insertBefore(alert, container.firstChild);
+        setTimeout(() => alert.remove(), 5000);
+    }
+</script>
+{% endblock %}

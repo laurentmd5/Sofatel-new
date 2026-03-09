@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Gestion des réservations{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <a href="{{ url_for('reservations.liste_reservations', intervention_id=intervention.id) }}">
+                <i class="fas fa-arrow-left mr-2"></i>
+            </a>
+            Réservations pour l'intervention #{{ intervention.id }}
+        </h1>
+        <!-- Bouton Nouvelle réservation supprimé -->
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    {% for category, message in messages %}
+    <div class="alert alert-{{ category }}">
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
+
+    {% block reservation_content %}{% endblock %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // Fonction pour confirmer les actions critiques
+    function confirmerAction(message) {
+        return confirm(message || 'Êtes-vous sûr de vouloir effectuer cette action ?');
+    }
+
+    // Initialisation des tooltips
+    $(function () {
+        $('[data-toggle="tooltip"]').tooltip()
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,275 @@
+/* Modern UI token set and scoped styles for Sofatelcom (opt-in via body.modern) */
+:root {
+    /* design tokens (keep brand exact values) */
+    --sofatelcom-primary: #dc3545;
+    --sofatelcom-secondary: #0d6efd;
+    --bg-page: #f6f7f8; /* slightly warm page bg */
+    --surface: #ffffff;
+    --muted: #6c757d;
+    --text: #1f2933;
+    --radius-md: 10px;
+    --radius-sm: 6px;
+    --elevation-1: 0 6px 18px rgba(17,24,39,0.08);
+    --elevation-2: 0 12px 30px rgba(17,24,39,0.12);
+    --focus-ring: rgba(13,110,253,0.18);
+    --transition-fast: 150ms;
+    --transition-default: 220ms;
+}
+
+/* All modern styles are scoped under body.modern to avoid impacting legacy UI */
+body.modern {
+    background-color: var(--bg-page);
+    color: var(--text);
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+}
+
+/* Header */
+body.modern .navbar {
+    background: var(--surface);
+    box-shadow: var(--elevation-1);
+    border-bottom: 1px solid rgba(17,24,39,0.04);
+}
+
+body.modern .navbar .navbar-brand {
+    color: var(--sofatelcom-primary);
+    font-weight: 700;
+    letter-spacing: -0.2px;
+}
+
+body.modern .navbar .nav-link {
+    color: var(--muted);
+    margin-right: 6px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    transition: background var(--transition-default), transform var(--transition-fast);
+}
+
+body.modern .navbar .nav-link:hover,
+body.modern .navbar .nav-link:focus {
+    background: rgba(13, 110, 253, 0.06);
+    color: var(--sofatelcom-secondary);
+}
+
+/* KPI hero */
+body.modern .kpi-hero {
+    background: linear-gradient(135deg, rgba(220,53,69,0.06), rgba(13,110,253,0.04));
+    border-radius: 12px;
+    padding: 22px;
+    box-shadow: var(--elevation-2);
+    margin-bottom: 24px;
+}
+
+body.modern .kpi-hero .kpi-title {
+    color: var(--sofatelcom-primary);
+    font-size: 28px;
+    font-weight: 700;
+}
+
+body.modern .metric-card, body.modern .stat-card, body.modern .card {
+    background: var(--surface);
+    border-radius: var(--radius-md);
+    box-shadow: var(--elevation-1);
+    transition: transform var(--transition-fast) ease, box-shadow var(--transition-default) ease;
+    position: relative;
+}
+
+body.modern .metric-card:hover, body.modern .stat-card:hover {
+    transform: translateY(-6px);
+    box-shadow: var(--elevation-2);
+}
+
+/* accent stripe on left for priority */
+body.modern .metric-card::before, body.modern .stat-card::before {
+    content: '';
+    display: block;
+    width: 6px;
+    height: 100%;
+    border-top-left-radius: var(--radius-md);
+    border-bottom-left-radius: var(--radius-md);
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+body.modern .metric-card.score-1::before { background: var(--sofatelcom-primary); }
+body.modern .metric-card.score-2::before { background: var(--sofatelcom-secondary); }
+
+/* Ensure cards have proper padding and position for left stripe */
+body.modern .metric-card .card-body, body.modern .stat-card .card-body {
+    padding-left: 20px;
+}
+
+/* Typography for KPI numbers */
+body.modern .metric-value {
+    font-size: 48px;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--sofatelcom-primary);
+}
+
+/* Buttons */
+body.modern .btn-sofatelcom-primary {
+    background: var(--sofatelcom-primary);
+    border: none;
+    color: #fff;
+    border-radius: 8px;
+    padding: 10px 16px;
+    box-shadow: 0 6px 18px rgba(220,53,69,0.12);
+    transition: transform var(--transition-fast), box-shadow var(--transition-default);
+}
+
+body.modern .btn-sofatelcom-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 30px rgba(220,53,69,0.14);
+}
+
+body.modern .btn-outline-secondary {
+    border-color: var(--sofatelcom-secondary);
+    color: var(--sofatelcom-secondary);
+}
+
+/* Tables: elevate header and hover rows */
+body.modern .table thead th {
+    background: var(--surface);
+    border-bottom: 2px solid rgba(17,24,39,0.06);
+}
+
+body.modern .table tbody tr:hover {
+    background: rgba(13,110,253,0.03);
+}
+
+/* Focus outlines for accessibility */
+body.modern :focus {
+    outline: none;
+    box-shadow: 0 0 0 4px var(--focus-ring);
+    transition: box-shadow var(--transition-fast);
+}
+
+/* Prefer focus-visible for keyboard users */
+body.modern :focus:not(:focus-visible) {
+    box-shadow: none;
+}
+
+/* Skip link visible on focus */
+.visually-hidden-focusable {
+    position: absolute;
+    left: -999px;
+    top: auto;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+
+.visually-hidden-focusable:focus,
+.visually-hidden-focusable:active {
+    position: fixed;
+    left: 16px;
+    top: 16px;
+    width: auto;
+    height: auto;
+    padding: 8px 12px;
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 6px;
+    box-shadow: var(--elevation-1);
+    z-index: 1100;
+}
+
+/* Table header text color for contrast */
+body.modern .table thead th { color: var(--text); }
+
+/* Forms: modern inputs */
+body.modern .form-control,
+body.modern .form-select,
+body.modern textarea.form-control {
+    border-radius: 8px;
+    border: 1px solid rgba(17,24,39,0.08);
+    padding: 10px 12px;
+    background: linear-gradient(180deg, #ffffff, #fbfbfb);
+    box-shadow: inset 0 -1px 0 rgba(0,0,0,0.02);
+    transition: box-shadow var(--transition-default), transform var(--transition-fast);
+}
+
+body.modern .form-control:focus,
+body.modern .form-select:focus,
+body.modern textarea.form-control:focus {
+    border-color: var(--sofatelcom-secondary);
+    box-shadow: 0 4px 18px rgba(13,110,253,0.06), 0 0 0 4px var(--focus-ring);
+}
+
+body.modern .is-invalid {
+    border-color: rgba(220,53,69,0.9) !important;
+}
+
+body.modern .invalid-feedback {
+    color: rgba(220,53,69,0.9);
+    font-weight: 600;
+}
+
+/* Buttons: standardized sizes and shadows */
+body.modern .btn-sofatelcom-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+body.modern .btn-outline-secondary {
+    border-radius: 8px;
+    padding: 8px 12px;
+}
+
+body.modern .btn-light {
+    background: rgba(255,255,255,0.9);
+    border: 1px solid rgba(17,24,39,0.04);
+}
+
+/* Table header elevation to make UI feel layered */
+body.modern .table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    box-shadow: 0 6px 18px rgba(17,24,39,0.04);
+}
+
+/* Small utilities */
+body.modern .page-header h1 { font-size: 26px; margin-bottom: 8px; }
+body.modern .page-header p { color: var(--muted); margin-bottom: 0; }
+
+/* Responsive tweaks */
+@media (max-width: 768px) {
+    body.modern .metric-value { font-size: 34px; }
+    body.modern .kpi-hero { padding: 14px; }
+}
+
+/* Opt-out helper: keep legacy visuals by not setting body.modern */
+
+/* Micro-interactions: subtle transitions and pressed state */
+body.modern .pressed {
+    transform: scale(0.99) !important;
+    transition: transform 120ms ease;
+}
+
+/* Skeleton utility - used by macros (adds pulse while data-skeleton attribute present) */
+[data-skeleton] .skeleton-card,
+[data-skeleton] .skeleton-line {
+    opacity: 1;
+    animation: skeletonShimmer 1.4s linear infinite;
+}
+
+@keyframes skeletonShimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+/* Collapsible transition helper for Alpine-based panels */
+.collapsible-body {
+    transition: max-height 280ms cubic-bezier(.2,.8,.2,1), opacity 200ms ease;
+    overflow: hidden;
+}
+
+/* Small micro-animations for icons on hover */
+body.modern .icon-hover:hover {
+    transform: translateY(-3px) scale(1.03);
+    transition: transform 180ms ease;
+}

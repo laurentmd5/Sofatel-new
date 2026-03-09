@@ -1,0 +1,32 @@
+{# Macro pour les cartes KPI du dashboard #}
+{% macro stat_card_kpi(counter_id, value, label, icon, color, onclick_modal=None) %}
+<div class="col-md-3 mb-3">
+    <div class="card bg-{{ color }} text-white clickable-card"
+        {% if onclick_modal %}onclick="showDetailsModal('{{ onclick_modal }}', document.getElementById('{{ counter_id }}').textContent, '{{ label }}')"{% endif %}>
+        <div class="card-body">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <h4 class="mb-0" id="{{ counter_id }}" data-counter="{{ counter_id|replace('counter-', '') }}">{{ value }}</h4>
+                    <p class="mb-0">{{ label }}</p>
+                </div>
+                <i data-feather="{{ icon }}" style="width: 32px; height: 32px"></i>
+            </div>
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+{# Section des statistiques principales #}
+{% macro stats_section(stats) %}
+<!-- Statistiques principales -->
+<div class="row mb-4">
+    {{ stat_card_kpi('counter-total_demandes', stats.total_demandes, 'Instances totales', 'file-text', 'primary', 'total_demandes') }}
+    {{ stat_card_kpi('counter-demandes_jour_sav', stats.demandes_jour_sav, 'Instances jour SAV', 'calendar', 'danger', 'demandes_jour_sav') }}
+    {{ stat_card_kpi('counter-demandes_jour_production', stats.demandes_jour_production, 'Instances jour Prod', 'calendar', 'danger', 'demandes_jour_production') }}
+    {{ stat_card_kpi('counter-interventions_cours', stats.interventions_cours, 'En cours', 'activity', 'warning', 'interventions_cours') }}
+    {{ stat_card_kpi('counter-attente_validation', stats.attente_validation, 'Attente validation', 'clock', 'info', 'attente_validation') }}
+    {{ stat_card_kpi('counter-interventions_rejetees', stats.interventions_rejetees, 'Rejetées', 'x-circle', 'danger', 'interventions_rejetees') }}
+    {{ stat_card_kpi('counter-interventions_validees_sav', stats.interventions_validees_sav, 'Validées SAV', 'check-circle', 'success', 'interventions_validees_sav') }}
+    {{ stat_card_kpi('counter-interventions_validees_production', stats.interventions_validees_production, 'Validées Prod', 'check-circle', 'success', 'interventions_validees_production') }}
+</div>
+{% endmacro %}

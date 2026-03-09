@@ -1,0 +1,33 @@
+{
+  "date": "2026-01-13T00:17:20.888675",
+  "results": {
+    "auth_admin_login": {
+      "status": false,
+      "code": 200
+    },
+    "mobile_login": {
+      "status": false,
+      "code": 401
+    },
+    "web_create_intervention": {
+      "status": true,
+      "code": 200
+    },
+    "sse_once": {
+      "status": false,
+      "code": 302
+    },
+    "completeness": {
+      "status": false,
+      "reason": "no intervention with photos"
+    },
+    "stock_stats": {
+      "status": false,
+      "code": 302
+    },
+    "rh_create_leave": {
+      "status": false,
+      "code": 404
+    }
+  }
+}

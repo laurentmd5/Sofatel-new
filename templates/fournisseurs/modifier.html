@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Accueil</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('stock.liste_fournisseurs') }}">Fournisseurs</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Modifier {{ fournisseur.raison_sociale }}</li>
+        </ol>
+    </nav>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">{{ title }}</h6>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="">
+                {{ form.hidden_tag() }}
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            {{ form.code.label(class="form-control-label") }}
+                            {{ form.code(class="form-control" + (' is-invalid' if form.code.errors else '')) }}
+                            {% for error in form.code.errors %}
+                                <div class="invalid-feedback">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="form-group">
+                            {{ form.raison_sociale.label(class="form-control-label") }}
+                            {{ form.raison_sociale(class="form-control" + (' is-invalid' if form.raison_sociale.errors else '')) }}
+                            {% for error in form.raison_sociale.errors %}
+                                <div class="invalid-feedback">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="form-group">
+                            {{ form.contact.label(class="form-control-label") }}
+                            {{ form.contact(class="form-control" + (' is-invalid' if form.contact.errors else '')) }}
+                            {% for error in form.contact.errors %}
+                                <div class="invalid-feedback">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            {{ form.telephone.label(class="form-control-label") }}
+                            {{ form.telephone(class="form-control" + (' is-invalid' if form.telephone.errors else '')) }}
+                            {% for error in form.telephone.errors %}
+                                <div class="invalid-feedback">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="form-group">
+                            {{ form.email.label(class="form-control-label") }}
+                            {{ form.email(class="form-control" + (' is-invalid' if form.email.errors else '')) }}
+                            {% for error in form.email.errors %}
+                                <div class="invalid-feedback">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="form-group">
+                            <div class="custom-control custom-checkbox">
+                                {{ form.actif(class="custom-control-input" + (' is-invalid' if form.actif.errors else '')) }}
+                                {{ form.actif.label(class="custom-control-label") }}
+                                {% for error in form.actif.errors %}
+                                    <div class="invalid-feedback">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    {{ form.adresse.label(class="form-control-label") }}
+                    {{ form.adresse(class="form-control" + (' is-invalid' if form.adresse.errors else ''), rows=3) }}
+                    {% for error in form.adresse.errors %}
+                        <div class="invalid-feedback">{{ error }}</div>
+                    {% endfor %}
+                </div>
+                
+                <div class="form-group mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Enregistrer les modifications
+                    </button>
+                    <a href="{{ url_for('stock.liste_fournisseurs') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Annuler
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Section des informations de suivi -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Informations de suivi</h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Date de création :</strong> {{ fournisseur.date_creation|format_datetime if fournisseur.date_creation else 'Non spécifiée' }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Dernière mise à jour :</strong> {{ fournisseur.date_maj|format_datetime if fournisseur.date_maj else 'Jamais' }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

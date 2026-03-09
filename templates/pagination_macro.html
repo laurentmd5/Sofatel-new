@@ -1,0 +1,133 @@
+{# Macro pour la pagination réutilisable #}
+{% macro render_pagination(pagination, endpoint, current_filters={}) %}
+    {% if pagination.pages > 1 %}
+    <nav aria-label="Navigation des pages">
+        <ul class="pagination justify-content-center">
+            {# Bouton Première page #}
+            {% if pagination.has_prev %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for(endpoint, page=1, **current_filters) }}" title="Première page">
+                        <i class="feather-chevrons-left"></i>
+                    </a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for(endpoint, page=pagination.prev_num, **current_filters) }}" title="Page précédente">
+                        <i class="feather-chevron-left"></i>
+                    </a>
+                </li>
+            {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">
+                        <i class="feather-chevrons-left"></i>
+                    </span>
+                </li>
+                <li class="page-item disabled">
+                    <span class="page-link">
+                        <i class="feather-chevron-left"></i>
+                    </span>
+                </li>
+            {% endif %}
+
+            {# Pages numérotées #}
+            {% set start_page = [pagination.page - 2, 1]|max %}
+            {% set end_page = [pagination.page + 2, pagination.pages]|min %}
+            
+            {% if start_page > 1 %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for(endpoint, page=1, **current_filters) }}">1</a>
+                </li>
+                {% if start_page > 2 %}
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                {% endif %}
+            {% endif %}
+
+            {% for page_num in range(start_page, end_page + 1) %}
+                {% if page_num == pagination.page %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ page_num }}</span>
+                    </li>
+                {% else %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for(endpoint, page=page_num, **current_filters) }}">{{ page_num }}</a>
+                    </li>
+                {% endif %}
+            {% endfor %}
+
+            {% if end_page < pagination.pages %}
+                {% if end_page < pagination.pages - 1 %}
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                {% endif %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for(endpoint, page=pagination.pages, **current_filters) }}">{{ pagination.pages }}</a>
+                </li>
+            {% endif %}
+
+            {# Bouton Page suivante #}
+            {% if pagination.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for(endpoint, page=pagination.next_num, **current_filters) }}" title="Page suivante">
+                        <i class="feather-chevron-right"></i>
+                    </a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for(endpoint, page=pagination.pages, **current_filters) }}" title="Dernière page">
+                        <i class="feather-chevrons-right"></i>
+                    </a>
+                </li>
+            {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">
+                        <i class="feather-chevron-right"></i>
+                    </span>
+                </li>
+                <li class="page-item disabled">
+                    <span class="page-link">
+                        <i class="feather-chevrons-right"></i>
+                    </span>
+                </li>
+            {% endif %}
+        </ul>
+    </nav>
+    
+    {# Informations sur la pagination #}
+    <div class="d-flex justify-content-between align-items-center mt-3">
+        <div class="text-muted small">
+            Affichage de {{ pagination.per_page * (pagination.page - 1) + 1 }} à 
+            {{ pagination.per_page * (pagination.page - 1) + pagination.items|length }} 
+            sur {{ pagination.total }} éléments
+        </div>
+        <div class="text-muted small">
+            Page {{ pagination.page }} sur {{ pagination.pages }}
+        </div>
+    </div>
+    {% endif %}
+{% endmacro %}
+
+{# Macro pour sélectionner le nombre d'éléments par page #}
+{% macro render_per_page_selector(current_per_page, endpoint, current_filters={}) %}
+    <div class="d-flex align-items-center">
+        <label for="per_page" class="me-2 small text-muted">Afficher :</label>
+        <select id="per_page" class="form-select form-select-sm" style="width: auto;" onchange="changePerPage(this.value)">
+            {% for value in [10, 25, 50, 100] %}
+                <option value="{{ value }}" {% if value == current_per_page %}selected{% endif %}>
+                    {{ value }}
+                </option>
+            {% endfor %}
+        </select>
+        <span class="ms-2 small text-muted">par page</span>
+    </div>
+    
+    <script>
+    function changePerPage(perPage) {
+        const url = new URL(window.location);
+        url.searchParams.set('per_page', perPage);
+        url.searchParams.set('page', '1'); // Retourner à la première page
+        // Conserver tous les autres paramètres de filtre
+        window.location.href = url.toString();
+    }
+    </script>
+{% endmacro %}

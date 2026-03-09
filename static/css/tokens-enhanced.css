@@ -1,0 +1,472 @@
+/* ========================================
+   SOFATELCOM - DESIGN TOKENS ENRICHIS (V1.0)
+   Extensions des tokens existants avec variables additionnelles
+   ======================================== */
+
+:root {
+  /* ===== COLOR SYSTEM - PRIMAIRE ===== */
+  --color-primary: #dc3545;
+  --color-primary-dark: #c02a37;
+  --color-primary-light: #ff6b7a;
+  --color-primary-hover: #bd2130;
+  --color-primary-active: #a71d2a;
+  --color-primary-disabled: #e5a5ab;
+  
+  /* ===== COLOR SYSTEM - SECONDAIRE ===== */
+  --color-secondary: #0d6efd;
+  --color-secondary-dark: #0b5ed7;
+  --color-secondary-light: #4d7fe8;
+  --color-secondary-hover: #0a58ca;
+  --color-secondary-active: #084298;
+  --color-secondary-disabled: #6fa3d1;
+  
+  /* ===== COLOR SYSTEM - ACCENT (Gris-Bleu) ===== */
+  --color-accent: #6c757d;
+  --color-accent-dark: #5a6268;
+  --color-accent-light: #7a8288;
+  --color-accent-hover: #5a6268;
+  
+  /* ===== SEMANTIC COLORS ===== */
+  --color-success: #198754;
+  --color-success-hover: #157347;
+  --color-success-light: #6ea8a8;
+  --color-success-disabled: #a5d8a5;
+  
+  --color-warning: #f0ad4e;  /* WCAG AA compliant (vs. #ffc107) */
+  --color-warning-hover: #d68a1e;
+  --color-warning-light: #f5c5a8;
+  --color-warning-disabled: #f5d9b3;
+  
+  --color-danger: #dc3545;
+  --color-danger-hover: #bb2d3b;
+  --color-danger-light: #f8d7da;
+  --color-danger-disabled: #f1b0b7;
+  
+  --color-info: #0dcaf0;
+  --color-info-hover: #31d5f8;
+  --color-info-light: #cfe2ff;
+  --color-info-disabled: #a8ddea;
+  
+  /* ===== NEUTRAL SCALE (Grays) ===== */
+  --color-neutral-0: #ffffff;
+  --color-neutral-50: #f8f9fa;
+  --color-neutral-100: #f0f1f3;
+  --color-neutral-200: #e0e3e8;
+  --color-neutral-300: #c1c7cd;
+  --color-neutral-400: #8b92a0;
+  --color-neutral-500: #5c6370;
+  --color-neutral-600: #495057;
+  --color-neutral-700: #343a40;
+  --color-neutral-800: #1a1d21;
+  --color-neutral-900: #0d0e11;
+  
+  /* ===== FOCUS & ACCESSIBILITY COLORS ===== */
+  --color-focus-ring: #0b5ed7;
+  --color-focus-ring-light: rgba(13, 110, 253, 0.25);
+  --color-link: #0b5ed7;
+  --color-link-hover: #0a58ca;
+  --color-link-visited: #6610f2;
+  
+  /* ===== STATE COLORS ===== */
+  --color-loading: #0dcaf0;
+  --color-disabled: #c1c7cd;
+  --color-error: #dc3545;
+  --color-success-state: #198754;
+  
+  /* ===== SPACING SYSTEM (8px base) ===== */
+  --space-xs: 0.25rem;    /* 4px */
+  --space-sm: 0.5rem;     /* 8px */
+  --space-md: 1rem;       /* 16px */
+  --space-lg: 1.5rem;     /* 24px */
+  --space-xl: 2rem;       /* 32px */
+  --space-2xl: 3rem;      /* 48px */
+  --space-3xl: 4rem;      /* 64px */
+  --space-4xl: 6rem;      /* 96px */
+  
+  /* ===== TYPOGRAPHY ===== */
+  --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", sans-serif;
+  --font-family-mono: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
+  
+  --font-size-xs: 0.75rem;      /* 12px */
+  --font-size-sm: 0.875rem;     /* 14px */
+  --font-size-base: 1rem;       /* 16px */
+  --font-size-lg: 1.125rem;     /* 18px */
+  --font-size-xl: 1.25rem;      /* 20px */
+  --font-size-2xl: 1.5rem;      /* 24px */
+  --font-size-3xl: 1.875rem;    /* 30px */
+  --font-size-4xl: 2.25rem;     /* 36px */
+  --font-size-5xl: 3rem;        /* 48px */
+  
+  --font-weight-light: 300;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+  
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+  --line-height-loose: 2;
+  
+  --letter-spacing-tight: -0.02em;
+  --letter-spacing-normal: 0;
+  --letter-spacing-wide: 0.025em;
+  
+  /* ===== BORDER RADIUS ===== */
+  --radius-xs: 0.125rem;   /* 2px */
+  --radius-sm: 0.25rem;    /* 4px */
+  --radius-md: 0.375rem;   /* 6px */
+  --radius-lg: 0.5rem;     /* 8px */
+  --radius-xl: 0.75rem;    /* 12px */
+  --radius-2xl: 1rem;      /* 16px */
+  --radius-full: 9999px;   /* Pill shape */
+  
+  /* ===== SHADOWS ===== */
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  
+  /* Focus shadow (blue ring) */
+  --shadow-focus: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+  --shadow-focus-danger: 0 0 0 0.25rem rgba(220, 53, 69, 0.25);
+  
+  /* Lift shadows (elevation) */
+  --shadow-lift-sm: 0 2px 4px rgba(0, 0, 0, 0.08);
+  --shadow-lift-md: 0 4px 8px rgba(0, 0, 0, 0.12);
+  --shadow-lift-lg: 0 8px 16px rgba(0, 0, 0, 0.16);
+  
+  /* ===== Z-INDEX SCALE ===== */
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+  --z-notification: 1080;
+  --z-navbar: 1000;
+  
+  /* ===== TRANSITIONS & ANIMATIONS ===== */
+  --duration-75: 75ms;
+  --duration-100: 100ms;
+  --duration-150: 150ms;
+  --duration-200: 200ms;
+  --duration-300: 300ms;
+  --duration-500: 500ms;
+  --duration-700: 700ms;
+  --duration-1000: 1000ms;
+  
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-linear: linear;
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  
+  /* ===== BREAKPOINTS ===== */
+  --breakpoint-xs: 0;
+  --breakpoint-sm: 576px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 992px;
+  --breakpoint-xl: 1200px;
+  --breakpoint-2xl: 1400px;
+  
+  /* ===== ACCESSIBILITY ===== */
+  --prefers-reduced-motion: no-preference;
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-75: 0ms;
+    --duration-100: 0ms;
+    --duration-150: 0ms;
+    --duration-200: 0ms;
+    --duration-300: 0ms;
+    --duration-500: 0ms;
+    --duration-700: 0ms;
+    --duration-1000: 0ms;
+    --prefers-reduced-motion: reduce;
+  }
+  
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ===== UTILITY CLASSES FOR SHADOWS ===== */
+.shadow-xs { box-shadow: var(--shadow-xs); }
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.shadow-md { box-shadow: var(--shadow-md); }
+.shadow-lg { box-shadow: var(--shadow-lg); }
+.shadow-xl { box-shadow: var(--shadow-xl); }
+.shadow-2xl { box-shadow: var(--shadow-2xl); }
+
+.shadow-focus { box-shadow: var(--shadow-focus); }
+.shadow-focus-danger { box-shadow: var(--shadow-focus-danger); }
+
+.shadow-lift-sm { box-shadow: var(--shadow-lift-sm); }
+.shadow-lift-md { box-shadow: var(--shadow-lift-md); }
+.shadow-lift-lg { box-shadow: var(--shadow-lift-lg); }
+/* ===== STAT CARDS - MODERN DESIGN ===== */
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  border: none;
+  border-radius: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: #fff;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1) !important;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--bs-primary), var(--bs-info));
+  transition: all 0.3s ease;
+}
+
+/* Variantes de couleurs pour les cartes */
+.stat-card-primary::before { background: linear-gradient(90deg, #0d6efd, #0dcaf0); }
+.stat-card-danger::before { background: linear-gradient(90deg, #dc3545, #ff6b6b); }
+.stat-card-warning::before { background: linear-gradient(90deg, #f0ad4e, #ffc107); }
+.stat-card-info::before { background: linear-gradient(90deg, #0dcaf0, #0d6efd); }
+.stat-card-success::before { background: linear-gradient(90deg, #198754, #20c997); }
+
+/* Icon wrapper pour les cartes */
+.stat-icon-wrapper {
+  margin-bottom: 0;
+}
+
+.stat-icon-bg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 45px;
+  height: 45px;
+  border-radius: 10px;
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover .stat-icon-bg {
+  transform: scale(1.1) rotate(5deg);
+}
+
+.stat-icon-large {
+  width: 22px !important;
+  height: 22px !important;
+  stroke-width: 2;
+}
+
+/* Overlay subtle */
+.stat-card-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+/* Valeur statistique */
+.stat-value {
+  font-size: 1.75rem;
+  letter-spacing: -1px;
+  background: linear-gradient(135deg, var(--bs-body-color) 0%, var(--bs-secondary-color) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.25rem !important;
+}
+
+/* Texte d'étiquette */
+.letter-spacing {
+  letter-spacing: 0.05em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--bs-secondary-color);
+  text-transform: uppercase;
+}
+
+/* Badges de tendance */
+.stat-card .badge {
+  font-size: 0.75rem;
+  padding: 0.35rem 0.65rem;
+  font-weight: 600;
+  border-radius: 20px;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Section des cartes KPI */
+.kpi-cards-section {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.kpi-cards-section > div {
+  display: flex;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .stat-value {
+    font-size: 1.5rem;
+  }
+  
+  .stat-icon-bg {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .kpi-cards-section > div {
+    flex: 0 0 100%;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .kpi-cards-section > div {
+    flex: 0 0 50%;
+  }
+}
+
+@media (min-width: 1025px) {
+  .kpi-cards-section > div {
+    flex: 0 0 25%;
+  }
+}
+
+/* ===== CHART MODAL FULLSCREEN ===== */
+.chart-modal-fullscreen {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 2000;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.chart-modal-fullscreen.active {
+  display: flex;
+}
+
+.chart-modal-content {
+  background: white;
+  border-radius: 12px;
+  max-width: 90vw;
+  max-height: 90vh;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.chart-modal-header {
+  padding: 20px;
+  border-bottom: 1px solid #e9ecef;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.chart-modal-header h5 {
+  margin: 0;
+  font-weight: 600;
+  color: var(--bs-body-color);
+}
+
+.chart-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #6c757d;
+  transition: all 0.2s ease;
+  padding: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.chart-modal-close:hover {
+  background: #f8f9fa;
+  color: var(--bs-body-color);
+}
+
+.chart-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex-grow: 1;
+  position: relative;
+}
+
+.chart-modal-body canvas {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* Carte cliquable pour les charts */
+.card.chart-card {
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.card.chart-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1) !important;
+}
+
+.card-header.chart-header {
+  position: relative;
+}
+
+.card-header.chart-header::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 15px;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3'%3E%3C/path%3E%3C/svg%3E") no-repeat center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.card.chart-card:hover .card-header.chart-header::after {
+  opacity: 1;
+}

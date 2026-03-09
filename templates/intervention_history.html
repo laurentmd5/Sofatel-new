@@ -1,0 +1,1949 @@
+{% extends "base.html" %}
+{% from 'pagination_macro.html' import render_pagination, render_per_page_selector %}
+
+{% block title %}Historique des interventions - Sofatelcom{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="h3 mb-4">
+            <i data-feather="clock" class="me-2"></i>
+            Historique des interventions
+        </h1>
+    </div>
+</div>
+
+<!-- Filtres -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-sofatelcom-primary text-white">
+                <h5 class="mb-0">
+                    <i data-feather="filter" class="me-2"></i>
+                    Filtres de recherche
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-2 mb-3">
+                        <label class="form-label">Statut</label>
+                        <select class="form-select" id="filterStatut" onchange="applyFilters()">
+                            <option value="">Tous</option>
+                            <option value="en_cours" {{ 'selected' if current_filters.statut == 'en_cours' else '' }}>En cours</option>
+                            <option value="termine" {{ 'selected' if current_filters.statut == 'termine' else '' }}>En attente validation</option>
+                            <option value="valide" {{ 'selected' if current_filters.statut == 'valide' else '' }}>Terminée</option>
+                            <option value="rejete" {{ 'selected' if current_filters.statut == 'rejete' else '' }}>Rejetée</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-2 mb-3">
+                        <label class="form-label">Technologie</label>
+                        <select class="form-select" id="filterTechnologie" onchange="applyFilters()">
+                            <option value="">Toutes</option>
+                            <option value="Fibre" {{ 'selected' if current_filters.technologie == 'Fibre' else '' }}>Fibre</option>
+                            <option value="Cuivre" {{ 'selected' if current_filters.technologie == 'Cuivre' else '' }}>Cuivre</option>
+                            <option value="5G" {{ 'selected' if current_filters.technologie == '5G' else '' }}>5G</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-2 mb-3">
+                        <label class="form-label">Service</label>
+                        <select class="form-select" id="filterService" onchange="applyFilters()">
+                            <option value="">Tous</option>
+                            <option value="SAV" {{ 'selected' if current_filters.service == 'SAV' else '' }}>SAV</option>
+                            <option value="Production" {{ 'selected' if current_filters.service == 'Production' else '' }}>Production</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-2 mb-3">
+                        <label class="form-label">Zone</label>
+                        <select class="form-select" id="filterZone" onchange="applyFilters()">
+                            <option value="">Toutes</option>
+                            <option value="Dakar" {{ 'selected' if current_filters.zone == 'Dakar' else '' }}>Dakar</option>
+                            <option value="Mbour" {{ 'selected' if current_filters.zone == 'Mbour' else '' }}>Mbour</option>
+                            <option value="Kaolack" {{ 'selected' if current_filters.zone == 'Kaolack' else '' }}>Kaolack</option>
+                            <option value="Autres" {{ 'selected' if current_filters.zone == 'Autres' else '' }}>Autres</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-2 mb-3">
+                        <label class="form-label">Date début</label>
+                        <input type="date" class="form-control" id="filterDateDebut" value="{{ current_filters.date_debut or '' }}" onchange="applyFilters()">
+                    </div>
+
+                    <div class="col-md-2 mb-3">
+                        <label class="form-label">Date fin</label>
+                        <input type="date" class="form-control" id="filterDateFin" value="{{ current_filters.date_fin or '' }}" onchange="applyFilters()">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <input type="text" class="form-control" id="searchText" value="{{ current_filters.search_text or '' }}"
+                            placeholder="Rechercher par ND, nom client, technicien..." onkeyup="applyFilters()">
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()">
+                            <i data-feather="x" class="me-2"></i>
+                            Effacer filtres
+                        </button>
+                        <button type="button" class="btn btn-outline-primary" onclick="exportData()">
+                            <i data-feather="download" class="me-2"></i>
+                            Exporter
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- Statistiques rapides -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card border-primary">
+            <div class="card-body text-center">
+                <h4 class="text-primary">{{ interventions.total }}</h4>
+                <p class="mb-0 small">Total interventions</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-success">
+            <div class="card-body text-center">
+                <h4 class="text-success">{{ interventions.items|selectattr('statut', 'equalto', 'valide')|list|length }}</h4>
+                <p class="mb-0 small">Validées</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-warning">
+            <div class="card-body text-center">
+                <h4 class="text-warning">{{ interventions.items|selectattr('statut', 'equalto', 'termine')|list|length }}</h4>
+                <p class="mb-0 small">En attente validation</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-info">
+            <div class="card-body text-center">
+                <h4 class="text-info">{{ interventions.items|selectattr('statut', 'equalto', 'en_cours')|list|length }}</h4>
+                <p class="mb-0 small">En cours</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Liste des interventions -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i data-feather="list" class="me-2"></i>
+                        Liste des interventions
+                    </h5>
+                    <div>
+                        <span class="text-muted small" id="resultCount">{{ interventions.total }}
+                            intervention(s)</span>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                {% if interventions.items %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="interventionsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Client</th>
+                                <th>ND</th>
+                                <th>Technologie</th>
+                                <th>Service</th>
+                                <th>Prestataire</th>
+                                <th>Âge</th>
+                                <th>Offre</th>
+                                <th>Technicien</th>
+                                <th>Statut</th>
+                                <th width="120">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for intervention in interventions.items %}
+                            <tr data-statut="{{ intervention.statut }}"
+                                data-technologie="{{ intervention.demande.type_techno }}"
+                                data-service="{{ intervention.demande.service }}"
+                                data-zone="{{ intervention.technicien.zone }}"
+                                data-date="{{ intervention.date_debut.strftime('%Y-%m-%d') if intervention.date_debut else 'Non précisée' }}">
+                                <td>
+                                    <small>{{ intervention.date_debut.strftime('%d/%m/%Y') if intervention.date_debut else 'Non précisée' }}</small>
+                                    {% if intervention.date_fin %}
+                                    <br><small class="text-muted">→ {{ intervention.date_fin.strftime('%d/%m/%Y') if intervention.date_fin else 'Non précisée' }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <strong>{{ intervention.demande.nom_client }} {{ intervention.demande.prenom_client }}</strong>
+                                    <br>
+                                    <small class="text-muted">{{ intervention.demande.libelle_commonne }}</small>
+                                </td>
+                                <td>
+                                    <code>{{ intervention.demande.nd }}</code>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ 'primary' if intervention.demande.type_techno == 'Fibre' else 'warning' if intervention.demande.type_techno == 'Cuivre' else 'info' }}">
+                                        {{ intervention.demande.type_techno }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ 'success' if intervention.demande.service == 'Production' else 'primary' }}">
+                                        {{ intervention.demande.service }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if intervention.demande.prestataire %}
+                                    <span class="badge bg-secondary">{{ intervention.demande.prestataire }}</span>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ intervention.demande.age or '-' }}
+                                </td>
+                                <td>
+                                    {{ intervention.demande.offre or '-' }}
+                                </td>
+                                <td>
+                                    <small>{{ intervention.technicien.prenom }} {{ intervention.technicien.nom }}</small>
+                                    <br>
+                                    <small class="text-muted">{{ intervention.technicien.zone }}</small>
+                                </td>
+                                <td>
+                                    {% if intervention.accuse_reception %}
+                                    <!-- Deux flèches bleues style WhatsApp pour "reçu" -->
+                                    <div class="d-flex align-items-center">
+                                        <span title="Reçue" class="me-2">
+                                            <svg width="18" height="18" style="vertical-align:middle;" fill="#4CAF50" viewBox="0 0 24 24">
+                                                <path d="M1.73,12.91l1.41-1.41,5.66,5.66L20.86,5.1l1.41,1.41L8.8,20.86Z" />
+                                            </svg>
+                                            <svg width="18" height="18" style="vertical-align:middle;margin-left:-8px;" fill="#4CAF50" viewBox="0 0 24 24">
+                                                <path d="M5.73,12.91l1.41-1.41,5.66,5.66L24,5.1l-1.41-1.41L8.8,20.86Z" />
+                                            </svg>
+                                        </span>
+                                        {% if intervention.statut == 'en_cours' %}
+                                        <a href="{{ url_for('reservations.liste_reservations', intervention_id=intervention.id) }}" 
+                                           class="btn btn-sm btn-outline-primary"
+                                           title="Réserver des pièces">
+                                            <i data-feather="shopping-cart" style="width: 14px; height: 14px;"></i>
+                                            Pièces
+                                        </a>
+                                        {% endif %}
+                                    </div>
+                                    {% else %}
+                                    <!-- Une flèche grise style WhatsApp pour "non reçu" -->
+                                    <span title="Non reçue">
+                                        <svg width="18" height="18" style="vertical-align:middle;" fill="#bbb" viewBox="0 0 24 24">
+                                            <path d="M1.73,12.91l1.41-1.41,5.66,5.66L20.86,5.1l1.41,1.41L8.8,20.86Z" />
+                                        </svg>
+                                    </span>
+                                    {% endif %}
+
+                                    {% if intervention.statut == 'en_cours' %}
+                                    <span class="badge bg-info">
+                                        <i data-feather="clock" style="width: 12px; height: 12px;"></i>
+                                        En cours
+                                    </span>
+                                    {% elif intervention.statut == 'termine' %}
+                                    <span class="badge bg-warning">
+                                        <i data-feather="check" style="width: 12px; height: 12px;"></i>
+                                        Terminée
+                                    </span>
+                                    {% elif intervention.statut == 'valide' %}
+                                    <span class="badge bg-success">
+                                        <i data-feather="check-circle" style="width: 12px; height: 12px;"></i>
+                                        Validée
+                                    </span>
+                                    {% elif intervention.statut == 'rejete' %}
+                                    <span class="badge bg-danger">
+                                        <i data-feather="x-circle" style="width: 12px; height: 12px;"></i>
+                                        Rejetée
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <button type="button" class="btn btn-outline-primary"
+                                            onclick="viewIntervention({{ intervention.id }})" title="Voir détails">
+                                            <i data-feather="eye" style="width: 14px; height: 14px;"></i>
+                                        </button>
+                                        {% if current_user.role in ['chef_pur', 'chef_pilote'] and intervention.statut == 'termine' %}
+                                        <button type="button" class="btn btn-outline-success"
+                                            onclick="validateIntervention({{ intervention.id }})" title="Valider">
+                                            <i data-feather="check" style="width: 14px; height: 14px;"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-outline-danger"
+                                            onclick="rejectIntervention({{ intervention.id }})" title="Rejeter">
+                                            <i data-feather="x" style="width: 14px; height: 14px;"></i>
+                                        </button>
+                                        {% endif %}
+                                        {% if current_user.role == 'technicien' and intervention.statut in ['en_cours', 'rejete'] %}
+                                        <a href="{{ url_for('legacy.intervention_form', demande_id=intervention.demande.id) }}"
+                                            class="btn btn-outline-warning" title="Modifier">
+                                            <i data-feather="edit" style="width: 14px; height: 14px;"></i>
+                                        </a>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i data-feather="inbox" style="width: 64px; height: 64px;" class="text-muted mb-3"></i>
+                    <h5 class="text-muted">Aucune intervention trouvée</h5>
+                    <p class="text-muted">Il n'y a actuellement aucune intervention dans l'historique.</p>
+                </div>
+                {% endif %}
+                
+                <!-- Pagination et contrôles -->
+                {% if interventions.items %}
+                <div class="card-footer bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        {{ render_per_page_selector(current_filters.per_page, 'intervention_history', current_filters) }}
+                        {{ render_pagination(interventions, 'intervention_history', current_filters) }}
+
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de détails d'intervention -->
+<div class="modal fade" id="interventionModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i data-feather="clipboard" class="me-2"></i>
+                    Détails de l'intervention
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="interventionDetails">
+                <!-- Contenu chargé dynamiquement -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de validation -->
+<div class="modal fade" id="validationModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="validationModalTitle">
+                    <i data-feather="check" class="me-2"></i>
+                    Validation de l'intervention
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Commentaire</label>
+                    <textarea class="form-control" id="validationCommentaire" rows="4"
+                        placeholder="Commentaire de validation..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-success" id="confirmValidation">Valider</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/vfs_fonts.js"></script>
+<script>
+$(document).ready(function() {
+    $('#interventionsTable').DataTable({
+        // Désactiver la pagination
+        "paging": false,
+        "searching": false,
+        order: [[0, 'desc']],
+        // Désactiver le tri pour la colonne Actions (8ème colonne, index 7)
+        "columnDefs": [
+            { "orderable": false, "targets": 7 }
+        ],
+        
+        // Options d'export
+        dom: 'Bfrtip',
+        buttons: [
+            {
+                extend: 'excel',
+                text: '<i data-feather="download"></i> Excel',
+                className: 'btn btn-success btn-sm',
+                exportOptions: {
+                    columns: [0, 1, 2, 3, 4, 5, 6] // Exclure la colonne Actions
+                }
+            },
+            {
+                extend: 'pdf',
+                text: '<i data-feather="file-text"></i> PDF',
+                className: 'btn btn-danger btn-sm',
+                exportOptions: {
+                    columns: [0, 1, 2, 3, 4, 5, 6] // Exclure la colonne Actions
+                }
+            },
+            {
+                extend: 'copy',
+                text: '<i data-feather="copy"></i> Copier',
+                className: 'btn btn-info btn-sm',
+                exportOptions: {
+                    columns: [0, 1, 2, 3, 4, 5, 6] // Exclure la colonne Actions
+                }
+            }
+        ],
+        
+        // Langue française
+        "language": {
+            "search": "Rechercher:",
+            "lengthMenu": "Afficher _MENU_ éléments",
+            "info": "Affichage de _START_ à _END_ sur _TOTAL_ éléments",
+            "infoEmpty": "Affichage de 0 à 0 sur 0 éléments",
+            "infoFiltered": "(filtrés depuis _MAX_ éléments au total)",
+            "loadingRecords": "Chargement...",
+            "zeroRecords": "Aucun élément correspondant trouvé",
+            "emptyTable": "Aucune donnée disponible dans le tableau",
+            "paginate": {
+                "first": "Premier",
+                "last": "Dernier",
+                "next": "Suivant",
+                "previous": "Précédent"
+            }
+        }
+    });
+    
+    // Remplacer les icônes Feather après le rendu des boutons
+    setTimeout(function() {
+        feather.replace();
+    }, 100);
+});
+</script>
+
+<style>
+.dt-buttons {
+    margin-bottom: 15px;
+    margin-top: 15px;
+}
+.dt-buttons .btn {
+    margin-right: 5px;
+}
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script>
+    let currentInterventionId = null;
+    let currentAction = null;
+    let currentIntervention = null;
+
+// Fonction pour afficher les détails de l'intervention dans la modal
+function displayInterventionDetails(intervention) {
+    currentIntervention = intervention;
+    
+    if (intervention.demande.service === 'Production') {
+         console.log('DEBUG: Service Production détecté:', intervention.demande.service);
+        console.log('DEBUG: fichier_technique_accessible =', intervention.fichier_technique_accessible);
+        if (intervention.fichier_technique_accessible===false) {
+            console.log('DEBUG: Chargement des données survey pour intervention ID:', intervention.id);
+            // Charger les données de la fiche survey
+            fetch(`/api/survey/${intervention.id}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displaySurveyDetails(data.survey, data.intervention);
+                    } else {
+                        // Fallback: afficher les données de base
+                        displaySAVDetails(intervention);
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur chargement survey:', error);
+                    displaySAVDetails(intervention);
+                });
+        } else {
+            // Charger les données de la fiche technique
+            fetch(`/api/fiche-technique/${intervention.id}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayFicheTechniqueDetails(data.fiche_technique, data.intervention);
+                    } else {
+                        // Fallback: afficher les données de base
+                        displaySAVDetails(intervention);
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur chargement fiche technique:', error);
+                    displaySAVDetails(intervention);
+                });
+        }
+    } else {
+        displaySAVDetails(intervention);
+    }
+}
+
+// Fonction pour afficher les détails SAV
+function displaySAVDetails(intervention) {
+    let validateurInfo = 'Non validé';
+    
+    if (intervention.valideur && intervention.valideur.prenom) {
+        validateurInfo = `${intervention.valideur.prenom} ${intervention.valideur.nom}`;
+    } else if (intervention.valide_par) {
+        validateurInfo = `Utilisateur #${intervention.valide_par}`;
+    }
+    const hasGPS = intervention.gps_lat && intervention.gps_long;
+    const gpsLink = hasGPS ? 
+        `<a href="https://maps.google.com/?q=${intervention.gps_lat},${intervention.gps_long}" target="_blank">Voir sur Google Maps</a>` : 
+        'Non renseigné';
+    const content = `
+    <div class="container-fluid">
+        <!-- En-tête -->
+        <div class="row mb-4">
+            <div class="col-12 text-center">
+                <h3 class="text-primary">RAPPORT D'INTERVENTION SAV</h3>
+                <p class="text-muted">Date de génération: ${new Date().toLocaleDateString()}</p>
+            </div>
+        </div>
+        
+        <!-- Informations client -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-user me-2"></i> INFORMATIONS CLIENT</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="mb-2"><strong>Nom:</strong> ${intervention.demande.nom_client} ${intervention.demande.prenom_client}</p>
+                            <p class="mb-2"><strong>ND:</strong> ${intervention.demande.nd}</p>
+                            <p class="mb-2"><strong>Adresse:</strong> ${intervention.demande.libelle_commune}, ${intervention.demande.libelle_quartier || ''}</p>
+                            <p class="mb-2"><strong>Téléphone:</strong> ${intervention.demande.contact_client || 'Non renseigné'}</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i> INFORMATIONS INTERVENTION</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="mb-2"><strong>Date début:</strong> ${intervention.date_debut ?? 'Non précisée'}</p>
+                            <p class="mb-2"><strong>Date fin:</strong> ${intervention.date_fin ?? 'Non précisée'}</p>
+                            <p class="mb-2"><strong>Technologie:</strong> ${intervention.demande.type_techno}</p>
+                            <p class="mb-2"><strong>Service:</strong> ${intervention.demande.service}</p>
+                            <p class="mb-2"><strong>Technicien:</strong> ${intervention.technicien.prenom} ${intervention.technicien.nom}</p>
+                            <p class="mb-2"><strong>Validé par:</strong> ${validateurInfo}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Diagnostic -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-search me-2"></i> DIAGNOSTIC</h5>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Numéro:</strong> ${intervention.demande.nd || '-'}</p>
+                            <p><strong>Nature signalisation:</strong> ${intervention.nature_signalisation || '-'}</p>
+                            <p><strong>Diagnostic technicien:</strong> ${intervention.diagnostic_technicien || '-'}</p>
+                            <p><strong>Cause du dérangement:</strong> ${intervention.cause_derangement || '-'}</p>
+                            <p><strong>Action relevée:</strong> ${intervention.action_releve || '-'}</p>
+                            <p><strong>Constitutions:</strong> ${intervention.constitutions || '-'}</p>
+                            <p><strong>Valeur pB0:</strong> ${intervention.valeur_pB0 || '-'}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Matériel -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-box-open me-2"></i> MATÉRIEL ET ACCESSOIRES</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-bordered">
+                                    <thead>
+                                        <tr>
+                                            <th>Matériel livré</th>
+                                            <th>Numéro série livré</th>
+                                            <th>Matériel récupéré</th>
+                                            <th>Numéro série récupéré</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>${intervention.materiel_livre || '-'}</td>
+                                            <td>${intervention.numero_serie_livre || '-'}</td>
+                                            <td>${intervention.materiel_recup || '-'}</td>
+                                            <td>${intervention.numero_serie_recup || '-'}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <h6 class="mt-4">Accessoires</h6>
+                            <div class="row">
+                                <div class="col-md-3"><p><strong>Jarretière:</strong> ${intervention.jarretiere || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>Nombre/type BPE:</strong> ${intervention.nombre_type_bpe || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>Coupleur C1:</strong> ${intervention.coupleur_c1 || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>Coupleur C2:</strong> ${intervention.coupleur_c2 || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>Arobase:</strong> ${intervention.arobase || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>Malico:</strong> ${intervention.malico || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>Type câble:</strong> ${intervention.type_cable || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>LC (m):</strong> ${intervention.lc_metre || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>BTI (m):</strong> ${intervention.bti_metre || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>PTO ONE:</strong> ${intervention.pto_one || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>KITPTO (m):</strong> ${intervention.kitpto_metre || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>Piton:</strong> ${intervention.piton || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>DS6:</strong> ${intervention.ds6 || '-'}</p></div>
+                                <div class="col-md-12"><p><strong>Autres accessoires:</strong> ${intervention.autres_accessoires || '-'}</p></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Tests -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-check-circle me-2"></i> TESTS EFFECTUÉS</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-bordered">
+                                    <thead>
+                                        <tr>
+                                            <th>Test</th>
+                                            <th>Résultat</th>
+                                            <th>Détails</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>Appel sortant</td>
+                                            <td>${intervention.appel_sortant === '1' ? 'OK' : 'NOK'}</td>
+                                            <td>${intervention.envoi_numero || '-'}</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Appel entrant</td>
+                                            <td>${intervention.appel_entrant === '1' ? 'OK' : 'NOK'}</td>
+                                            <td>${intervention.affichage_numero || '-'}</td>
+                                        </tr>
+                                        <tr>
+                                            <td>TVO Mono</td>
+                                            <td>${intervention.tvo_mono_ok === '1' ? 'OK' : 'NOK'}</td>
+                                            <td>-</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <h6 class="mt-4">Mesures débits</h6>
+                            <div class="row">
+                                <div class="col-md-3"><p><strong>Débit montant:</strong> ${intervention.debit_cable_montant || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>Débit descendant:</strong> ${intervention.debit_mbs_descendant || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>Ping:</strong> ${intervention.debit_ms || '-'} ms</p></div>
+                                <div class="col-md-3"><p><strong>Débit ping:</strong> ${intervention.debit_mbs_ping || '-'}</p></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Installation et localisation -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-home me-2"></i> INSTALLATION ET LOCALISATION</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-3"><p><strong>Pièces:</strong> ${intervention.pieces || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>Communes:</strong> ${intervention.communes || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>Chambres:</strong> ${intervention.chambres || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>Bureau:</strong> ${intervention.bureau || '-'}</p></div>
+                                <div class="col-md-3"><p><strong>Wifi Extender:</strong> ${intervention.wifi_extender ? 'Oui' : 'Non'}</p></div>
+                                <div class="col-md-3"><p><strong>Mesure dBm:</strong> ${intervention.mesure_dbm || '-'}</p></div>
+                                <div class="col-md-6"><p><strong>Coordonnées GPS:</strong> ${hasGPS ? `${intervention.gps_lat}, ${intervention.gps_long}` : 'Non renseigné'}</p></div>
+                                <div class="col-md-6"><p><strong>Lien carte:</strong> ${gpsLink}</p></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Satisfaction -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-star me-2"></i> SATISFACTION CLIENT</h5>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Niveau de satisfaction:</strong> 
+                                ${intervention.satisfaction === '1' ? 'Satisfait' :
+                intervention.satisfaction === '2' ? 'Peu satisfait' :
+                    intervention.satisfaction === '3' ? 'Très satisfait' :
+                        intervention.satisfaction === '0' ? 'Pas satisfait' : 'Non renseigné'
+            }
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- section Photos et documents -->
+            <div class="intervention-section mb-4">
+                <h5 class="text-primary mb-3">
+                    <i data-feather="image" class="me-2"></i>
+                    Photos et documents
+                </h5>
+                <div class="field-group">
+                    ${intervention.photos_list && intervention.photos_list.length > 0
+                ? intervention.photos_list.map(photo =>
+                    `<img src="/uploads/${photo}" class="photo-preview" style="width:30%;" alt="Photo intervention">`
+                ).join('')
+                : '<span>Aucune photo enregistrée</span>'
+            }
+                </div>
+            </div>
+            
+            <!-- Signatures -->
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-signature me-2"></i> SIGNATURE ÉQUIPE</h5>
+                        </div>
+                        <div class="card-body text-center">
+                            ${intervention.signature_equipe ? `
+                                <img src="${intervention.signature_equipe}" class="img-fluid signature-pad" style="max-height: 100px;">
+                            ` : 'Non signé'}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-signature me-2"></i> SIGNATURE CLIENT</h5>
+                        </div>
+                        <div class="card-body text-center">
+                            ${intervention.signature_client ? `
+                                <img src="${intervention.signature_client}" class="img-fluid signature-pad" style="max-height: 100px;">
+                            ` : 'Non signé'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        
+    </div>
+    `;
+
+    document.getElementById('interventionDetails').innerHTML = content;
+    addPdfButtonToModal();
+}
+
+// Fonction pour afficher les détails de la fiche survey
+function displaySurveyDetails(survey, intervention) {
+    currentIntervention = intervention;
+    
+    let validateurInfo = 'Non validé';
+    if (intervention.valideur && intervention.valideur.prenom) {
+        validateurInfo = `${intervention.valideur.prenom} ${intervention.valideur.nom}`;
+    } else if (intervention.valide_par) {
+        validateurInfo = `Utilisateur #${intervention.valide_par}`;
+    }
+
+    const hasGPS = survey.gps_lat && survey.gps_long;
+    const gpsLink = hasGPS ? 
+        `<a href="https://maps.google.com/?q=${survey.gps_lat},${survey.gps_long}" target="_blank">Voir sur Google Maps</a>` : 
+        'Non renseigné';
+
+    const content = `
+    <div class="container-fluid">
+        <!-- En-tête -->
+        <div class="row mb-4">
+            <div class="col-12 text-center">
+                <h3 class="text-primary">FICHE SURVEY D'INSTALLATION</h3>
+                <p class="text-muted">Date de génération: ${new Date().toLocaleDateString()}</p>
+            </div>
+        </div>
+        
+        <!-- Informations générales -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">INFORMATIONS GÉNÉRALES</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Date survey:</strong> ${survey.date_survey || 'Non renseigné'}</p>
+                        <p><strong>Nom/Raison sociale:</strong> ${survey.nom_raison_sociale || intervention.demande.nom_client + ' ' + intervention.demande.prenom_client}</p>
+                        <p><strong>Contact:</strong> ${survey.contact || 'Non renseigné'}</p>
+                        <p><strong>Tél 1:</strong> ${survey.tel1 || 'Non renseigné'}</p>
+                        <p><strong>Tél 2:</strong> ${survey.tel2 || 'Non renseigné'}</p>
+                        <p><strong>Représenté par:</strong> ${survey.represente_par || 'Non renseigné'}</p>
+                        <p><strong>Adresse demandée:</strong> ${survey.adresse_demande || intervention.demande.libelle_commune}</p>
+                        <p><strong>Étage:</strong> ${survey.etage || 'Non renseigné'}</p>
+                        <p><strong>Heure début:</strong> ${survey.h_debut || 'Non renseigné'}</p>
+                        <p><strong>Heure fin:</strong> ${survey.h_fin || 'Non renseigné'}</p>
+                        <p><strong>Coordonnées GPS:</strong> ${hasGPS ? `${survey.gps_lat}, ${survey.gps_long}` : 'Non renseigné'}</p>
+                        <p><strong>Lien carte:</strong> ${gpsLink}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">INFORMATIONS INTERVENTION</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Date début:</strong> ${intervention.date_debut ?? 'Non précisée'}</p>
+                        <p><strong>Date fin:</strong> ${intervention.date_fin ?? 'Non précisée'}</p>
+                        <p><strong>Technologie:</strong> ${intervention.demande.type_techno}</p>
+                        <p><strong>Service:</strong> ${intervention.demande.service}</p>
+                        <p><strong>Technicien:</strong> ${intervention.technicien.prenom} ${intervention.technicien.nom}</p>
+                        <p><strong>Validé par:</strong> ${validateurInfo}</p>
+                        <p><strong>N° Ligne:</strong> ${survey.n_ligne || 'Non renseigné'}</p>
+                        <p><strong>N° Demande:</strong> ${survey.n_demande || 'Non renseigné'}</p>
+                        <p><strong>Service demandé:</strong> ${survey.service_demande || 'Non renseigné'}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Informations techniques -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">INFORMATIONS TECHNIQUES</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <p><strong>Technicien structure:</strong> ${survey.technicien_structure || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p><strong>Backoffice structure:</strong> ${survey.backoffice_structure || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p><strong>Offre:</strong> ${survey.offre || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p><strong>Débit:</strong> ${survey.debit || 'Non renseigné'}</p>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-3">
+                                <p><strong>Type MI:</strong> ${survey.type_mi ? 'Oui' : 'Non'}</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p><strong>Type NA:</strong> ${survey.type_na ? 'Oui' : 'Non'}</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p><strong>Type Transfer:</strong> ${survey.type_transfer ? 'Oui' : 'Non'}</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p><strong>Type Autre:</strong> ${survey.type_autre ? 'Oui' : 'Non'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- État du client et localisation -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">ÉTAT DU CLIENT ET LOCALISATION</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <p><strong>État client:</strong> ${survey.etat_client || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-4">
+                                <p><strong>Nature local:</strong> ${survey.nature_local || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-4">
+                                <p><strong>Type logement:</strong> ${survey.type_logement || 'Non renseigné'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Réseaux -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">RÉSEAUX</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Fibre</h6>
+                                <p><strong>Disponible:</strong> ${survey.fibre_dispo ? 'Oui' : 'Non'}</p>
+                                <p><strong>GPON OLT:</strong> ${survey.gpon_olt || 'Non renseigné'}</p>
+                                <p><strong>Splitter:</strong> ${survey.splitter || 'Non renseigné'}</p>
+                                <p><strong>Distance fibre:</strong> ${survey.distance_fibre || 'Non renseigné'}</p>
+                                <p><strong>État fibre:</strong> ${survey.etat_fibre || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Cuivre</h6>
+                                <p><strong>Disponible:</strong> ${survey.cuivre_dispo ? 'Oui' : 'Non'}</p>
+                                <p><strong>SR:</strong> ${survey.sr || 'Non renseigné'}</p>
+                                <p><strong>PC:</strong> ${survey.pc || 'Non renseigné'}</p>
+                                <p><strong>Distance cuivre:</strong> ${survey.distance_cuivre || 'Non renseigné'}</p>
+                                <p><strong>État cuivre:</strong> ${survey.etat_cuivre || 'Non renseigné'}</p>
+                            </div>
+                        </div>
+
+                        <!-- Données réseaux détaillées -->
+                        <div class="row mt-4">
+                            <div class="col-md-3">
+                                <p><strong>NRO:</strong> ${survey.nro || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p><strong>Type réseau:</strong> ${survey.type_reseau || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p><strong>Plaque:</strong> ${survey.plaque || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p><strong>BPI:</strong> ${survey.bpi || 'Non renseigné'}</p>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-3">
+                                <p><strong>PBO:</strong> ${survey.pbo || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p><strong>Coupleur:</strong> ${survey.coupleur || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p><strong>Fibre:</strong> ${survey.fibre || 'Non renseigné'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mesures WiFi -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">MESURES WiFi</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <p><strong>Salon:</strong> ${survey.niveau_wifi_salon || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p><strong>Chambre 1:</strong> ${survey.niveau_wifi_chambre1 || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p><strong>Bureau 1:</strong> ${survey.niveau_wifi_bureau1 || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p><strong>Autres pièces:</strong> ${survey.niveau_wifi_autres_pieces || 'Non renseigné'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Accessoires recommandés -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">ACCESSOIRES RECOMMANDÉS</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Répéteur WiFi</h6>
+                                <p><strong>Recommandé:</strong> ${survey.repeteur_wifi_oui ? 'Oui' : (survey.repeteur_wifi_non ? 'Non' : 'Non renseigné')}</p>
+                                <p><strong>Quantité:</strong> ${survey.repeteur_wifi_quantite || 'Non renseigné'}</p>
+                                <p><strong>Emplacement:</strong> ${survey.repeteur_wifi_emplacement || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>CPL</h6>
+                                <p><strong>Recommandé:</strong> ${survey.cpl_oui ? 'Oui' : (survey.cpl_non ? 'Non' : 'Non renseigné')}</p>
+                                <p><strong>Quantité:</strong> ${survey.cpl_quantite || 'Non renseigné'}</p>
+                                <p><strong>Emplacement:</strong> ${survey.cpl_emplacement || 'Non renseigné'}</p>
+                            </div>
+                        </div>
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <h6>Câble local</h6>
+                                <p><strong>Type:</strong> ${survey.cable_local_type || 'Non renseigné'}</p>
+                                <p><strong>Longueur:</strong> ${survey.cable_local_longueur || 'Non renseigné'}</p>
+                                <p><strong>Connecteurs:</strong> ${survey.cable_local_connecteurs || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Goulottes</h6>
+                                <p><strong>Recommandées:</strong> ${survey.goulottes_oui ? 'Oui' : (survey.goulottes_non ? 'Non' : 'Non renseigné')}</p>
+                                <p><strong>Quantité:</strong> ${survey.goulottes_quantite || 'Non renseigné'}</p>
+                                <p><strong>Nombre x2m:</strong> ${survey.goulottes_nombre_x2m || 'Non renseigné'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Conclusion -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">CONCLUSION</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Conclusion:</strong> ${survey.conclusion || 'Non renseigné'}</p>
+                        <p><strong>Observation technique:</strong> ${survey.observation_tech || 'Non renseigné'}</p>
+                        <p><strong>Observation client:</strong> ${survey.observation_client || 'Non renseigné'}</p>
+                        <p><strong>Survey:</strong> ${survey.survey_ok ? 'OK' : (survey.survey_nok ? 'NOK' : 'Non renseigné')}</p>
+                        <p><strong>Motif:</strong> ${survey.motif || 'Non renseigné'}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Satisfaction client -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">SATISFACTION CLIENT</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Satisfaction:</strong> 
+                            ${survey.client_tres_satisfait ? 'Très satisfait' :
+                              survey.client_satisfait ? 'Satisfait' :
+                              survey.client_pas_satisfait ? 'Pas satisfait' : 'Non renseigné'}
+                        </p>
+                        <p><strong>Commentaires:</strong> ${survey.commentaires || 'Aucun commentaire'}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Photos -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">PHOTOS</h5>
+                    </div>
+                    <div class="card-body">
+                        ${survey.photos_list && survey.photos_list.length > 0
+                            ? survey.photos_list.map(photo =>
+                                `<img src="/uploads/${photo}" class="photo-preview m-2" style="width:30%;" alt="Photo survey">`
+                            ).join('')
+                            : '<span>Aucune photo enregistrée</span>'
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Signatures -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">SIGNATURE ÉQUIPE</h5>
+                    </div>
+                    <div class="card-body text-center">
+                        ${survey.signature_equipe ? 
+                            `<img src="${survey.signature_equipe}" class="img-fluid signature-pad" style="max-height: 100px;">` : 
+                            'Non signé'}
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">SIGNATURE CLIENT</h5>
+                    </div>
+                    <div class="card-body text-center">
+                        ${survey.signature_client ? 
+                            `<img src="${survey.signature_client}" class="img-fluid signature-pad" style="max-height: 100px;">` : 
+                            'Non signé'}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    `;
+
+    document.getElementById('interventionDetails').innerHTML = content;
+    addPdfButtonToModal();
+}
+
+// Fonction pour afficher les détails Fiche Technique
+function displayFicheTechniqueDetails(ficheTechnique, intervention) {
+     currentIntervention = intervention;
+    // Déterminez le nom du validateur
+    let validateurInfo = 'Non validé';
+    
+    if (intervention.valideur && intervention.valideur.prenom) {
+        validateurInfo = `${intervention.valideur.prenom} ${intervention.valideur.nom}`;
+    } else if (intervention.valide_par) {
+        validateurInfo = `Utilisateur #${intervention.valide_par}`;
+    }
+
+    const content = `
+    <div class="container-fluid">
+        <!-- En-tête -->
+        <div class="row mb-4">
+            <div class="col-12 text-center">
+                <h3 class="text-primary">FICHE TECHNIQUE D'INSTALLATION</h3>
+                <p class="text-muted">Date de génération: ${new Date().toLocaleDateString()}</p>
+            </div>
+        </div>
+        
+        <!-- Informations client -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-user me-2"></i> INFORMATIONS CLIENT</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-2"><strong>Nom/Raison sociale:</strong> ${ficheTechnique.nom_raison_sociale || intervention.demande.nom_client + ' ' + intervention.demande.prenom_client}</p>
+                        <p class="mb-2"><strong>ND:</strong> ${intervention.demande.nd}</p>
+                        <p class="mb-2"><strong>Adresse:</strong> ${ficheTechnique.adresse_demandee || intervention.demande.libelle_commune}</p>
+                        <p class="mb-2"><strong>Contact:</strong> ${ficheTechnique.contact || 'Non renseigné'}</p>
+                        <p class="mb-2"><strong>Représenté par:</strong> ${ficheTechnique.represente_par || 'Non renseigné'}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i> INFORMATIONS INTERVENTION</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-2"><strong>Date début:</strong> ${intervention.date_debut ? new Date(intervention.date_debut).toLocaleDateString() : 'Non précisée'}</p>
+                        <p class="mb-2"><strong>Date fin:</strong> ${intervention.date_fin ? new Date(intervention.date_fin).toLocaleDateString() : 'Non précisée'}</p>
+                        <p class="mb-2"><strong>Technologie:</strong> ${intervention.demande.type_techno}</p>
+                        <p class="mb-2"><strong>Service:</strong> ${intervention.demande.service}</p>
+                        <p class="mb-2"><strong>Technicien:</strong> ${intervention.technicien.prenom} ${intervention.technicien.nom}</p>
+                        <p class="mb-2"><strong>Validé par:</strong> ${validateurInfo}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- COORDONNÉES & LOCALISATION -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-map-marker-alt me-2"></i> COORDONNÉES & LOCALISATION</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-2"><strong>Tél 1:</strong> ${ficheTechnique.tel1 || 'Non renseigné'}</p>
+                        <p class="mb-2"><strong>Tél 2:</strong> ${ficheTechnique.tel2 || 'Non renseigné'}</p>
+                        <p class="mb-2"><strong>Étage:</strong> ${ficheTechnique.etage || 'Non renseigné'}</p>
+                        <p class="mb-2"><strong>GPS:</strong> ${ficheTechnique.gps_lat || 'N/A'}, ${ficheTechnique.gps_long || 'N/A'}</p>
+                        <p class="mb-2"><strong>Type logement:</strong> ${ficheTechnique.type_logement_avec_bpi || ficheTechnique.type_logement_sans_bpi || 'Non renseigné'}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- PLANNING INSTALLATION -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-calendar me-2"></i> PLANNING INSTALLATION</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-2"><strong>Date installation:</strong> ${ficheTechnique.date_installation || 'Non renseignée'}</p>
+                        <p class="mb-2"><strong>Heure arrivée:</strong> ${ficheTechnique.h_arrivee || 'Non renseignée'}</p>
+                        <p class="mb-2"><strong>Heure départ:</strong> ${ficheTechnique.h_depart || 'Non renseignée'}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Informations installation -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-wrench me-2"></i> INFORMATIONS TECHNIQUES</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-2"><strong>N° Ligne:</strong> ${ficheTechnique.n_ligne || 'Non renseigné'}</p>
+                        <p class="mb-2"><strong>N° Demande:</strong> ${ficheTechnique.n_demande || 'Non renseigné'}</p>
+                        <p class="mb-2"><strong>Offre:</strong> ${ficheTechnique.offre || 'Non renseignée'}</p>
+                        <p class="mb-2"><strong>Débit:</strong> ${ficheTechnique.debit || 'Non renseigné'}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Matériels installés -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-box-open me-2"></i> MATÉRIELS INSTALLÉS</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>ONT (Modem)</h6>
+                                <p><strong>Type:</strong> ${ficheTechnique.type_ont || 'Non renseigné'}</p>
+                                <p><strong>Nature:</strong> ${ficheTechnique.nature_ont || 'Non renseigné'}</p>
+                                <p><strong>N° Série:</strong> ${ficheTechnique.numero_serie_ont || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Décodeur TV</h6>
+                                <p><strong>Type:</strong> ${ficheTechnique.type_decodeur || 'Non renseigné'}</p>
+                                <p><strong>Nature:</strong> ${ficheTechnique.nature_decodeur || 'Non renseigné'}</p>
+                                <p><strong>N° Série:</strong> ${ficheTechnique.numero_serie_decodeur || 'Non renseigné'}</p>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-12">
+                                <h6>Options installées</h6>
+                                <p>
+                                    ${ficheTechnique.disque_dur ? '✓ Disque Dur' : ''}
+                                    ${ficheTechnique.telephone ? '✓ Téléphone' : ''}
+                                    ${ficheTechnique.recepteur_wifi ? '✓ Récepteur WiFi' : ''}
+                                    ${ficheTechnique.cpl ? '✓ CPL' : ''}
+                                    ${ficheTechnique.carte_vaccess ? '✓ Carte Vaccess' : ''}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Accessoires -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-tools me-2"></i> ACCESSOIRES UTILISÉS</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <p><strong>Câble LC:</strong> ${ficheTechnique.type_cable_lc || 'Non renseigné'}</p>
+                                <p><strong>Câble BTI:</strong> ${ficheTechnique.type_cable_bti || 'Non renseigné'}</p>
+                                <p><strong>Câble PTO ONE:</strong> ${ficheTechnique.type_cable_pto_one || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-4">
+                                <p><strong>Kit PTO:</strong> ${ficheTechnique.kit_pto ? 'Oui' : 'Non'}</p>
+                                <p><strong>Piton:</strong> ${ficheTechnique.piton ? 'Oui' : 'Non'}</p>
+                                <p><strong>Arobase:</strong> ${ficheTechnique.arobase ? 'Oui' : 'Non'}</p>
+                            </div>
+                            <div class="col-md-4">
+                                <p><strong>Malico:</strong> ${ficheTechnique.malico ? 'Oui' : 'Non'}</p>
+                                <p><strong>DS6:</strong> ${ficheTechnique.ds6 ? 'Oui' : 'Non'}</p>
+                                <p><strong>Autre:</strong> ${ficheTechnique.autre_accessoire || 'Aucun'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tests services -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-check-circle me-2"></i> TESTS SERVICES</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Téléphonie</h6>
+                                <p><strong>Appel sortant:</strong> ${ficheTechnique.appel_sortant_ok ? '✓ OK' : ficheTechnique.appel_sortant_nok ? '✗ NOK' : 'Non testé'}</p>
+                                <p><strong>Appel entrant:</strong> ${ficheTechnique.appel_entrant_ok ? '✓ OK' : ficheTechnique.appel_entrant_nok ? '✗ NOK' : 'Non testé'}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Télévision</h6>
+                                <p><strong>TV Mono:</strong> ${ficheTechnique.tvo_mono_ok ? '✓ OK' : ficheTechnique.tvo_mono_nok ? '✗ NOK' : 'Non testé'}</p>
+                                <p><strong>TV Multi:</strong> ${ficheTechnique.tvo_multi_ok ? '✓ OK' : ficheTechnique.tvo_multi_nok ? '✗ NOK' : 'Non testé'}</p>
+                                <p><strong>Enregistreur DD:</strong> ${ficheTechnique.enregistreur_dd_ok ? '✓ OK' : ficheTechnique.enregistreur_dd_nok ? '✗ NOK' : 'Non testé'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tests débits -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-tachometer-alt me-2"></i> TESTS DÉBITS</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Par câble</h6>
+                                <p><strong>Salon:</strong> ${ficheTechnique.par_cable_salon || 'Non testé'}</p>
+                                <p><strong>Chambres:</strong> ${ficheTechnique.par_cable_chambres || 'Non testé'}</p>
+                                <p><strong>Bureau:</strong> ${ficheTechnique.par_cable_bureau || 'Non testé'}</p>
+                                <p><strong>Vitesse WiFi:</strong> ${ficheTechnique.par_cable_vitesse_wifi || 'Non testé'}</p>
+                                <p><strong>Mesure Mbps:</strong> ${ficheTechnique.par_cable_mesure_mbps || 'N/A'} Mbps</p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Par WiFi</h6>
+                                <p><strong>Salon:</strong> ${ficheTechnique.par_wifi_salon || 'Non testé'}</p>
+                                <p><strong>Chambres:</strong> ${ficheTechnique.par_wifi_chambres || 'Non testé'}</p>
+                                <p><strong>Bureau:</strong> ${ficheTechnique.par_wifi_bureau || 'Non testé'}</p>
+                                <p><strong>Vitesse WiFi:</strong> ${ficheTechnique.par_wifi_vitesse_wifi || 'Non testé'}</p>
+                                <p><strong>Mesure Mbps:</strong> ${ficheTechnique.par_wifi_mesure_mbps || 'N/A'} Mbps</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Rattachement -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-project-diagram me-2"></i> RATTACHEMENT</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>NRO:</strong> ${ficheTechnique.rattachement_nro || 'Non renseigné'}</p>
+                                <p><strong>Type:</strong> ${ficheTechnique.rattachement_type || 'Non renseigné'}</p>
+                                <p><strong>N° Carte:</strong> ${ficheTechnique.rattachement_num_carte || 'Non renseigné'}</p>
+                                <p><strong>N° Port:</strong> ${ficheTechnique.rattachement_num_port || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Plaque:</strong> ${ficheTechnique.rattachement_plaque || 'Non renseigné'}</p>
+                                <p><strong>BPI/PBO:</strong> ${ficheTechnique.rattachement_bpi_pbo || 'Non renseigné'}</p>
+                                <p><strong>Coupleur:</strong> ${ficheTechnique.rattachement_coupleur || 'Non renseigné'}</p>
+                                <p><strong>Fibre:</strong> ${ficheTechnique.rattachement_fibre || 'Non renseigné'}</p>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <p><strong>Référence dBm:</strong> ${ficheTechnique.rattachement_ref_dbm || 'N/A'}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Mesure dBm:</strong> ${ficheTechnique.rattachement_mesure_dbm || 'N/A'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Commentaires et satisfaction -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-star me-2"></i> SATISFACTION CLIENT</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Niveau de satisfaction:</strong> 
+                            ${ficheTechnique.client_tres_satisfait ? 'Très satisfait' :
+                              ficheTechnique.client_satisfait ? 'Satisfait' :
+                              ficheTechnique.client_pas_satisfait ? 'Pas satisfait' : 'Non renseigné'}
+                        </p>
+                        <p><strong>Commentaires:</strong> ${ficheTechnique.commentaires || 'Aucun commentaire'}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- section Photos et documents -->
+            <div class="intervention-section mb-4">
+                <h5 class="text-primary mb-3">
+                    <i data-feather="image" class="me-2"></i>
+                    Photos et documents
+                </h5>
+                <div class="field-group">
+                    ${ficheTechnique.photos_list && ficheTechnique.photos_list.length > 0
+                ? ficheTechnique.photos_list.map(photo =>
+                    `<img src="/uploads/${photo}" class="photo-preview" style="width:30%;" alt="Photo intervention">`
+                ).join('')
+                : '<span>Aucune photo enregistrée</span>'
+            }
+                </div>
+            </div>
+        
+        <!-- Signatures -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-signature me-2"></i> SIGNATURE ÉQUIPE</h5>
+                    </div>
+                    <div class="card-body text-center">
+                        ${ficheTechnique.signature_equipe ? 
+                            `<img src="${ficheTechnique.signature_equipe}" class="img-fluid signature-pad" style="max-height: 100px;">` : 
+                            'Non signé'}
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-signature me-2"></i> SIGNATURE CLIENT</h5>
+                    </div>
+                    <div class="card-body text-center">
+                        ${ficheTechnique.signature_client ? 
+                            `<img src="${ficheTechnique.signature_client}" class="img-fluid signature-pad" style="max-height: 100px;">` : 
+                            'Non signé'}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    `;
+
+    document.getElementById('interventionDetails').innerHTML = content;
+    addPdfButtonToModal();
+}// Fonction pour ajouter le bouton PDF dans la modal
+function addPdfButtonToModal() {
+    const modalHeader = document.querySelector('#interventionModal .modal-header');
+    if (modalHeader) {
+        const existingButton = modalHeader.querySelector('.btn-pdf');
+        if (existingButton) {
+            existingButton.remove();
+        }
+        
+        modalHeader.insertAdjacentHTML('beforeend', `
+            <button type="button" class="btn btn-info ms-2 btn-pdf" onclick="generateInterventionPDF()">
+                <i data-feather="file-text" class="me-2"></i>
+                Générer PDF
+            </button>
+        `);
+    }
+    
+    if (window.feather) {
+        feather.replace();
+    }
+}  
+
+function applyFilters() {
+    const params = new URLSearchParams();
+    const statut = document.getElementById('filterStatut').value;
+    const technologie = document.getElementById('filterTechnologie').value;
+    const service = document.getElementById('filterService').value;
+    const zone = document.getElementById('filterZone').value;
+    const dateDebut = document.getElementById('filterDateDebut').value;
+    const dateFin = document.getElementById('filterDateFin').value;
+    const searchText = document.getElementById('searchText').value;
+    const perPage = {{ current_filters.per_page }};
+
+    if (statut) params.append('statut', statut);
+    if (technologie) params.append('technologie', technologie);
+    if (service) params.append('service', service);
+    if (zone) params.append('zone', zone);
+    if (dateDebut) params.append('date_debut', dateDebut);
+    if (dateFin) params.append('date_fin', dateFin);
+    if (searchText) params.append('search_text', searchText);
+    params.append('per_page', perPage);
+
+    // Recharger la page avec les filtres appliqués
+    window.location.href = `${window.location.pathname}?${params.toString()}`;
+}
+
+function clearFilters() {
+    // Rediriger vers la page sans paramètres de filtre
+    window.location.href = window.location.pathname + '?per_page={{ current_filters.per_page }}';
+}
+
+
+
+    
+    function viewIntervention(interventionId) {
+        console.log('Chargement intervention:', interventionId);
+        
+        fetch(`/api/intervention/${interventionId}`)
+            .then(response => {
+                console.log('Status:', response.status);
+                if (!response.ok) {
+                    throw new Error(`Erreur HTTP: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Data reçue:', data);
+                if (data.success) {
+                    displayInterventionDetails(data.intervention);
+                    new bootstrap.Modal(document.getElementById('interventionModal')).show();
+                } else {
+                    alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+                }
+            })
+            .catch(error => {
+                console.error('Erreur complète:', error);
+                alert('Erreur lors du chargement des détails. Voir la console pour plus de détails.');
+            });
+    }
+
+    function validateIntervention(interventionId) {
+        currentInterventionId = interventionId;
+        currentAction = 'valider';
+
+        document.getElementById('validationModalTitle').innerHTML = '<i data-feather="check" class="me-2"></i>Valider l\'intervention';
+        document.getElementById('confirmValidation').className = 'btn btn-success';
+        document.getElementById('confirmValidation').textContent = 'Valider';
+
+        new bootstrap.Modal(document.getElementById('validationModal')).show();
+        feather.replace();
+    }
+
+    function rejectIntervention(interventionId) {
+        currentInterventionId = interventionId;
+        currentAction = 'rejeter';
+
+        document.getElementById('validationModalTitle').innerHTML = '<i data-feather="x" class="me-2"></i>Rejeter l\'intervention';
+        document.getElementById('confirmValidation').className = 'btn btn-danger';
+        document.getElementById('confirmValidation').textContent = 'Rejeter';
+
+        new bootstrap.Modal(document.getElementById('validationModal')).show();
+        feather.replace();
+    }
+
+    document.getElementById('confirmValidation').addEventListener('click', function () {
+        if (!currentInterventionId || !currentAction) return;
+
+        const commentaire = document.getElementById('validationCommentaire').value;
+
+        fetch(`/validate-intervention/${currentInterventionId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: currentAction,
+                commentaire: commentaire
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('success', data.message);
+                    bootstrap.Modal.getInstance(document.getElementById('validationModal')).hide();
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showAlert('danger', 'Erreur: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                showAlert('danger', 'Erreur lors de la validation');
+            });
+    });
+
+    function exportData() {
+        const visibleRows = document.querySelectorAll('#interventionsTable tbody tr[style=""]');
+
+        if (visibleRows.length === 0) {
+            alert('Aucune donnée à exporter avec les filtres actuels.');
+            return;
+        }
+
+        let csvContent = 'Date,Client,ND,Technologie,Service,Technicien,Statut\n';
+
+        visibleRows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            const rowData = [
+                cells[0].textContent.trim().replace(/\n/g, ' '),
+                cells[1].textContent.trim().replace(/\n/g, ' '),
+                cells[2].textContent.trim(),
+                cells[3].textContent.trim(),
+                cells[4].textContent.trim(),
+                cells[5].textContent.trim().replace(/\n/g, ' '),
+                cells[6].textContent.trim()
+            ];
+            csvContent += rowData.map(cell => `"${cell}"`).join(',') + '\n';
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `interventions_${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+    }
+
+    function showAlert(type, message) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+        alertDiv.style.top = '10px';
+        alertDiv.style.right = '10px';
+        alertDiv.style.zIndex = '9999';
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(alertDiv);
+
+        setTimeout(() => {
+            alertDiv.remove();
+        }, 5000);
+    }
+
+    // Fonction pour générer le PDF approprié
+    function generateInterventionPDF() {
+        if (!currentIntervention) {
+            alert('Aucune intervention à exporter');
+            return;
+        }
+        
+        if (currentIntervention.demande.service === 'Production') {
+            if (currentIntervention.fichier_technique_accessible === false) {
+                // Charger les données de la fiche survey pour générer le PDF
+                generateSurveyPDF(currentIntervention);
+                
+            } else {
+                generateFicheTechniquePDF(currentIntervention);
+            }
+        } else {
+            generateSAVPDF(currentIntervention);
+        }
+    }
+
+    // Fonction pour générer PDF SAV
+    function generateSAVPDF(intervention) {
+        const details = document.getElementById('interventionDetails');
+        const pdfContent = details.cloneNode(true);
+        
+        // Appliquer des styles spécifiques pour le PDF
+        pdfContent.querySelectorAll('.card, .table').forEach(el => {
+            el.style.marginBottom = '10px';
+        });
+        
+        pdfContent.querySelectorAll('.card-header').forEach(el => {
+            el.style.padding = '8px 12px';
+            el.style.fontSize = '14px';
+        });
+        
+        pdfContent.querySelectorAll('.card-body').forEach(el => {
+            el.style.padding = '12px';
+        });
+        
+        // Ajuster les images pour le PDF
+        pdfContent.querySelectorAll('img').forEach(img => {
+            img.style.maxWidth = '100%';
+            img.style.height = 'auto';
+        });
+        
+        const options = {
+            margin: [5, 5, 5, 5], // Marges réduites [haut, droite, bas, gauche]
+            filename: `rapport_SAV_${intervention.demande.nd}_${new Date().toISOString().slice(0, 10)}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { 
+                scale: 2, 
+                useCORS: true,
+                logging: false,
+                scrollX: 0,
+                scrollY: 0
+            },
+            jsPDF: { 
+                unit: 'mm', 
+                format: 'a4', 
+                orientation: 'portrait',
+                compress: true
+            },
+            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+        };
+
+        html2pdf().set(options).from(pdfContent).save();
+    }
+
+   // Fonction pour générer PDF Fiche Technique (version simplifiée)
+    function generateFicheTechniquePDF(intervention) {
+        const details = document.getElementById('interventionDetails');
+        const pdfContent = details.cloneNode(true);
+        
+        // Appliquer des styles spécifiques pour le PDF
+        applyPdfStyles(pdfContent);
+        
+        const options = {
+            margin: [5, 5, 5, 5], // Marges réduites [haut, droite, bas, gauche]
+            filename: `fiche_technique_${intervention.demande.nd}_${new Date().toISOString().slice(0, 10)}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { 
+                scale: 2, 
+                useCORS: true,
+                logging: false,
+                scrollX: 0,
+                scrollY: 0
+            },
+            jsPDF: { 
+                unit: 'mm', 
+                format: 'a4', 
+                orientation: 'portrait',
+                compress: true
+            },
+            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+        };
+
+        html2pdf().set(options).from(pdfContent).save();
+    }
+
+    // Fonction pour générer le PDF de la fiche survey
+    function generateSurveyPDF(intervention) {
+        const details = document.getElementById('interventionDetails');
+        const pdfContent = details.cloneNode(true);
+        
+        // Appliquer des styles spécifiques pour le PDF
+        applyPdfStyles(pdfContent);
+            
+            const options = {
+                margin: [5, 5, 5, 5],
+                filename: `fiche_survey_${intervention.demande.nd}_${new Date().toISOString().slice(0, 10)}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { 
+                    scale: 2, 
+                    useCORS: true,
+                    logging: false,
+                    scrollX: 0,
+                    scrollY: 0
+                },
+                jsPDF: { 
+                    unit: 'mm', 
+                    format: 'a4', 
+                    orientation: 'portrait',
+                    compress: true
+                },
+                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+            };
+
+            html2pdf().set(options).from(pdfContent).save();
+        }
+
+    // Fonction pour appliquer les styles PDF au contenu
+    function applyPdfStyles(element) {
+        // Réduire les marges et espacements
+        element.querySelectorAll('.card, .table').forEach(el => {
+            el.style.marginBottom = '8px';
+        });
+        
+        element.querySelectorAll('.card-header').forEach(el => {
+            el.style.padding = '6px 10px';
+            el.style.fontSize = '13px';
+        });
+        
+        element.querySelectorAll('.card-body').forEach(el => {
+            el.style.padding = '10px';
+        });
+        
+        element.querySelectorAll('h5').forEach(el => {
+            el.style.fontSize = '14px';
+            el.style.marginBottom = '8px';
+        });
+        
+        element.querySelectorAll('p').forEach(el => {
+            el.style.marginBottom = '5px';
+            el.style.fontSize = '12px';
+        });
+        
+        element.querySelectorAll('h3').forEach(el => {
+            el.style.fontSize = '16px';
+            el.style.marginBottom = '10px';
+        });
+        
+        // Ajuster les images pour le PDF
+        element.querySelectorAll('img').forEach(img => {
+            img.style.maxWidth = '100%';
+            img.style.height = 'auto';
+            img.style.maxHeight = '80px'; // Limiter la hauteur des signatures
+        });
+        
+        // Ajuster les tableaux
+        element.querySelectorAll('table').forEach(table => {
+            table.style.fontSize = '11px';
+            table.style.width = '100%';
+        });
+        
+        element.querySelectorAll('th, td').forEach(cell => {
+            cell.style.padding = '4px';
+        });
+        
+        // Réduire l'espacement des lignes
+        element.querySelectorAll('tr').forEach(row => {
+            row.style.marginBottom = '2px';
+        });
+    }
+    // Initialisation
+    document.addEventListener('DOMContentLoaded', function () {
+        // Définir la date du jour dans le filtre de date fin par défaut
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('filterDateFin').value = today;
+    });
+
+</script>
+
+<style>
+    .pdf-sav {
+        font-family: Arial, sans-serif;
+        background: #f8f9fa;
+        border-left: 6px solid #0d6efd;
+        padding: 20px;
+    }
+
+    .pdf-fiche-technique {
+        font-family: Arial, sans-serif;
+        background: #f8f9fa;
+        border-left: 6px solid #28a745;
+        padding: 20px;
+    }
+
+    .pdf-fiche-technique h3, .pdf-fiche-technique h5 {
+        color: #28a745 !important;
+    }
+
+    .pdf-fiche-technique .signature-box {
+        border: 2px dashed #dee2e6;
+        border-radius: 8px;
+        padding: 15px;
+        text-align: center;
+        min-height: 100px;
+    }
+
+    .pdf-fiche-technique .signature-img {
+        max-width: 200px;
+        max-height: 80px;
+    }
+
+    /* Styles pour la modal de détails */
+    #interventionDetails .card {
+        margin-bottom: 1rem;
+    }
+    #interventionDetails .card-header {
+        font-weight: bold;
+    }
+    #interventionDetails p {
+        margin-bottom: 0.5rem;
+    }
+
+     /* Styles pour les PDF */
+    .pdf-container {
+        font-family: Arial, sans-serif;
+        font-size: 12px;
+        line-height: 1.4;
+        padding: 5px;
+    }
+    
+    .pdf-container h2 {
+        font-size: 18px;
+        margin-bottom: 5px;
+        color: #0d6efd;
+    }
+    
+    .pdf-container h3 {
+        font-size: 16px;
+        margin-bottom: 5px;
+        color: #0d6efd;
+    }
+    
+    .pdf-container h4 {
+        font-size: 14px;
+        margin-bottom: 5px;
+        background-color: #0d6efd;
+        color: white;
+        padding: 5px;
+    }
+    
+    .pdf-container .card {
+        margin-bottom: 10px;
+        border: 1px solid #dee2e6;
+    }
+    
+    .pdf-container .card-header {
+        padding: 8px 12px;
+        font-size: 14px;
+    }
+    
+    .pdf-container .card-body {
+        padding: 12px;
+    }
+    
+    .pdf-container img {
+        max-width: 100%;
+        height: auto;
+    }
+    
+    .pdf-container .signature-pad {
+        max-height: 80px;
+        max-width: 100%;
+    }
+    
+    /* Ajustements pour l'impression */
+    @media print {
+        .pdf-container {
+            font-size: 11px;
+        }
+        
+        .pdf-container h2 {
+            font-size: 16px;
+        }
+        
+        .pdf-container h3 {
+            font-size: 14px;
+        }
+        
+        .pdf-container h4 {
+            font-size: 12px;
+        }
+    }
+</style>
+{% endblock %}

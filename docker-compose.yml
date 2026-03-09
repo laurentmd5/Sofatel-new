@@ -1,0 +1,115 @@
+version: '3.9'
+
+services:
+  # Application Flask
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sofatelcom-app
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=production
+      - SQLALCHEMY_DATABASE_URI=mysql+pymysql://sofatelcom:sofatelcom_pass@db:3306/sofatelcom_db
+      - REDIS_URL=redis://redis:6379/0
+      - SESSION_REDIS_HOST=redis
+      - SESSION_REDIS_PORT=6379
+      - SESSION_REDIS_DB=1
+      - CACHE_REDIS_HOST=redis
+      - CACHE_REDIS_PORT=6379
+      - CACHE_REDIS_DB=0
+      - MAIL_SERVER=smtp.gmail.com
+      - MAIL_PORT=587
+      - MAIL_USE_TLS=True
+      - MAIL_USERNAME=${MAIL_USERNAME}
+      - MAIL_PASSWORD=${MAIL_PASSWORD}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - CSRF_SECRET_KEY=${CSRF_SECRET_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    networks:
+      - sofatelcom-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Base de données MySQL
+  db:
+    image: mysql:8.0
+    container_name: sofatelcom-db
+    environment:
+      - MYSQL_ROOT_PASSWORD=root_password_${RANDOM}
+      - MYSQL_DATABASE=sofatelcom_db
+      - MYSQL_USER=sofatelcom
+      - MYSQL_PASSWORD=sofatelcom_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - sofatelcom-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: --default-authentication-plugin=mysql_native_password
+
+  # Cache Redis
+  redis:
+    image: redis:7-alpine
+    container_name: sofatelcom-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - sofatelcom-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password}
+
+  # Phpmyadmin (optionnel - pour l'administration DB en dev)
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: sofatelcom-phpmyadmin
+    environment:
+      - PMA_HOST=db
+      - PMA_USER=sofatelcom
+      - PMA_PASSWORD=sofatelcom_pass
+      - PMA_ROOT_PASSWORD=root_password_${RANDOM}
+    ports:
+      - "8081:80"
+    depends_on:
+      - db
+    networks:
+      - sofatelcom-network
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+    driver: local
+  redis-data:
+    driver: local
+
+networks:
+  sofatelcom-network:
+    driver: bridge

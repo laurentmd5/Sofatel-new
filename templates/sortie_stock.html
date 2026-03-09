@@ -1,0 +1,831 @@
+{% extends "base.html" %} {% block content %}
+<div class="container-fluid">
+  <!-- Fil d'Ariane -->
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item">
+        <a href="{{ url_for('index') }}">Tableau de bord</a>
+      </li>
+      <li class="breadcrumb-item">
+        <a href="{{ url_for('stock.gestion_stock') }}">Gestion des stocks</a>
+      </li>
+      <li class="breadcrumb-item active" aria-current="page">
+        Sortie de stock
+      </li>
+    </ol>
+  </nav>
+
+  <h1 class="h3 mb-4 text-gray-800">
+    <i class="fas fa-arrow-down text-warning mr-2"></i>Sortie de stock
+  </h1>
+
+  <div class="row">
+    <!-- Colonne principale -->
+    <div class="col-lg-8">
+      <!-- Carte du produit -->
+      <div class="card shadow mb-4">
+        <div
+          class="card-header py-3 d-flex justify-content-between align-items-center"
+        >
+          <h6 class="m-0 font-weight-bold text-primary">
+            <i class="fas fa-box-open mr-2"></i>Détails du produit
+          </h6>
+          <span
+            class="badge badge-{{ 'success' if produit.quantite > 0 else 'danger' }}"
+          >
+            {{ produit.quantite|round(2) }} {{ produit.unite_mesure if
+            produit.unite_mesure else 'unité' }} en stock
+          </span>
+        </div>
+        <div class="card-body">
+          <!-- Zone Indicator Bar (Magasinier Only) -->
+          {% if current_user.role == 'magasinier' %}
+          <div
+            class="alert alert-info border-2 border-info mb-4"
+            style="
+              background-color: rgba(23, 162, 184, 0.1);
+              border-left: 4px solid #17a2b8;
+            "
+          >
+            <strong
+              ><i class="fas fa-map-marker-alt"></i> Zone — {{
+              current_user.zone.nom if current_user.zone else 'Zone' }}</strong
+            >
+            <p class="mb-0 mt-2">
+              Vous opérez en Zone {{ current_user.zone.nom if current_user.zone
+              else 'Zone' }}. Les emplacements ci-dessous doivent appartenir à
+              votre zone.
+            </p>
+          </div>
+          {% endif %}
+
+          <div class="row">
+            <div class="col-md-4 border-right">
+              <h5 class="font-weight-bold">Référence</h5>
+              <p class="text-muted">{{ produit.reference }}</p>
+
+              <h5 class="font-weight-bold">Désignation</h5>
+              <p class="text-muted">{{ produit.nom }}</p>
+            </div>
+            <div class="col-md-4 border-right">
+              <h5 class="font-weight-bold">Catégorie</h5>
+              <p class="text-muted">
+                {{ produit.categorie.nom if produit.categorie else 'Non
+                spécifiée' }}
+              </p>
+
+              <h5 class="font-weight-bold">Fournisseur</h5>
+              <p class="text-muted">
+                {% if produit.fournisseur %} {{
+                produit.fournisseur.raison_sociale if
+                produit.fournisseur.raison_sociale else 'Non spécifié' }} {%
+                else %} Non spécifié {% endif %}
+              </p>
+            </div>
+            <div class="col-md-4">
+              <h5 class="font-weight-bold">Niveau de stock</h5>
+              <div class="progress mb-2" style="height: 25px">
+                {% set quantite = produit.quantite|float %} {% set stock_max =
+                produit.stock_max|default(quantite * 2, true) %} {% set
+                stock_min = produit.stock_min|default(0, true) %} {% set
+                pourcentage = (quantite / stock_max) * 100 if stock_max > 0 else
+                0 %}
+
+                <div
+                  class="progress-bar {% if quantite <= stock_min %} bg-danger {% elif quantite <= (stock_max * 0.3) %} bg-warning {% else %} bg-success {% endif %}"
+                  role="progressbar"
+                  style="width: {{ [pourcentage, 100]|min }}%"
+                  aria-valuenow="{{ quantite }}"
+                  aria-valuemin="0"
+                  aria-valuemax="{{ stock_max }}"
+                >
+                  {{ "%.2f"|format(quantite) }}
+                </div>
+              </div>
+              <div class="text-center">
+                <small class="text-muted">
+                  {% if produit.stock_min is not none %} Min: {{
+                  produit.stock_min }} • {% endif %} Actuel: {{
+                  produit.quantite|round(2) }} {% if produit.stock_max is not
+                  none %} • Max: {{ produit.stock_max }} {% endif %}
+                </small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Formulaire de sortie de stock -->
+      <div class="card shadow mb-4">
+        <div class="card-header py-3">
+          <h6 class="m-0 font-weight-bold text-warning">
+            <i class="fas fa-minus-circle mr-2"></i>Nouvelle sortie de stock
+          </h6>
+        </div>
+        <div class="card-body">
+          <form
+            method="POST"
+            action="{{ url_for('stock.sortie_stock', produit_id=produit.id) }}"
+            id="formSortieStock"
+          >
+            {{ form.hidden_tag() }}
+
+            <div class="form-row">
+              <div class="form-group">
+                {{ form.quantite.label(class="font-weight-bold") }}
+                <div class="input-group">
+                  {{ form.quantite(class="form-control form-control-lg",
+                  id="quantite", min="0.01", step="0.01", required=True,
+                  data_quantite=produit.quantite,
+                  oninput="updateSortieStock(this)") }}
+                  <div class="input-group-append">
+                    <span class="input-group-text"
+                      >{{ produit.unite_mesure if produit.unite_mesure else
+                      'unité' }}</span
+                    >
+                  </div>
+                </div>
+                <small class="form-text text-muted"
+                  >Quantité à sortir du stock</small
+                >
+              </div>
+
+              <div class="form-group">
+                {% if current_user.role == 'magasinier' %}
+                <label
+                  for="{{ form.emplacement_id.id }}"
+                  class="font-weight-bold"
+                >
+                  {{ form.emplacement_id.label.text }} — Zone {{
+                  current_user.zone.nom if current_user.zone else 'Zone' }}
+                </label>
+                {% else %} {{
+                form.emplacement_id.label(class="font-weight-bold") }} {% endif
+                %} {{ form.emplacement_id(class="form-control form-control-lg")
+                }} {% if form.emplacement_id.errors %}
+                <div class="text-danger">
+                  {% for error in form.emplacement_id.errors %} {{ error }} {%
+                  endfor %}
+                </div>
+                {% endif %} {% if current_user.role == 'magasinier' %}
+                <small class="form-text text-muted"
+                  >Sélectionnez rayon/emplacement Zone {{ current_user.zone.nom
+                  if current_user.zone else 'Zone' }} uniquement</small
+                >
+                {% else %}
+                <small class="form-text text-muted"
+                  >Sélectionnez l'emplacement de sortie</small
+                >
+                {% endif %}
+              </div>
+
+              <div class="form-group col-md-6">
+                {{ form.prix_vente.label(class="font-weight-bold") }}
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">FCFA</span>
+                  </div>
+                  {{ form.prix_vente(class="form-control form-control-lg",
+                  id="prix_unitaire", step="0.01", min="0",
+                  oninput="updateMontantTotal()") }}
+                </div>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group col-md-6">
+                {{ form.motif.label(class="font-weight-bold") }} {{
+                form.motif(class="form-control form-control-lg") }} {% if
+                form.motif.errors %}
+                <div class="text-danger">
+                  {% for error in form.motif.errors %} {{ error }} {% endfor %}
+                </div>
+                {% endif %}
+                <small class="form-text text-muted"
+                  >Sélectionnez le motif de cette sortie</small
+                >
+              </div>
+            </div>
+
+            <div class="form-group">
+              {{ form.commentaire.label(class="font-weight-bold") }} {{
+              form.commentaire(class="form-control", id="commentaire", rows=3)
+              }} {% if form.commentaire.errors %}
+              <div class="text-danger">
+                {% for error in form.commentaire.errors %} {{ error }} {% endfor
+                %}
+              </div>
+              {% endif %}
+              <small class="form-text text-muted"
+                >Veuillez indiquer la raison de cette sortie de stock (vente,
+                perte, etc.)</small
+              >
+            </div>
+
+            <!-- Récapitulatif -->
+            <div class="alert alert-warning">
+              <h5 class="alert-heading">Récapitulatif de la sortie</h5>
+              <div class="row">
+                <div class="col-md-6">
+                  <p class="mb-1">
+                    <strong>Stock actuel :</strong>
+                    <span id="stock-actuel"
+                      >{{ produit.quantite|round(2) }}</span
+                    >
+                    {{ produit.unite_mesure if produit.unite_mesure else 'unité'
+                    }}
+                  </p>
+                  <p class="mb-1">
+                    <strong>Quantité retirée :</strong>
+                    <span id="quantite-retiree">0.00</span> {{
+                    produit.unite_mesure if produit.unite_mesure else 'unité' }}
+                  </p>
+                  <p class="mb-1">
+                    <strong>Nouveau stock :</strong>
+                    <span id="stock-restant"
+                      >{{ produit.quantite|round(2) }}</span
+                    >
+                    {{ produit.unite_mesure if produit.unite_mesure else 'unité'
+                    }}
+                  </p>
+                </div>
+                <div class="col-md-6">
+                  <p class="mb-1">
+                    <strong>Prix unitaire :</strong>
+                    <span id="prix-unitaire-display">0.00</span> FCFA
+                  </p>
+                  <p class="mb-1">
+                    <strong>Montant total :</strong>
+                    <span id="montant-total">0.00</span> FCFA
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group mt-4">
+              <button type="submit" class="btn btn-warning btn-lg mr-2">
+                <i class="fas fa-check-circle mr-2"></i>Valider la sortie de
+                stock
+              </button>
+              <a
+                href="{{ url_for('stock.gestion_stock') }}"
+                class="btn btn-secondary"
+              >
+                <i class="fas fa-times-circle mr-2"></i>Annuler
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Colonne latérale -->
+    <div class="col-lg-4">
+      <!-- Actions rapides -->
+      <div class="card shadow mb-4">
+        <div class="card-header py-3">
+          <h6 class="m-0 font-weight-bold text-primary">
+            <i class="fas fa-bolt mr-2"></i>Actions rapides
+          </h6>
+        </div>
+        <div class="card-body">
+          <div class="d-grid gap-2">
+            <a
+              href="#"
+              class="btn btn-outline-primary btn-block text-left mb-2"
+              data-toggle="modal"
+              data-target="#historiqueCompletModal"
+            >
+              <i class="fas fa-history mr-2"></i>Voir l'historique complet
+            </a>
+            <a
+              href="#"
+              class="btn btn-outline-info btn-block text-left mb-2"
+              data-toggle="modal"
+              data-target="#ajusterStockModal"
+            >
+              <i class="fas fa-sliders-h mr-2"></i>Ajuster le stock
+            </a>
+            <a
+              href="#"
+              class="btn btn-outline-secondary btn-block text-left"
+              data-toggle="modal"
+              data-target="#imprimerEtiquetteModal"
+            >
+              <i class="fas fa-print mr-2"></i>Imprimer une étiquette
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dernières sorties -->
+      <div class="card shadow mb-4">
+        <div
+          class="card-header py-3 d-flex justify-content-between align-items-center"
+        >
+          <h6 class="m-0 font-weight-bold text-primary">
+            <i class="fas fa-list-ul mr-2"></i>Dernières sorties
+          </h6>
+          <span class="badge badge-primary"
+            >{{ produit.mouvements|selectattr('type_mouvement', 'equalto',
+            'sortie')|list|length }}</span
+          >
+        </div>
+        <div class="card-body p-0">
+          <div class="list-group list-group-flush">
+            {% for sortie in produit.mouvements|selectattr('type_mouvement',
+            'equalto', 'sortie')|sort(attribute='date_mouvement',
+            reverse=true)|batch(5)|first %}
+            <div class="list-group-item list-group-item-action">
+              <div class="d-flex w-100 justify-content-between">
+                <h6 class="mb-1">
+                  {{ sortie.quantite }} {{ produit.unite_mesure if
+                  produit.unite_mesure else 'unité' }}
+                </h6>
+                <small
+                  class="text-muted"
+                  title="{{ sortie.date_mouvement.strftime('%d/%m/%Y %H:%M') }}"
+                >
+                  {{ sortie.date_mouvement.strftime('%d/%m/%Y') }}
+                </small>
+              </div>
+              <p class="mb-1">
+                {{ sortie.commentaire|truncate(50) if sortie.commentaire else
+                'Aucun commentaire' }}
+              </p>
+              <small class="text-muted"
+                >Par {{ sortie.utilisateur.username if sortie.utilisateur else
+                'Système' }}</small
+              >
+            </div>
+            {% else %}
+            <div class="text-center p-3">
+              <i class="fas fa-inbox fa-3x text-gray-300 mb-2"></i>
+              <p class="text-muted mb-0">Aucune sortie enregistrée</p>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Historique Complet -->
+<div
+  class="modal fade"
+  id="historiqueCompletModal"
+  tabindex="-1"
+  role="dialog"
+  aria-labelledby="historiqueCompletModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title" id="historiqueCompletModalLabel">
+          <i class="fas fa-history mr-2"></i>Historique complet des mouvements
+        </h5>
+        <button
+          type="button"
+          class="close text-white"
+          data-dismiss="modal"
+          aria-label="Fermer"
+        >
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="table-responsive">
+          <table
+            class="table table-bordered"
+            id="historiqueComplet"
+            width="100%"
+            cellspacing="0"
+          >
+            <thead class="table-light">
+              <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Quantité</th>
+                <th>Prix unitaire</th>
+                <th>Montant</th>
+                <th>Utilisateur</th>
+                <th>Commentaire</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for mouvement in
+              produit.mouvements|sort(attribute='date_mouvement', reverse=true)
+              %}
+              <tr
+                class="{{ 'table-danger' if mouvement.type_mouvement == 'sortie' else 'table-success' }}"
+              >
+                <td>
+                  {{ mouvement.date_mouvement.strftime('%d/%m/%Y %H:%M') }}
+                </td>
+                <td>
+                  {% if mouvement.type_mouvement == 'entree' %}
+                  <span class="badge badge-success">Entrée</span>
+                  {% else %}
+                  <span class="badge badge-danger">Sortie</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {{ mouvement.quantite }} {{ produit.unite_mesure if
+                  produit.unite_mesure else 'unité' }}
+                </td>
+                <td>
+                  {% if mouvement.prix_unitaire is not none %}{{
+                  '%.2f'|format(mouvement.prix_unitaire) }} FCFA{% else %}N/A{%
+                  endif %}
+                </td>
+                <td>
+                  {% if mouvement.prix_unitaire is not none %}{{
+                  '%.2f'|format(mouvement.quantite * mouvement.prix_unitaire) }}
+                  FCFA{% else %}N/A{% endif %}
+                </td>
+                <td>
+                  {{ mouvement.utilisateur.username if mouvement.utilisateur
+                  else 'Système' }}
+                </td>
+                <td>{{ mouvement.commentaire|default('', true) }}</td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="7" class="text-center">
+                  Aucun mouvement enregistré pour ce produit
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">
+          Fermer
+        </button>
+        <button type="button" class="btn btn-primary">
+          <i class="fas fa-download mr-2"></i>Exporter en Excel
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Ajustement de Stock -->
+<div
+  class="modal fade"
+  id="ajusterStockModal"
+  tabindex="-1"
+  role="dialog"
+  aria-labelledby="ajusterStockModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-warning">
+        <h5 class="modal-title text-white" id="ajusterStockModalLabel">
+          <i class="fas fa-sliders-h mr-2"></i>Ajustement de stock
+        </h5>
+        <button
+          type="button"
+          class="close text-white"
+          data-dismiss="modal"
+          aria-label="Fermer"
+        >
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-info">
+          <i class="fas fa-info-circle mr-2"></i>
+          Utilisez cette fonction pour corriger manuellement le niveau de stock.
+          Cette opération créera une entrée ou une sortie de stock automatique.
+        </div>
+
+        <form id="formAjustementStock">
+          <div class="form-group">
+            <label for="stock_reel">Stock physique réel *</label>
+            <input
+              type="number"
+              class="form-control"
+              id="stock_reel"
+              step="0.01"
+              min="0"
+              required
+            />
+            <small class="form-text text-muted"
+              >Quantité physique actuellement en stock</small
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="motif_ajustement">Motif de l'ajustement *</label>
+            <textarea
+              class="form-control"
+              id="motif_ajustement"
+              rows="3"
+              required
+            ></textarea>
+          </div>
+
+          <div class="alert alert-warning">
+            <strong>Différence :</strong>
+            <span id="difference-stock">0.00</span>
+            {{ produit.unite_mesure if produit.unite_mesure else 'unité' }}
+            <span id="type-ajustement" class="font-weight-bold"></span>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">
+          Annuler
+        </button>
+        <button type="button" class="btn btn-warning" id="btnValiderAjustement">
+          <i class="fas fa-check-circle mr-2"></i>Valider l'ajustement
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Impression d'étiquette -->
+<div
+  class="modal fade"
+  id="imprimerEtiquetteModal"
+  tabindex="-1"
+  role="dialog"
+  aria-labelledby="imprimerEtiquetteModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-info text-white">
+        <h5 class="modal-title" id="imprimerEtiquetteModalLabel">
+          <i class="fas fa-print mr-2"></i>Imprimer une étiquette
+        </h5>
+        <button
+          type="button"
+          class="close text-white"
+          data-dismiss="modal"
+          aria-label="Fermer"
+        >
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="nombre_etiquettes">Nombre d'étiquettes à imprimer</label>
+          <input
+            type="number"
+            class="form-control"
+            id="nombre_etiquettes"
+            min="1"
+            value="1"
+          />
+        </div>
+
+        <div class="form-group">
+          <label>Format d'étiquette</label>
+          <select class="form-control">
+            <option>Petite (30x20mm)</option>
+            <option selected>Moyenne (50x30mm)</option>
+            <option>Grande (70x40mm)</option>
+            <option>Code-barres uniquement</option>
+          </select>
+        </div>
+
+        <div class="form-check">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            value=""
+            id="inclure_prix"
+            checked
+          />
+          <label class="form-check-label" for="inclure_prix">
+            Inclure le prix de vente
+          </label>
+        </div>
+
+        <div class="form-check">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            value=""
+            id="inclure_code_barres"
+            checked
+          />
+          <label class="form-check-label" for="inclure_code_barres">
+            Inclure le code-barres
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">
+          Annuler
+        </button>
+        <button type="button" class="btn btn-info">
+          <i class="fas fa-print mr-2"></i>Imprimer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block scripts %} {{ super() }}
+<script>
+      //<![CDATA[
+      $(document).ready(function () {
+          // Formatage des nombres avec séparateur de milliers
+          function formatNumber(number, decimals = 2) {
+              return parseFloat(number).toFixed(decimals).replace(/\.?0+$/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+          }
+
+          // Mise à jour du stock restant et du montant total
+          function updateSortieStock(input) {
+              // Récupérer la quantité actuelle depuis l'attribut data
+              const stockActuel = parseFloat(input.dataset.quantite) || 0;
+              let quantiteRetiree = parseFloat(input.value) || 0;
+
+              // Vérifier que la quantité est valide
+              if (isNaN(quantiteRetiree) || quantiteRetiree <= 0) {
+                  input.setCustomValidity('La quantité doit être supérieure à zéro');
+                  input.reportValidity();
+                  return;
+              }
+
+              // Vérifier que la quantité ne dépasse pas le stock disponible
+              if (quantiteRetiree > stockActuel) {
+                  input.setCustomValidity('La quantité ne peut pas dépasser le stock disponible');
+                  input.reportValidity();
+                  return;
+              } else {
+                  input.setCustomValidity('');
+              }
+
+              // Mettre à jour les éléments d'affichage
+              document.getElementById('quantite-retiree').textContent = formatNumber(quantiteRetiree);
+
+              // Calculer le stock restant
+              const stockRestant = stockActuel - quantiteRetiree;
+
+              // Mettre à jour l'affichage du stock restant
+              document.getElementById('stock-restant').textContent = formatNumber(stockRestant);
+
+              // Mettre à jour le montant total
+              updateMontantTotal();
+
+              // Mettre à jour la différence pour l'ajustement de stock
+              updateDifferenceAjustement();
+          }
+
+          // Mise à jour du montant total
+          function updateMontantTotal() {
+              const quantite = parseFloat(document.getElementById('quantite').value) || 0;
+              const prixUnitaire = parseFloat(document.getElementById('prix_unitaire').value) || 0;
+              const montantTotal = quantite * prixUnitaire;
+
+              // Mettre à jour l'affichage
+              document.getElementById('prix-unitaire-display').textContent = formatNumber(prixUnitaire, 2);
+              document.getElementById('montant-total').textContent = formatNumber(montantTotal, 2);
+          }
+
+          // Mise à jour de la différence pour l'ajustement de stock
+          function updateDifferenceAjustement() {
+              const stockReelInput = document.getElementById('stock_reel');
+              if (!stockReelInput) return;
+
+              const stockActuel = parseFloat('{{ produit.quantite }}') || 0;
+              const stockReel = parseFloat(stockReelInput.value) || 0;
+              const difference = Math.abs(stockReel - stockActuel);
+              const typeAjustement = stockReel > stockActuel ? ' (Entrée)' : ' (Sortie)';
+
+              document.getElementById('difference-stock').textContent = formatNumber(difference);
+              document.getElementById('type-ajustement').textContent = typeAjustement;
+              document.getElementById('type-ajustement').className = stockReel > stockActuel ? 'text-success' : 'text-danger';
+          }
+
+          // Initialisation des composants
+          // Initialisation de la DataTable pour l'historique complet
+          $('#historiqueComplet').DataTable({
+              language: {
+                  url: '//cdn.datatables.net/plug-ins/1.10.25/i18n/French.json'
+              },
+              order: [[0, 'desc']],
+              pageLength: 10,
+              responsive: true,
+              dom: 'Bfrtip',
+              buttons: [
+                  'copy', 'csv', 'excel', 'pdf', 'print'
+              ]
+          });
+
+          // Mise à jour du montant total lors de la modification du prix unitaire
+          $('#prix_unitaire').on('input', updateMontantTotal);
+
+          // Mise à jour de la différence pour l'ajustement de stock
+          $('#stock_reel').on('input', updateDifferenceAjustement);
+
+          // Validation du formulaire
+          $('#formSortieStock').on('submit', function (e) {
+              const quantite = parseFloat($('#quantite').val()) || 0;
+              const stockActuel = parseFloat('{{ produit.quantite }}') || 0;
+
+              if (quantite > stockActuel) {
+                  e.preventDefault();
+                  showAlert('danger', 'Erreur', 'La quantité à retirer ne peut pas dépasser le stock disponible.');
+                  return false;
+              }
+
+              if (quantite <= 0) {
+                  e.preventDefault();
+                  showAlert('danger', 'Erreur', 'La quantité doit être supérieure à zéro.');
+                  return false;
+              }
+
+              const prixUnitaire = parseFloat($('#prix_unitaire').val()) || 0;
+              if (prixUnitaire <= 0) {
+                  e.preventDefault();
+                  showAlert('warning', 'Attention', 'Le prix unitaire doit être supérieur à zéro.');
+                  return false;
+              }
+
+              return true;
+          });
+
+          // Gestion de la soumission du formulaire d'ajustement
+          $('#btnValiderAjustement').on('click', function () {
+              const stockReel = parseFloat($('#stock_reel').val()) || 0;
+              const motif = $('#motif_ajustement').val().trim();
+
+              if (!motif) {
+                  showAlert('warning', 'Champ manquant', 'Veuillez saisir un motif pour cet ajustement.');
+                  return;
+              }
+
+              // Appel AJAX pour enregistrer l'ajustement
+              $.ajax({
+                  url: "{{ url_for('stock.ajuster_stock', produit_id=produit.id) }}",
+                  method: 'POST',
+                  headers: {
+                      'X-CSRFToken': "{{ csrf_token() }}",
+                      'Content-Type': 'application/json'
+                  },
+                  data: JSON.stringify({
+                      stock_reel: stockReel,
+                      motif: motif
+                  }),
+                  success: function (response) {
+                      if (response.success) {
+                          showAlert('success', 'Succès', 'Le stock a été ajusté avec succès.');
+                          $('#ajusterStockModal').modal('hide');
+                          // Recharger la page pour mettre à jour les données
+                          setTimeout(function () {
+                              window.location.reload();
+                          }, 1500);
+                      } else {
+                          showAlert('danger', 'Erreur', response.message || 'Une erreur est survenue lors de l\'ajustement du stock.');
+                      }
+                  },
+                  error: function () {
+                      showAlert('danger', 'Erreur', 'Une erreur est survenue lors de la communication avec le serveur.');
+                  }
+              });
+              // Pour l'instant, on affiche simplement un message de succès
+              showAlert('success', 'Ajustement de stock', 'Cette fonctionnalité sera bientôt disponible.');
+              $('#ajusterStockModal').modal('hide');
+          });
+
+          // Initialisation des valeurs
+          updateMontantTotal();
+      });
+
+      // Fonction utilitaire pour afficher des alertes
+      function showAlert(type, title, message) {
+          // Supprimer les anciennes alertes
+          $('.alert-dismissible').remove();
+
+          // Créer l'alerte
+          const alertHtml = `
+              <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                  <strong>${title} : </strong> ${message}
+                  <button type="button" class="close" data-dismiss="alert" aria-label="Fermer">
+                      <span aria-hidden="true">&times;</span>
+                  </button>
+              </div>
+          `;
+
+          // Ajouter l'alerte en haut de la page
+          $('.container-fluid').prepend(alertHtml);
+
+          // Fermer automatiquement après 5 secondes
+          setTimeout(function () {
+              $('.alert-dismissible').alert('close');
+          }, 5000);
+      }
+  });
+      //]]>
+</script>
+{% endblock %}

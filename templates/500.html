@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Erreur Serveur - Sofatelcom{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i data-feather="alert-triangle" class="text-warning mb-3" style="width: 64px; height: 64px;"></i>
+                    <h2 class="card-title text-danger">Erreur Serveur</h2>
+                    <p class="card-text">Une erreur interne s'est produite. Veuillez réessayer plus tard.</p>
+                    <a href="{{ url_for('dashboard') }}" class="btn btn-primary">
+                        <i data-feather="home" class="me-2"></i>
+                        Retour au tableau de bord
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
