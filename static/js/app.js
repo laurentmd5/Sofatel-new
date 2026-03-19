@@ -11,7 +11,7 @@ const SofatelcomApp = {
         autoSaveInterval: 120000, // 2 minutes
         apiBaseUrl: window.location.origin
     },
-    
+
     // État global de l'application
     state: {
         currentUser: null,
@@ -23,7 +23,7 @@ const SofatelcomApp = {
 /**
  * Initialisation de l'application
  */
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     initializeApp();
     setupGlobalEventListeners();
     initializeFeatherIcons();
@@ -36,22 +36,22 @@ document.addEventListener('DOMContentLoaded', function() {
  */
 function initializeApp() {
     console.log('Initialisation de Sofatelcom PUR...');
-    
+
     // Vérifier la connectivité
     checkConnectivity();
-    
+
     // Initialiser les tooltips Bootstrap
     initializeTooltips();
-    
+
     // Configurer les formulaires
     setupFormValidation();
-    
+
     // Configurer les tableaux
     setupTables();
-    
+
     // Démarrer les intervalles de rafraîchissement
     startRefreshIntervals();
-    
+
     console.log('Sofatelcom PUR initialisé avec succès');
 }
 
@@ -62,16 +62,16 @@ function setupGlobalEventListeners() {
     // Gestion de la déconnexion réseau
     window.addEventListener('offline', handleOffline);
     window.addEventListener('online', handleOnline);
-    
+
     // Gestion des erreurs JavaScript globales
     window.addEventListener('error', handleGlobalError);
-    
+
     // Gestion du redimensionnement de fenêtre
     window.addEventListener('resize', debounce(handleWindowResize, 250));
-    
+
     // Prévention de la perte de données
     window.addEventListener('beforeunload', handleBeforeUnload);
-    
+
     // Gestion des clics sur les éléments avec data-action
     document.addEventListener('click', handleDataActionClicks);
 }
@@ -83,11 +83,11 @@ function setupGlobalEventListeners() {
 function initializeFeatherIcons() {
     // Check if there are actually feather icons to initialize
     const hasFeatherIcons = document.querySelectorAll('[data-feather]').length > 0;
-    
+
     if (!hasFeatherIcons) {
         return; // Skip if no feather icons
     }
-    
+
     // Use the safe replace function from feather-fix.js
     if (typeof window.safeFeatherReplace === 'function') {
         window.safeFeatherReplace();
@@ -106,33 +106,23 @@ function initializeFeatherIcons() {
         }
     }
 }
-                height: 20
-            });
-        } catch (e) {
-            // Silently ignore toSvg errors - feather icons are non-critical
-            if (!(e && e.message && e.message.includes('toSvg'))) {
-                console.warn('Feather icons initialization warning:', e);
-            }
-        }
-    });
-}
 
 /**
  * Global safe feather replace function - can be called from anywhere
  * Prevents toSvg() errors by checking icons exist and using requestAnimationFrame
  */
-window.safeFeatherReplace = function() {
+window.safeFeatherReplace = function () {
     // Check if feather is available
     if (typeof feather === 'undefined' || typeof feather.replace !== 'function') {
         return;
     }
-    
+
     // Only process if there are feather icons in DOM
     const featherIcons = document.querySelectorAll('[data-feather]');
     if (featherIcons.length === 0) {
         return;
     }
-    
+
     // Use requestAnimationFrame to ensure DOM is stable
     requestAnimationFrame(() => {
         try {
@@ -155,7 +145,7 @@ function initializeTooltips() {
     const tooltipTriggerList = [].slice.call(
         document.querySelectorAll('[data-bs-toggle="tooltip"]:not([data-tooltip-initialized])')
     );
-    
+
     tooltipTriggerList.forEach(function (tooltipTriggerEl) {
         // Check if instance already exists
         const existing = bootstrap.Tooltip.getInstance(tooltipTriggerEl);
@@ -172,15 +162,15 @@ function initializeTooltips() {
  */
 function setupFormValidation() {
     const forms = document.querySelectorAll('.needs-validation');
-    
+
     Array.from(forms).forEach(form => {
-        form.addEventListener('submit', function(event) {
+        form.addEventListener('submit', function (event) {
             if (!form.checkValidity()) {
                 event.preventDefault();
                 event.stopPropagation();
                 showNotification('Veuillez corriger les erreurs dans le formulaire', 'warning');
             }
-            
+
             form.classList.add('was-validated');
         });
     });
@@ -195,7 +185,7 @@ function setupTables() {
     tables.forEach(table => {
         table.classList.add('table-hover');
     });
-    
+
     // Gérer le tri des colonnes
     setupTableSorting();
 }
@@ -205,24 +195,24 @@ function setupTables() {
  */
 function setupTableSorting() {
     const sortableHeaders = document.querySelectorAll('th[data-sortable]');
-    
+
     sortableHeaders.forEach(header => {
         header.style.cursor = 'pointer';
         header.classList.add('user-select-none');
-        
-        header.addEventListener('click', function() {
+
+        header.addEventListener('click', function () {
             const table = this.closest('table');
             const column = Array.from(this.parentNode.children).indexOf(this);
             const isAscending = this.classList.contains('sort-asc');
-            
+
             // Réinitialiser tous les en-têtes
             sortableHeaders.forEach(h => {
                 h.classList.remove('sort-asc', 'sort-desc');
             });
-            
+
             // Appliquer le nouveau tri
             this.classList.add(isAscending ? 'sort-desc' : 'sort-asc');
-            
+
             sortTable(table, column, !isAscending);
         });
     });
@@ -234,33 +224,33 @@ function setupTableSorting() {
 function sortTable(table, column, ascending = true) {
     const tbody = table.querySelector('tbody');
     const rows = Array.from(tbody.querySelectorAll('tr'));
-    
+
     rows.sort((a, b) => {
         const aValue = a.cells[column].textContent.trim();
         const bValue = b.cells[column].textContent.trim();
-        
+
         // Détecter si c'est un nombre
         const aNum = parseFloat(aValue);
         const bNum = parseFloat(bValue);
-        
+
         if (!isNaN(aNum) && !isNaN(bNum)) {
             return ascending ? aNum - bNum : bNum - aNum;
         }
-        
+
         // Détecter si c'est une date
         const aDate = Date.parse(aValue);
         const bDate = Date.parse(bValue);
-        
+
         if (!isNaN(aDate) && !isNaN(bDate)) {
             return ascending ? aDate - bDate : bDate - aDate;
         }
-        
+
         // Tri alphabétique
-        return ascending ? 
+        return ascending ?
             aValue.localeCompare(bValue, 'fr', { numeric: true, sensitivity: 'base' }) :
             bValue.localeCompare(aValue, 'fr', { numeric: true, sensitivity: 'base' });
     });
-    
+
     // Réappliquer les lignes triées
     rows.forEach(row => tbody.appendChild(row));
 }
@@ -274,7 +264,7 @@ function startRefreshIntervals() {
         const statsInterval = setInterval(refreshDashboardStats, SofatelcomApp.config.refreshInterval);
         SofatelcomApp.state.intervalHandlers.push(statsInterval);
     }
-    
+
     // Vérification des nouvelles notifications
     const notificationInterval = setInterval(checkNewNotifications, SofatelcomApp.config.refreshInterval);
     SofatelcomApp.state.intervalHandlers.push(notificationInterval);
@@ -299,7 +289,7 @@ function updateDashboardStats(stats) {
         if (element) {
             const newValue = stats[key];
             const currentValue = parseInt(element.textContent);
-            
+
             if (newValue !== currentValue) {
                 animateCounterUpdate(element, currentValue, newValue);
             }
@@ -316,11 +306,11 @@ function animateCounterUpdate(element, from, to) {
     const stepValue = (to - from) / steps;
     let current = from;
     let step = 0;
-    
+
     const interval = setInterval(() => {
         step++;
         current += stepValue;
-        
+
         if (step >= steps) {
             element.textContent = to;
             clearInterval(interval);
@@ -328,7 +318,7 @@ function animateCounterUpdate(element, from, to) {
             element.textContent = Math.round(current);
         }
     }, duration / steps);
-    
+
     // Ajouter un effet visuel
     element.classList.add('pulse');
     setTimeout(() => element.classList.remove('pulse'), duration);
@@ -348,7 +338,7 @@ function checkNewNotifications() {
                         'info',
                         true
                     );
-                    
+
                     // Notification browser si autorisée
                     if (Notification.permission === 'granted') {
                         new Notification('Sofatelcom PUR', {
@@ -371,7 +361,7 @@ function setupNotifications() {
     if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission();
     }
-    
+
     // Créer le conteneur de notifications si nécessaire
     if (!document.getElementById('notification-container')) {
         const container = document.createElement('div');
@@ -388,11 +378,11 @@ function setupNotifications() {
 function showNotification(message, type = 'info', persistent = false) {
     const container = document.getElementById('notification-container');
     if (!container) return;
-    
+
     const notification = document.createElement('div');
     notification.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show`;
     notification.setAttribute('role', 'alert');
-    
+
     notification.innerHTML = `
         <div class="d-flex align-items-center">
             <i data-feather="${getNotificationIcon(type)}" class="me-2"></i>
@@ -400,9 +390,9 @@ function showNotification(message, type = 'info', persistent = false) {
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     `;
-    
+
     container.appendChild(notification);
-    
+
     // Safely replace feather icons if present
     if (document.querySelectorAll('[data-feather]').length > 0) {
         if (typeof window.safeFeatherReplace === 'function') {
@@ -418,7 +408,7 @@ function showNotification(message, type = 'info', persistent = false) {
             }
         }
     }
-    
+
     // Suppression automatique si non persistante
     if (!persistent) {
         setTimeout(() => {
@@ -428,7 +418,7 @@ function showNotification(message, type = 'info', persistent = false) {
             }
         }, SofatelcomApp.config.notificationDuration);
     }
-    
+
     // Ajouter à l'état
     SofatelcomApp.state.notifications.push({
         message,
@@ -457,12 +447,12 @@ function getNotificationIcon(type) {
  */
 function setupAutoSave() {
     const forms = document.querySelectorAll('[data-auto-save]');
-    
+
     forms.forEach(form => {
         const interval = setInterval(() => {
             autoSaveForm(form);
         }, SofatelcomApp.config.autoSaveInterval);
-        
+
         SofatelcomApp.state.intervalHandlers.push(interval);
     });
 }
@@ -473,20 +463,20 @@ function setupAutoSave() {
 function autoSaveForm(form) {
     const formData = new FormData(form);
     const autoSaveUrl = form.dataset.autoSave;
-    
+
     if (!autoSaveUrl) return;
-    
+
     fetch(autoSaveUrl, {
         method: 'POST',
         body: formData
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showAutoSaveIndicator();
-        }
-    })
-    .catch(error => console.error('Erreur sauvegarde auto:', error));
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAutoSaveIndicator();
+            }
+        })
+        .catch(error => console.error('Erreur sauvegarde auto:', error));
 }
 
 /**
@@ -494,7 +484,7 @@ function autoSaveForm(form) {
  */
 function showAutoSaveIndicator() {
     let indicator = document.getElementById('auto-save-indicator');
-    
+
     if (!indicator) {
         indicator = document.createElement('div');
         indicator.id = 'auto-save-indicator';
@@ -507,7 +497,7 @@ function showAutoSaveIndicator() {
         `;
         document.body.appendChild(indicator);
     }
-    
+
     indicator.classList.add('show');
     // Sécuriser l'appel à feather.replace pour éviter l'erreur toSvg
     if (typeof feather !== 'undefined' && typeof feather.replace === 'function') {
@@ -517,7 +507,7 @@ function showAutoSaveIndicator() {
             console.warn('Feather.replace() error:', e);
         }
     }
-    
+
     setTimeout(() => {
         indicator.classList.remove('show');
     }, 2000);
@@ -529,10 +519,10 @@ function showAutoSaveIndicator() {
 function handleDataActionClicks(event) {
     const element = event.target.closest('[data-action]');
     if (!element) return;
-    
+
     const action = element.dataset.action;
     const params = element.dataset.params ? JSON.parse(element.dataset.params) : {};
-    
+
     switch (action) {
         case 'refresh':
             location.reload();
@@ -556,7 +546,7 @@ function handleDataActionClicks(event) {
  */
 function exportData(params) {
     const { type = 'csv', selector, filename } = params;
-    
+
     if (type === 'csv' && selector) {
         const table = document.querySelector(selector);
         if (table) {
@@ -581,7 +571,7 @@ function exportTableToCSV(table, filename = 'export.csv') {
             return `"${cell.textContent.trim().replace(/"/g, '""')}"`;
         }).join(',');
     }).join('\n');
-    
+
     downloadCSV(csvContent, filename);
 }
 
@@ -591,7 +581,7 @@ function exportTableToCSV(table, filename = 'export.csv') {
 function downloadCSV(content, filename) {
     const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
-    
+
     if (link.download !== undefined) {
         const url = URL.createObjectURL(blob);
         link.setAttribute('href', url);
@@ -619,14 +609,14 @@ function copyToClipboard(text) {
         document.body.appendChild(textArea);
         textArea.focus();
         textArea.select();
-        
+
         try {
             document.execCommand('copy');
             showNotification('Copié dans le presse-papiers', 'success');
         } catch (err) {
             showNotification('Erreur lors de la copie', 'error');
         }
-        
+
         document.body.removeChild(textArea);
     }
 }
@@ -695,7 +685,7 @@ function handleWindowResize() {
             canvas.signaturePad.resizeCanvas();
         }
     });
-    
+
     // Réinitialiser les tooltips
     const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
     tooltips.forEach(el => {
@@ -711,7 +701,7 @@ function handleWindowResize() {
 function handleBeforeUnload(event) {
     const forms = document.querySelectorAll('form[data-warn-unsaved]');
     const hasUnsavedChanges = Array.from(forms).some(form => formHasUnsavedChanges(form));
-    
+
     if (hasUnsavedChanges) {
         event.preventDefault();
         event.returnValue = '';
@@ -724,9 +714,9 @@ function handleBeforeUnload(event) {
 function formHasUnsavedChanges(form) {
     const formData = new FormData(form);
     const originalData = form.dataset.originalData;
-    
+
     if (!originalData) return false;
-    
+
     const currentData = JSON.stringify(Array.from(formData.entries()));
     return currentData !== originalData;
 }
@@ -747,16 +737,16 @@ function debounce(func, wait, immediate) {
     return function executedFunction() {
         const context = this;
         const args = arguments;
-        
-        const later = function() {
+
+        const later = function () {
             timeout = null;
             if (!immediate) func.apply(context, args);
         };
-        
+
         const callNow = immediate && !timeout;
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
-        
+
         if (callNow) func.apply(context, args);
     };
 }
@@ -766,7 +756,7 @@ function debounce(func, wait, immediate) {
  */
 function throttle(func, limit) {
     let inThrottle;
-    return function() {
+    return function () {
         const args = arguments;
         const context = this;
         if (!inThrottle) {
@@ -782,12 +772,12 @@ function throttle(func, limit) {
  * ✅ FIX #6: Proper cleanup on navigation to prevent memory leaks
  * Dispose all component instances and disconnect observers
  */
-window.addEventListener('beforeunload', function() {
+window.addEventListener('beforeunload', function () {
     // Nettoyer les intervalles
     SofatelcomApp.state.intervalHandlers.forEach(handler => {
         clearInterval(handler);
     });
-    
+
     // ✅ Dispose all Bootstrap tooltips (prevent phantom listeners)
     const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
     tooltips.forEach(el => {
@@ -796,7 +786,7 @@ window.addEventListener('beforeunload', function() {
             tooltip.dispose();  // Cleanup instance and listeners
         }
     });
-    
+
     // ✅ Disconnect MutationObserver if exists
     if (window.autoPagination && window.autoPagination.observer) {
         window.autoPagination.observer.disconnect();

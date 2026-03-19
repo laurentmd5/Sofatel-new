@@ -62,7 +62,7 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 # Configuration CSRF
 app.config['WTF_CSRF_ENABLED'] = True
-app.config['WTF_CSRF_SECRET_KEY'] = os.getenv('CSRF_SECRET_KEY', os.urandom(24).hex())
+app.config['WTF_CSRF_SECRET_KEY'] = os.getenv('CSRF_SECRET_KEY', os.getenv('SECRET_KEY', 'sofatel-csrf-fallback-key-2025'))
 app.config['WTF_CSRF_TIME_LIMIT'] = 3600  # 1 heure en secondes
 app.config['WTF_CSRF_CHECK_DEFAULT'] = False  # Désactive la vérification CSRF par défaut
 app.config['WTF_CSRF_SSL_STRICT'] = False  # Désactive la vérification SSL stricte

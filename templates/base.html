@@ -649,6 +649,7 @@
             }
         }
 
+        {% if current_user.is_authenticated %}
         // Initialize notification manager when DOM is loaded
         let notificationManager;
         document.addEventListener('DOMContentLoaded', function () {
@@ -663,6 +664,7 @@
                 });
             }
         });
+        {% endif %}
     </script>
 
     <!-- Mobile Navigation Manager -->
@@ -713,14 +715,18 @@
 
         // Initialize on DOMContentLoaded
         document.addEventListener('DOMContentLoaded', function () {
+            {% if current_user.is_authenticated %}
             // Wait a moment for Flutter interface to be ready
             setTimeout(initializeFlutterGeolocation, 500);
+            {% endif %}
         });
 
         // Also initialize on page navigation (in case page reloads)
         window.addEventListener('load', function () {
+            {% if current_user.is_authenticated %}
             // Check again for late initialization
             setTimeout(initializeFlutterGeolocation, 500);
+            {% endif %}
         });
     </script>
 

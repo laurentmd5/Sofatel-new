@@ -15,6 +15,13 @@ class MobileNavManager {
     constructor() {
         this.navbarToggler = document.querySelector('.navbar-toggler');
         this.navbarCollapse = document.querySelector('.navbar-collapse');
+        
+        // Guard: exit if navbar elements are missing (e.g. on login page)
+        if (!this.navbarCollapse) {
+            console.log('ℹ️ Mobile navigation elements not found - manager disabled for this page');
+            return;
+        }
+
         this.navItems = document.querySelectorAll('.navbar-nav .nav-link');
         this.dropdownToggles = document.querySelectorAll('.navbar-nav .dropdown-toggle');
         

@@ -319,6 +319,7 @@ class User(UserMixin, db.Model):
     
     actif = db.Column(db.Boolean, default=True)
     date_creation = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login = db.Column(db.DateTime, nullable=True)
     
     # Relations
     interventions = db.relationship('Intervention', foreign_keys='Intervention.technicien_id', backref='technicien_user', lazy='dynamic', overlaps='interventions_realisees,technicien')
