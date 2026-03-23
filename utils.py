@@ -11,7 +11,10 @@ import json
 def determine_file_type(df_columns):
     """Détermine si le fichier est de type SAV ou Production en fonction des colonnes"""
     sav_columns = {'ND', 'ZONE', 'PRIORITE DE TRAITEMENT', 'ORIGINE'}
-    prod_columns = {'ND', 'OLT', 'DEMANDE', 'COMMANDECLIENT', 'NOMDUCLIENT', 'CONTACTCLIENT'}
+    prod_columns = {
+        'ND', 'OLT', 'DEMANDE', 'COMMANDECLIENT', 'NOMDUCLIENT', 'CONTACTCLIENT',
+        'NOM DU CLIENT', 'CONTACT CLIENT', 'DATE VALIDATION', "DATE D'INTERVENTION", 'TÂCHES'
+    }
     
     sav_count = len(sav_columns.intersection(df_columns))
     prod_count = len(prod_columns.intersection(df_columns))
@@ -242,25 +245,16 @@ def process_excel_file_production(filepath, service, importe_par, fichier_import
             'nd': ['ND'],
             'olt': ['OLT'],
             'demande': ['DEMANDE'],
-            'commande_client': ['COMMANDECLIENT'],
-            'date_validation': ['DATEVALIDATION'],
-            'age': ['AGE'],
-            'nom_client': ['NOMDUCLIENT'],
-            'client_avise': ['CLIENT AVISÉ'],
-            'type_logement': ['TYPEDELOGEMENT'],
-            'contact_client': ['CONTACTCLIENT'],
-            'date_intervention': ["DATED'INTERVENTION"],
-            'heure': ['HEURE'],
-            'via_cc': ['VIACC'],
-            'rbs': ['RBS'],
-            'pilotes': ['PILOTES'],
-            'st': ['ST'],
-            'equipe': ['EQUIPE'],
-            'ci_prcl': ['CI-PRCL'],
+            'commande_client': ['COMMANDECLIENT', 'DEMANDE'],
+            'date_validation': ['DATEVALIDATION', 'DATE VALIDATION'],
+            'nom_client': ['NOMDUCLIENT', 'NOM DU CLIENT'],
+            'contact_client': ['CONTACTCLIENT', 'CONTACT CLIENT'],
+            'date_intervention': ["DATED'INTERVENTION", "DATE D'INTERVENTION"],
             'taches': ['TÂCHES'],
-            'coordonnees_gps': ['COORDONNÉESGPSSUREASYWORK'],
-            'sr': ['SR'],
-            'adresse': ['ADRESSE']
+            'pilotes': ['PILOTES', 'PILOTES REGIS'],
+            'adresse': ['ADRESSE'],
+            'type_techno': ['TECHO'],
+            'offre': ['OFFRES', 'OFFRE']
         }
         
         # Construction du mapping dynamique
@@ -316,12 +310,24 @@ def process_excel_file_production(filepath, service, importe_par, fichier_import
                 # Définir le prestataire pour la production
                 prestataire = "Production"  # Pour les imports Production
                 
+                # Déterminer le type de technologie dynamiquement
+                type_tech_val = safe_str(row.get('type_techno')).upper()
+                if 'FTTH' in type_tech_val:
+                    type_techno = 'Fibre'
+                elif 'ADSL' in type_tech_val:
+                    type_techno = 'Cuivre'
+                elif '5G' in type_tech_val:
+                    type_techno = '5G'
+                else:
+                    type_techno = 'Fibre'  # Valeur par défaut pour la production
+                
                 # Créer la demande d'intervention pour la production
                 demande = DemandeIntervention(
                     nd=safe_str(row.get('nd')),
                     demandee=safe_str(row.get('demande') or 'Production'),
                     zone=safe_str(row.get('olt')),  # Utiliser OLT comme zone pour la production
-                    type_techno='Fibre',  # Par défaut pour la production
+                    type_techno=type_techno,
+                    offre=safe_str(row.get('offre')),
                     nom_client=safe_str(row.get('nom_client')),
                     prenom_client='',  # Valeur par défaut vide pour la production
                     contact_client=safe_str(row.get('contact_client')),
