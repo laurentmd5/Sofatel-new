@@ -35,6 +35,114 @@
         </div>
     </div>
 
+    <!-- Transferts Entrants -->
+    {% if mouvements_en_attente and mouvements_en_attente|length > 0 %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm border-warning">
+                <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-truck-loading"></i> Transferts Entrants (En attente de réception)
+                    </h5>
+                    <span class="badge bg-dark">{{ mouvements_en_attente|length }}</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Référence</th>
+                                    <th>Produit</th>
+                                    <th class="text-end">Quantité</th>
+                                    <th>Date Expédition</th>
+                                    <th class="text-center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for mvt in mouvements_en_attente %}
+                                <tr>
+                                    <td><code>{{ mvt.reference }}</code></td>
+                                    <td>
+                                        <strong>{{ mvt.produit_relation.nom if mvt.produit_relation else 'Produit inconnu' }}</strong><br>
+                                        <small class="text-muted">{{ mvt.produit_relation.reference if mvt.produit_relation else '-' }}</small>
+                                    </td>
+                                    <td class="text-end"><strong>{{ mvt.quantite }}</strong></td>
+                                    <td>{{ mvt.date_mouvement.strftime('%d/%m/%Y %H:%M') if mvt.date_mouvement else '-' }}</td>
+                                    <td class="text-center">
+                                        <button class="btn btn-sm btn-success" 
+                                                onclick="confirmReception({{ mvt.id }}, '{{ mvt.produit_relation.nom if mvt.produit_relation else 'Produit' }}', {{ mvt.quantite }})">
+                                            <i class="fas fa-check-circle"></i> Confirmer
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Réservations Techniciens -->
+    {% if reservations_en_attente and reservations_en_attente|length > 0 %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm border-primary">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-tools"></i> Demandes de Pièces (Techniciens)
+                    </h5>
+                    <span class="badge bg-light text-primary">{{ reservations_en_attente|length }}</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Technicien</th>
+                                    <th>Produit</th>
+                                    <th class="text-end">Quantité</th>
+                                    <th>Intervention</th>
+                                    <th class="text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for res in reservations_en_attente %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ res.intervention.technicien.prenom }} {{ res.intervention.technicien.nom }}</strong>
+                                    </td>
+                                    <td>
+                                        <strong>{{ res.produit.nom }}</strong><br>
+                                        <small class="text-muted">{{ res.produit.reference }}</small>
+                                    </td>
+                                    <td class="text-end"><strong>{{ res.quantite }}</strong></td>
+                                    <td>
+                                        <small>{{ res.intervention.demande.reference if res.intervention.demande else 'Intervention #' ~ res.intervention_id }}</small>
+                                    </td>
+                                    <td class="text-center">
+                                        <button class="btn btn-sm btn-success me-1" 
+                                                onclick="validerReservation({{ res.id }}, '{{ res.produit.nom }}', {{ res.quantite }}, '{{ res.intervention.technicien.prenom }} {{ res.intervention.technicien.nom }}')">
+                                            <i class="fas fa-check"></i> Valider Sortie
+                                        </button>
+                                        <button class="btn btn-sm btn-danger" 
+                                                onclick="rejeterReservation({{ res.id }})">
+                                            <i class="fas fa-times"></i> Rejeter
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Content -->
     <div class="row">
         <div class="col-12">
@@ -320,4 +428,79 @@
         font-size: 0.9em;
     }
 </style>
+<script>
+function confirmReception(mouvementId, produitNom, quantite) {
+    if (confirm(`Confirmer la réception de ${quantite} unités de ${produitNom} ?`)) {
+        fetch(`/gestion-stock/stock/transfert/recevoir/${mouvementId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Réception confirmée avec succès !');
+                location.reload();
+            } else {
+                alert('Erreur : ' + (data.error || 'Une erreur est survenue'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Une erreur est survenue lors de la communication avec le serveur.');
+        });
+    }
+}
+
+function validerReservation(reservationId, produitNom, quantite, technicienNom) {
+    if (confirm(`Confirmer la sortie de ${quantite} unités de ${produitNom} pour le technicien ${technicienNom} ?\nCette action décrémentera le stock immédiatement.`)) {
+        fetch(`/gestion-stock/reservation/valider/${reservationId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Réservation validée et sortie de stock effectuée !');
+                location.reload();
+            } else {
+                alert('Erreur : ' + (data.message || 'Une erreur est survenue'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Une erreur est survenue lors de la communication avec le serveur.');
+        });
+    }
+}
+
+function rejeterReservation(reservationId) {
+    const motif = prompt("Veuillez saisir le motif du rejet :", "Stock insuffisant ou erreur de saisie");
+    if (motif === null) return; // Annuler l'action
+
+    fetch(`/gestion-stock/reservation/rejeter/${reservationId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ motif: motif })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Réservation rejetée avec succès.');
+            location.reload();
+        } else {
+            alert('Erreur : ' + (data.message || 'Une erreur est survenue'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Une erreur est survenue lors de la communication avec le serveur.');
+    });
+}
+</script>
 {% endblock %}

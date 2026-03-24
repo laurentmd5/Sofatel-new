@@ -307,6 +307,20 @@
                 <div class="stat-number">{{ entrees_7j + sorties_7j }}</div>
                 <div class="stat-label">Mouvements (7 jours)</div>
             </div>
+
+            <!-- Demandes de Pièces -->
+            <div class="stat-card {% if nb_reservations_attente > 0 %}alert{% else %}success{% endif %}">
+                <div class="stat-icon">🔧</div>
+                <div class="stat-number">{{ nb_reservations_attente }}</div>
+                <div class="stat-label">Demandes de Pièces en Attente</div>
+                {% if nb_reservations_attente > 0 %}
+                <div class="mt-auto text-center">
+                    <a href="{{ url_for('stock.liste_produits_zone') }}" class="btn btn-sm btn-outline-danger w-100">
+                        Valider les sorties →
+                    </a>
+                </div>
+                {% endif %}
+            </div>
         </div>
 
         <!-- QUICK ACTIONS -->

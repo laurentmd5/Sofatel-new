@@ -199,6 +199,22 @@
                     <small class="text-muted">Référentiel des partenaires</small>
                 </a>
             </div>
+            {% if current_user.role in ['admin', 'chef_pur', 'gestionnaire_stock'] %}
+            <div class="col-md-3 col-sm-6">
+                <button type="button" class="btn btn-primary w-100 py-3 d-flex flex-column align-items-center justify-content-center shadow-sm" data-bs-toggle="modal" data-bs-target="#importSonatelModal">
+                    <i class="fas fa-file-excel mb-2 fa-lg"></i>
+                    <span class="fw-semibold">Import Stock Sonatel</span>
+                    <small class="text-white-50">Charger fichier .xlsx</small>
+                </button>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <button type="button" class="btn btn-info w-100 py-3 d-flex flex-column align-items-center justify-content-center shadow-sm" data-bs-toggle="modal" data-bs-target="#dispatchModal">
+                    <i class="fas fa-shuttle-van mb-2 fa-lg"></i>
+                    <span class="fw-semibold">Dispatching Régional</span>
+                    <small class="text-white-50">Dakar vers Mbour/Kaolack</small>
+                </button>
+            </div>
+            {% endif %}
         </div>
 
         <!-- Section Statistiques -->
@@ -298,9 +314,7 @@
                 </div>
             </div>
         </div>
-
-</div> <!-- Fin de la section Tableau de Bord -->
-</section>
+    </section>
 
 <!-- Section Gestion des Produits -->
 <section id="produits" class="dashboard-section py-4" style="display: none;">
@@ -429,7 +443,6 @@
                                     <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal"
                                         data-bs-target="#detailsProduitModal" data-id="{{ produit.id }}"
                                         title="Voir les détails" aria-label="Voir les détails du produit"
-                                        onclick="event.stopPropagation(); showProductDetails({{ produit.id }}); return false;"
                                         style="white-space: nowrap;">
                                         <i class="fas fa-info-circle" aria-hidden="true"></i>
                                         <span class="sr-only">Voir les détails du produit</span>
@@ -533,11 +546,10 @@
                     <tbody>
                         <!-- Les données seront chargées via AJAX -->
                     </tbody>
-                </table>
             </div>
         </div>
     </div>
-    </div>
+</section>
 
 <!-- Section Produits en Faible Stock -->
 <section id="produits-faibles-stocks" class="dashboard-section py-4" style="display: none;">
@@ -616,6 +628,77 @@
 
 </div> <!-- FIN du container-fluid px-4 -->
 
+{% if current_user.role in ['admin', 'chef_pur', 'gestionnaire_stock'] %}
+<!-- Modal Import Sonatel -->
+<div class="modal fade" id="importSonatelModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Importer Stock Sonatel (.xlsx)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="importSonatelForm" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="sonatelFile" class="form-label">Sélectionnez le fichier Excel Sonatel</label>
+                        <input class="form-control" type="file" id="sonatelFile" name="file" accept=".xlsx, .xls" required>
+                    </div>
+                    <div id="importResults" class="mt-3 d-none">
+                        <h6>Résultats de l'import:</h6>
+                        <ul id="importResultsList"></ul>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary" id="btnSubmitImport">Lancer l'import</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Dispatching -->
+<div class="modal fade" id="dispatchModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Dispatching vers les régions</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="dispatchForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="dispatchProduit" class="form-label">Produit à dispatcher (depuis Dakar)</label>
+                        <select class="form-select select2" id="dispatchProduit" name="produit_id" required>
+                            <option value="">Sélectionner un produit...</option>
+                            {% for p in produits %}
+                            <option value="{{ p.id }}">{{ p.nom }} (Stock: {{ p.quantite|int }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="dispatchQty" class="form-label">Quantité</label>
+                        <input type="number" class="form-control" id="dispatchQty" name="quantite" min="1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="dispatchZone" class="form-label">Zone de destination</label>
+                        <select class="form-select" id="dispatchZone" name="target_zone_id" required>
+                            <option value="">Sélectionner une zone...</option>
+                            <option value="2">Mbour (Zone 2)</option>
+                            <option value="3">Kaolack (Zone 3)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-info">Initier le transfert</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Modal Détails du Produit -->
     <div class="modal fade" id="detailsProduitModal" tabindex="-1" aria-labelledby="detailsProduitModalLabel"
         aria-hidden="true">
@@ -632,35 +715,35 @@
                             <table class="table table-sm">
                                 <tr>
                                     <th>Référence:</th>
-                                    <td id="produitReference"></td>
+                                    <td id="modal-reference"></td>
                                 </tr>
                                 <tr>
                                     <th>Désignation:</th>
-                                    <td id="produitNom"></td>
+                                    <td id="modal-designation"></td>
                                 </tr>
                                 <tr>
                                     <th>Catégorie:</th>
-                                    <td id="produitCategorie"></td>
+                                    <td id="modal-categorie"></td>
                                 </tr>
                                 <tr>
                                     <th>Emplacement:</th>
-                                    <td id="produitEmplacement"></td>
+                                    <td id="modal-emplacement"></td>
                                 </tr>
                                 <tr>
                                     <th>Stock actuel:</th>
-                                    <td id="produitQuantite"></td>
+                                    <td id="modal-stock"></td>
                                 </tr>
                                 <tr>
                                     <th>Seuil d'alerte:</th>
-                                    <td id="produitSeuilAlerte"></td>
+                                    <td id="modal-seuil"></td>
                                 </tr>
                                 <tr>
                                     <th>Prix d'achat moyen:</th>
-                                    <td id="produitPrixAchat"></td>
+                                    <td id="modal-prix-achat"></td>
                                 </tr>
                                 <tr>
                                     <th>Prix de vente:</th>
-                                    <td id="produitPrixVente"></td>
+                                    <td id="modal-prix-vente"></td>
                                 </tr>
                             </table>
                         </div>
@@ -732,6 +815,65 @@
     <script src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap5.min.js"></script>
 
     <script>
+        // JS pour l'Import Sonatel
+        $('#importSonatelForm').on('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const btn = $('#btnSubmitImport');
+            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Traitement...');
+            
+            $.ajax({
+                url: "{{ url_for('stock.api_import_sonatel') }}",
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    if (response.success) {
+                        const s = response.summary;
+                        alert(`Succès! ${s.inserted_rows} articles importés.`);
+                        location.reload();
+                    } else {
+                        alert("Erreur: " + response.error);
+                    }
+                },
+                error: function() {
+                    alert("Erreur lors de l'envoi du fichier.");
+                },
+                complete: function() {
+                    btn.prop('disabled', false).text("Lancer l'import");
+                }
+            });
+        });
+
+        // JS pour le Dispatching
+        $('#dispatchForm').on('submit', function(e) {
+            e.preventDefault();
+            const data = {
+                produit_id: $('#dispatchProduit').val(),
+                quantite: $('#dispatchQty').val(),
+                target_zone_id: $('#dispatchZone').val()
+            };
+            
+            $.ajax({
+                url: "{{ url_for('stock.initier_transfert') }}",
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(data),
+                success: function(response) {
+                    if (response.success) {
+                        alert("Transfert initié avec succès. En attente de réception par le magasinier.");
+                        location.reload();
+                    } else {
+                        alert("Erreur: " + response.error);
+                    }
+                },
+                error: function() {
+                    alert("Erreur réseau.");
+                }
+            });
+        });
+
         // Initialisation de DataTable pour la table des produits
         $(document).ready(function () {
             const produitsTable = $('#dataTable').DataTable({
@@ -968,7 +1110,6 @@
             // Initialisation des graphiques
             initCharts();
 
-            // Gestion du bouton d'ajout de produit
             $('#ajouterProduitBtn').click(function () {
                 window.location.href = "{{ url_for('stock.ajouter_produit') }}";
             });
@@ -976,279 +1117,6 @@
             // Chargement des statistiques
             loadStats();
         });
-
-        // Fonction pour afficher les détails d'un produit dans la modale
-        function showProductDetails(produitId) {
-            console.log('showProductDetails appelé avec ID:', produitId);
-
-            // Vérifier si l'ID du produit est valide
-            if (!produitId || produitId === 'undefined') {
-                console.error('ID du produit manquant ou invalide');
-                alert('Erreur : Impossible de charger les détails du produit (ID manquant ou invalide)');
-                return;
-            }
-
-            // Récupérer les éléments du DOM une seule fois
-            const modal = document.getElementById('detailsProduitModal');
-            const modalLabel = document.getElementById('detailsProduitModalLabel');
-            const modalInstance = new bootstrap.Modal(modal);
-
-            // Fonction utilitaire pour définir le texte d'un élément en toute sécurité
-            const setText = (elementId, text) => {
-                if (!elementId) {
-                    console.error('ID d\'élément manquant pour setText');
-                    return;
-                }
-                const el = document.getElementById(elementId);
-                if (el) {
-                    el.textContent = (text !== undefined && text !== null) ? text : 'N/A';
-                } else {
-                    console.warn(`Élément non trouvé: ${elementId}`);
-                }
-            };
-
-            // Afficher le modal
-            modalInstance.show();
-
-            // Mettre à jour le titre et le contenu du modal
-            modalLabel.textContent = 'Chargement...';
-
-            // Réinitialiser le contenu du modal
-            const fieldsToReset = [
-                'produitReference', 'produitNom', 'produitDescription',
-                'produitCategorie', 'produitEmplacement', 'produitQuantite',
-                'produitSeuilAlerte', 'produitPrixAchat', 'produitPrixVente'
-            ];
-
-            fieldsToReset.forEach(field => setText(field, 'Chargement...'));
-
-            // Mettre à jour le lien de modification
-            const btnModifier = document.getElementById('btnModifierProduit');
-            if (btnModifier) {
-                btnModifier.href = `/gestion-stock/produits/modifier/${produitId}`;
-            }
-
-            // Récupérer les détails du produit via une requête AJAX
-            fetch(`/gestion-stock/api/produits/${produitId}`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`Erreur HTTP: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    console.log('Réponse de l\'API mouvements:', data);
-
-                    if (!data) {
-                        throw new Error('Aucune donnée reçue du serveur');
-                    }
-
-                    if (!data.success) {
-                        throw new Error(data.message || 'Erreur lors de la récupération des détails du produit');
-                    }
-
-                    // Vérifier si des mouvements sont disponibles
-                    const produit = data.produit;
-                    if (!produit) {
-                        throw new Error('Données du produit manquantes');
-                    }
-
-                    // Mettre à jour le titre du modal
-                    setText('detailsProduitModalLabel', `Détails du produit: ${produit.designation || 'Inconnu'}`);
-
-                    // Mettre à jour les informations du produit
-                    setText('produitReference', produit.reference);
-                    setText('produitNom', produit.designation);
-                    setText('produitDescription', produit.description || 'Aucune description');
-                    setText('produitCategorie', produit.categorie || 'Non catégorisé');
-                    setText('produitEmplacement', produit.emplacement || 'Non spécifié');
-                    setText('produitQuantite', produit.quantite !== undefined ? Math.round(produit.quantite) : 'N/A');
-                    setText('produitSeuilAlerte', produit.seuil_alerte !== null && produit.seuil_alerte !== undefined ?
-                        `${produit.seuil_alerte}${produit.unite_mesure ? ' ' + produit.unite_mesure : ''}` : 'Non défini');
-                    setText('produitPrixAchat', produit.prix_achat ? `${produit.prix_achat} FCFA` : 'N/A');
-                    setText('produitPrixVente', produit.prix_vente ? `${produit.prix_vente} FCFA` : 'N/A');
-
-                    // Charger l'historique des mouvements
-                    loadProductMovements(produitId);
-                })
-                .catch(error => {
-                    console.error('Erreur lors du chargement des détails du produit:', error);
-                    setText('produitNom', 'Erreur');
-                    setText('produitDescription', `Impossible de charger les détails du produit. ${error.message}`);
-                });
-        }
-
-        // Fonction pour charger l'historique des mouvements d'un produit
-        function loadProductMovements(produitId) {
-            console.log('Chargement des mouvements pour le produit ID:', produitId);
-
-            const historiqueDiv = document.getElementById('historiqueMouvements');
-            if (!historiqueDiv) {
-                console.error('Élément historiqueMouvements introuvable dans le DOM');
-                return;
-            }
-
-            // Afficher un indicateur de chargement
-            historiqueDiv.innerHTML = `
-                <div class="text-center py-3">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Chargement des mouvements...</span>
-                    </div>
-                    <p class="mt-2 text-muted">Chargement de l'historique des mouvements...</p>
-                </div>`;
-
-            // Utiliser l'URL correcte pour l'API des mouvements
-            const apiUrl = `/gestion-stock/api/produits/${produitId}/mouvements`;
-            console.log('Appel API vers:', apiUrl);
-
-            fetch(apiUrl)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`Erreur HTTP: ${response.status} - ${response.statusText}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    console.log('Réponse de l\'API mouvements:', data);
-
-                    if (!data) {
-                        throw new Error('Aucune donnée reçue du serveur');
-                    }
-
-                    if (!data.success) {
-                        throw new Error(data.message || 'Erreur lors de la récupération des mouvements');
-                    }
-
-                    // Vérifier si des mouvements sont disponibles
-                    const mouvements = data.mouvements || [];
-
-                    if (!Array.isArray(mouvements) || mouvements.length === 0) {
-                        historiqueDiv.innerHTML = `
-                            <div class="alert alert-info mb-0">
-                                <i class="fas fa-info-circle me-2"></i>
-                                Aucun mouvement enregistré pour ce produit.
-                            </div>`;
-                        return;
-                    }
-
-                    try {
-                        // Créer un tableau pour afficher les mouvements
-                        let html = `
-                            <div class="table-responsive">
-                                <table class="table table-sm table-hover align-middle">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>Type</th>
-                                            <th class="text-end">Quantité</th>
-                                            <th>Référence</th>
-                                            <th>Commentaire</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                        `;
-
-                        // Trier les mouvements par date (du plus récent au plus ancien)
-                        mouvements.sort((a, b) => {
-                            return new Date(b.date_mouvement) - new Date(a.date_mouvement);
-                        });
-
-                        // Limiter à 50 mouvements pour des raisons de performance
-                        const maxMouvements = mouvements.slice(0, 50);
-
-                        // Ajouter chaque mouvement au tableau
-                        maxMouvements.forEach(mouvement => {
-                            try {
-                                // Formater la date
-                                const date = new Date(mouvement.date_mouvement);
-                                const dateStr = date.toLocaleDateString('fr-FR', {
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                });
-
-                                // Déterminer le type de mouvement et la couleur du badge
-                                const typeMouvement = mouvement.type_mouvement || 'inconnu';
-                                let typeBadge = '';
-
-                                switch (typeMouvement.toLowerCase()) {
-                                    case 'entree':
-                                        typeBadge = '<span class="badge bg-success">Entrée</span>';
-                                        break;
-                                    case 'sortie':
-                                        typeBadge = '<span class="badge bg-warning">Sortie</span>';
-                                        break;
-                                    case 'inventaire':
-                                        typeBadge = '<span class="badge bg-info">Inventaire</span>';
-                                        break;
-                                    default:
-                                        typeBadge = `<span class="badge bg-secondary">${typeMouvement}</span>`;
-                                }
-
-                                // Récupérer les informations du mouvement
-                                const quantite = mouvement.quantite || 0;
-                                const reference = mouvement.reference || 'N/A';
-                                const commentaire = mouvement.commentaire || '';
-
-                                // Ajouter la ligne du tableau
-                                html += `
-                                    <tr>
-                                        <td>${dateStr}</td>
-                                        <td>${typeBadge}</td>
-                                        <td class="text-end fw-bold">${quantite}</td>
-                                        <td>${reference}</td>
-                                        <td class="text-muted small">${commentaire}</td>
-                                    </tr>
-                                `;
-                            } catch (e) {
-                                console.error('Erreur lors du formatage d\'un mouvement:', e, mouvement);
-                            }
-                        });
-
-                        // Fermer le tableau
-                        html += `
-                                    </tbody>
-                                </table>
-                                ${mouvements.length > 50 ?
-                                `<div class="text-center text-muted small mt-2">
-                                        Affichage des 50 derniers mouvements sur ${mouvements.length} au total
-                                    </div>`
-                                : ''
-                            }
-                            </div>
-                        `;
-
-                        // Mettre à jour le contenu du div
-                        historiqueDiv.innerHTML = html;
-                    } catch (e) {
-                        console.error('Erreur lors de la génération du tableau des mouvements:', e);
-                        historiqueDiv.innerHTML = `
-                            <div class="alert alert-warning">
-                                <i class="fas fa-exclamation-triangle me-2"></i>
-                                Une erreur est survenue lors de l'affichage des mouvements: ${e.message || 'Erreur inconnue'}
-                                <div class="mt-2 small text-muted">${e.stack || ''}</div>
-                            </div>`;
-                    }
-                })
-                .catch(error => {
-                    console.error('Erreur lors du chargement des mouvements:', error);
-                    if (historiqueDiv) {
-                        historiqueDiv.innerHTML = `
-                            <div class="alert alert-danger">
-                                <i class="fas fa-exclamation-circle me-2"></i>
-                                <strong>Erreur lors du chargement des mouvements</strong>
-                                <div class="mt-2">${error.message || 'Une erreur inconnue est survenue'}</div>
-                                <div class="mt-2 small">
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="loadProductMovements(${produitId})">
-                                        <i class="fas fa-sync-alt me-1"></i> Réessayer
-                                    </button>
-                                </div>
-                            </div>`;
-                    }
-                });
-        }
 
         // Fonction pour confirmer la suppression d'un produit
         function confirmDelete(produitId) {
@@ -1675,6 +1543,7 @@
                     const tbody = $('#mouvementsProduitTable tbody');
                     tbody.empty();
 
+                    const mouvements = data.mouvements;
                     if (!mouvements || !Array.isArray(mouvements)) {
                         console.error('Les mouvements ne sont pas un tableau valide:', mouvements);
                         return;

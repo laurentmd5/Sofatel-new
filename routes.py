@@ -235,8 +235,8 @@ def dashboard():
             
             from zone_rbac import filter_produit_by_emplacement_zone, filter_mouvement_by_zone
             
-            # Stats zone magasinier
-            zone = current_user.zone
+            # Stats zone magasinier - FIXED: Use zone_relation (object) not legacy zone string
+            zone = current_user.zone_relation
             
             # Produits de la zone
             produits_query = Produit.query
@@ -251,12 +251,25 @@ def dashboard():
             
             # Stock summary
             total_articles = len(produits_zone)
-            total_value = sum([p.quantite * (p.prix_unitaire or 0) for p in produits_zone])
+            # FIXED: Use prix_vente instead of non-existent prix_unitaire
+            total_value = sum([p.quantite * (float(p.prix_vente) if p.prix_vente else 0) for p in produits_zone])
             articles_low_stock = len([p for p in produits_zone if p.quantite and p.quantite < 10])
             
             # Mouvements par type
             entrees = len([m for m in mouvements_zone if m.type_mouvement == 'entree'])
             sorties = len([m for m in mouvements_zone if m.type_mouvement == 'sortie'])
+            
+            # ✅ NOUVEAU: Réservations techniciens en attente
+            reservations_en_attente = db.session.query(ReservationPiece).join(
+                Intervention, ReservationPiece.intervention_id == Intervention.id
+            ).join(
+                User, Intervention.technicien_id == User.id
+            ).filter(
+                User.zone_id == current_user.zone_id,
+                ReservationPiece.statut == ReservationPiece.STATUT_EN_ATTENTE
+            ).all()
+            
+            nb_reservations_attente = len(reservations_en_attente)
             
             return render_template('dashboard_magasinier.html',
                                  zone=zone,
@@ -266,7 +279,8 @@ def dashboard():
                                  produits_zone=produits_zone,
                                  mouvements_zone=mouvements_zone,
                                  entrees_7j=entrees,
-                                 sorties_7j=sorties)
+                                 sorties_7j=sorties,
+                                 nb_reservations_attente=nb_reservations_attente)
         else:
             flash('Rôle utilisateur non reconnu.', 'error')
             return redirect(url_for('logout'))

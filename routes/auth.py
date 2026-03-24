@@ -9,9 +9,8 @@ from datetime import datetime, timezone, timedelta
 
 from app import db
 from forms import LoginForm
-from models import User, Produit, MouvementStock
+from models import User, Produit, MouvementStock, ReservationPiece, Intervention, Equipe
 from utils import log_activity, get_chef_pur_stats, get_chef_pilote_stats, get_chef_zone_stats, get_technicien_interventions, get_performance_data, build_stats_by_zone_tech
-from models import Equipe
 from extensions import csrf  # needed to exempt login in tests
 from cache_decorators import cache_kpi_data
 
@@ -192,6 +191,16 @@ def register_auth_blueprint(app):
             entrees = len([m for m in mouvements_zone if m.type_mouvement == 'entree'])
             sorties = len([m for m in mouvements_zone if m.type_mouvement == 'sortie'])
             
+            # NOUVEAU: Réservations techniciens en attente
+            nb_reservations_attente = ReservationPiece.query.join(
+                Intervention, ReservationPiece.intervention_id == Intervention.id
+            ).join(
+                User, Intervention.technicien_id == User.id
+            ).filter(
+                User.zone_id == current_user.zone_id,
+                ReservationPiece.statut == ReservationPiece.STATUT_EN_ATTENTE
+            ).count()
+            
             return render_template('dashboard_magasinier.html',
                                  zone=zone,
                                  total_articles=total_articles,
@@ -200,7 +209,8 @@ def register_auth_blueprint(app):
                                  produits_zone=produits_zone,
                                  mouvements_zone=mouvements_zone,
                                  entrees_7j=entrees,
-                                 sorties_7j=sorties)
+                                 sorties_7j=sorties,
+                                 nb_reservations_attente=nb_reservations_attente)
         elif current_user.role == 'rh':
             return redirect(url_for('dashboard_rh'))
         else:
@@ -245,6 +255,16 @@ def register_auth_blueprint(app):
         entrees = len([m for m in mouvements_zone if m.type_mouvement == 'entree'])
         sorties = len([m for m in mouvements_zone if m.type_mouvement == 'sortie'])
         
+        # NOUVEAU: Réservations techniciens en attente
+        nb_reservations_attente = ReservationPiece.query.join(
+            Intervention, ReservationPiece.intervention_id == Intervention.id
+        ).join(
+            User, Intervention.technicien_id == User.id
+        ).filter(
+            User.zone_id == current_user.zone_id,
+            ReservationPiece.statut == ReservationPiece.STATUT_EN_ATTENTE
+        ).count()
+        
         # Log activity
         log_activity(
             user_id=current_user.id,
@@ -262,7 +282,8 @@ def register_auth_blueprint(app):
                              produits_zone=produits_zone,
                              mouvements_zone=mouvements_zone,
                              entrees_7j=entrees,
-                             sorties_7j=sorties)
+                             sorties_7j=sorties,
+                             nb_reservations_attente=nb_reservations_attente)
     
     @app.route('/dashboard/rh')
     @login_required
@@ -386,6 +407,6 @@ def register_auth_blueprint(app):
         
         except Exception as e:
             # Fallback if KPI system fails
-            logger.error(f"KPI dashboard error: {str(e)}")
+            current_app.logger.error(f"KPI dashboard error: {str(e)}")
             flash(f'Erreur lors du chargement du KPI: {str(e)}', 'warning')
             return render_template('dashboard_kpi.html')

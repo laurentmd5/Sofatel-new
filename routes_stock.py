@@ -8,7 +8,7 @@ from models import db, Produit, MouvementStock, Categorie, EmplacementStock
 from sqlalchemy import func, extract, and_
 from extensions import db
 from forms import EntreeStockForm, SortieStockForm, ProduitForm, FournisseurForm
-from models import Produit, Categorie, MouvementStock, User, Fournisseur, EmplacementStock
+from models import Produit, Categorie, MouvementStock, User, Fournisseur, EmplacementStock, Intervention, ReservationPiece
 import pandas as pd
 import traceback
 from io import BytesIO
@@ -18,6 +18,7 @@ from utils_audit import log_stock_entry, log_stock_removal
 from utils_export import generate_csv, PDFReport, format_datetime, apply_date_filter
 from rbac_stock import require_stock_permission, require_stock_role, has_stock_permission, can_modify_produit, can_delete_produit
 from supplier_import import process_supplier_import
+from sonatel_stock_import import process_sonatel_import
 
 # Création d'un Blueprint pour les routes de gestion de stock
 stock_bp = Blueprint('stock', __name__, url_prefix='/gestion-stock')
@@ -1534,8 +1535,28 @@ def liste_produits_zone():
     current_app.logger.info(f"   Produits trouvés: {total_produits}")
     current_app.logger.info(f"   Emplacements: {len(emplacements_liste)}")
     
+    # Fetch pending transfers for this zone
+    from models import EmplacementStock
+    mouvements_en_attente = MouvementStock.query.filter(
+        MouvementStock.type_mouvement == 'entree',
+        MouvementStock.workflow_state == 'EN_ATTENTE',
+        MouvementStock.applique_au_stock == False
+    ).join(EmplacementStock).filter(EmplacementStock.zone_id == current_user.zone_id).all()
+
+    # Fetch pending technician reservations for this zone
+    reservations_en_attente = db.session.query(ReservationPiece).join(
+        Intervention, ReservationPiece.intervention_id == Intervention.id
+    ).join(
+        User, Intervention.technicien_id == User.id
+    ).filter(
+        User.zone_id == current_user.zone_id,
+        ReservationPiece.statut == ReservationPiece.STATUT_EN_ATTENTE
+    ).all()
+    
     return render_template('produits_zone_magasinier.html', 
                          produits=produits,
+                         mouvements_en_attente=mouvements_en_attente,
+                         reservations_en_attente=reservations_en_attente,
                          sort=sort,
                          direction=direction,
                          emplacements=emplacements_liste,
@@ -2995,6 +3016,138 @@ def api_import_supplier():
         }), 500
 
 
+@stock_bp.route('/import-sonatel', methods=['POST'])
+@login_required
+@require_stock_permission('can_dispatch_stock')
+def api_import_sonatel():
+    """
+    Import stock from Sonatel Excel via Excel parsing logic.
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'Aucun fichier fourni'}), 400
+        
+        file = request.files['file']
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            return jsonify({'success': False, 'error': 'Format invalide (Excel attendu)'}), 400
+            
+        file_content = file.read()
+        result = process_sonatel_import(file_content, current_user)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in Sonatel import: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@stock_bp.route('/stock/transfert/initier', methods=['POST'])
+@login_required
+@require_stock_permission('can_dispatch_stock')
+def initier_transfert():
+    """
+    Initiate a transfer from Dakar to another zone.
+    """
+    try:
+        data = request.get_json()
+        produit_id = data.get('produit_id')
+        quantite = float(data.get('quantite', 0))
+        target_zone_id = data.get('target_zone_id')
+        
+        if quantite <= 0:
+            return jsonify({'success': False, 'error': 'Quantité invalide'}), 400
+            
+        # 1. Source: Dakar Central
+        source_warehouse = db.session.query(EmplacementStock).filter_by(code='ENTREPOT').first()
+        if not source_warehouse:
+            return jsonify({'success': False, 'error': 'Entrepôt central non trouvé'}), 500
+            
+        # 2. Check stock in Dakar
+        valid, current_stock, msg = prevent_negative_stock_on_creation(produit_id, quantite)
+        if not valid:
+            return jsonify({'success': False, 'error': msg}), 400
+            
+        # 3. Create Sortie from Dakar (EN_TRANSIT)
+        mouvement_sortie = MouvementStock(
+            type_mouvement='sortie',
+            reference=f'TRANS-{datetime.now().strftime("%y%m%d%H%M")}',
+            produit_id=produit_id,
+            quantite=quantite,
+            utilisateur_id=current_user.id,
+            emplacement_id=source_warehouse.id,
+            commentaire=f"Transfert vers zone ID {target_zone_id}",
+            workflow_state='APPROUVE', # GS can approve their own transfers if they have roles
+            applique_au_stock=True # Deduct immediately from Dakar
+        )
+        db.session.add(mouvement_sortie)
+        db.session.flush()
+        
+        # 4. Find target warehouse for the zone
+        target_warehouse = db.session.query(EmplacementStock).filter_by(zone_id=target_zone_id).first()
+        if not target_warehouse:
+            # Fallback to a special code like ZONE1, ZONE2 etc.
+            zone_code = f"ZONE{target_zone_id}"
+            target_warehouse = db.session.query(EmplacementStock).filter_by(code=zone_code).first()
+            
+        # 5. Create Pending Entree for Target
+        mouvement_entree = MouvementStock(
+            type_mouvement='entree',
+            reference=mouvement_sortie.reference,
+            produit_id=produit_id,
+            quantite=quantite,
+            utilisateur_id=current_user.id,
+            emplacement_id=target_warehouse.id if target_warehouse else None,
+            commentaire=f"Réception transfert de Dakar (Ref: {mouvement_sortie.reference})",
+            workflow_state='EN_ATTENTE', # Requires magasinier action
+            applique_au_stock=False
+        )
+        db.session.add(mouvement_entree)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Transfert initié'})
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error initiating transfer: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@stock_bp.route('/stock/transfert/recevoir/<int:mouvement_id>', methods=['POST'])
+@login_required
+@require_stock_permission('can_receive_stock')
+def recevoir_transfert(mouvement_id):
+    """
+    Magasinier confirms reception of a transfer.
+    """
+    from workflow_stock import WorkflowState
+    try:
+        mouvement = db.session.get(MouvementStock, mouvement_id)
+        if not mouvement or mouvement.type_mouvement != 'entree':
+            return jsonify({'success': False, 'error': 'Mouvement introuvable'}), 404
+            
+        # Security: must be in same zone
+        emplacement = db.session.get(EmplacementStock, mouvement.emplacement_id)
+        if current_user.role == 'magasinier' and (not emplacement or emplacement.zone_id != current_user.zone_id):
+            return jsonify({'success': False, 'error': 'Accès refusé: zone incorrecte'}), 403
+            
+        if mouvement.workflow_state != 'EN_ATTENTE':
+            return jsonify({'success': False, 'error': 'Déjà traité'}), 400
+            
+        # Confirm reception
+        mouvement.workflow_state = WorkflowState.EXECUTE.value # or VALIDE
+        mouvement.applique_au_stock = True
+        mouvement.date_execution = datetime.now(timezone.utc)
+        mouvement.approuve_par_id = current_user.id
+        
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Réception confirmée'})
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error receiving transfer: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @stock_bp.route('/import-template', methods=['GET'])
 @login_required
 def get_import_template():
@@ -3232,3 +3385,95 @@ def liste_approbations_en_attente():
         current_app.logger.error(f"Error listing approvals: {e}")
         flash(f'❌ Erreur: {str(e)}', 'danger')
         return redirect(url_for('stock.dashboard'))
+
+# ============================================================================
+# 🔴 MAGASINIER: Gestion des Réservations Techniciens
+# ============================================================================
+
+@stock_bp.route('/reservations/attente')
+@login_required
+def liste_reservations_attente():
+    """
+    Affiche la liste des réservations en attente pour la zone du magasinier
+    """
+    if current_user.role.lower() != 'magasinier':
+        flash('Accès réservé aux magasiniers.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    if not current_user.zone_id:
+        flash('Vous n\'êtes pas assigné à une zone.', 'error')
+        return redirect(url_for('dashboard'))
+
+    # Récupérer les réservations en attente dont le technicien est dans la même zone
+    reservations = db.session.query(ReservationPiece).join(
+        Intervention, ReservationPiece.intervention_id == Intervention.id
+    ).join(
+        User, Intervention.technicien_id == User.id
+    ).filter(
+        User.zone_id == current_user.zone_id,
+        ReservationPiece.statut == ReservationPiece.STATUT_EN_ATTENTE
+    ).all()
+    
+    return render_template('reservations_zone_magasinier.html', reservations=reservations)
+
+@stock_bp.route('/reservation/valider/<int:reservation_id>', methods=['POST'])
+@login_required
+def valider_reservation(reservation_id):
+    """
+    Valide une réservation de pièce par un magasinier
+    """
+    if current_user.role.lower() != 'magasinier':
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    reservation = db.session.get(ReservationPiece, reservation_id)
+    if not reservation:
+        return jsonify({'success': False, 'message': 'Réservation introuvable'}), 404
+    
+    # Vérifier que le technicien est dans la zone du magasinier
+    if reservation.intervention.technicien.zone_id != current_user.zone_id:
+        return jsonify({'success': False, 'message': 'Cette réservation ne concerne pas votre zone'}), 403
+    
+    success, message = reservation.valider(current_user.id)
+    
+    if success:
+        # Automatiquement marquer comme utilisée pour sortir du stock ? 
+        # Ou attendre que le tech vienne chercher ? 
+        # Dans le workflow Sonatel, le magasinier valide la SORTIE.
+        # Donc on marque comme utilisée immédiatement pour décrémenter le stock.
+        success_use, message_use = reservation.marquer_comme_utilisee()
+        if not success_use:
+            # Si on ne peut pas marquer comme utilisé (stock insuffisant au moment T), on rollback la validation
+            reservation.statut = ReservationPiece.STATUT_EN_ATTENTE
+            db.session.commit()
+            return jsonify({'success': False, 'message': f"Validation impossible: {message_use}"})
+            
+        return jsonify({'success': True, 'message': 'Réservation validée et stock mis à jour'})
+    else:
+        return jsonify({'success': False, 'message': message})
+
+@stock_bp.route('/reservation/rejeter/<int:reservation_id>', methods=['POST'])
+@login_required
+def rejeter_reservation(reservation_id):
+    """
+    Rejette une réservation de pièce par un magasinier
+    """
+    if current_user.role.lower() != 'magasinier':
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    reservation = db.session.get(ReservationPiece, reservation_id)
+    if not reservation:
+        return jsonify({'success': False, 'message': 'Réservation introuvable'}), 404
+    
+    # Vérifier que le technicien est dans la zone du magasinier
+    if reservation.intervention.technicien.zone_id != current_user.zone_id:
+        return jsonify({'success': False, 'message': 'Cette réservation ne concerne pas votre zone'}), 403
+    
+    data = request.get_json()
+    motif = data.get('motif', 'Rejeté par le magasinier')
+    
+    success, message = reservation.annuler(motif=motif, rejeter=True)
+    
+    if success:
+        return jsonify({'success': True, 'message': 'Réservation rejetée'})
+    else:
+        return jsonify({'success': False, 'message': message})
