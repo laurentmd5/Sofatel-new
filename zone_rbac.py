@@ -6,7 +6,8 @@ Module pour implémenter l'isolation des zones dans le système stock
 from functools import wraps
 from flask import flash, redirect, url_for, abort, current_app, request
 from flask_login import current_user, login_required
-from sqlalchemy import or_, and_
+from extensions import db
+from sqlalchemy import or_, and_, select
 import logging
 
 logger = logging.getLogger(__name__)
@@ -446,7 +447,7 @@ def filter_produit_by_emplacement_zone(query):
     Returns:
         Query: Requête filtrée
     """
-    from models import Produit, EmplacementStock, Zone
+    from models import Produit, EmplacementStock, Zone, MouvementStock
     
     if user_has_global_access():
         return query  # Chef/Gestionnaire: pas de filtre
@@ -454,14 +455,31 @@ def filter_produit_by_emplacement_zone(query):
     if not current_user.zone_id:
         return query.filter(False)  # Aucun résultat
     
-    # Join Produit → EmplacementStock → Zone
-    # Filtre par zone_id de l'emplacement
-    query = query.join(EmplacementStock)\
-        .join(Zone)\
-        .filter(Zone.id == current_user.zone_id)\
-        .distinct()
+    # Stratégie: Inclure les produits qui:
+    # 1. Ont leur emplacement principal dans la zone
+    # 2. OU ont au moins un mouvement dans la zone (indiquant une présence de stock passée ou présente)
     
-    return query
+    # On utilise un alias pour éviter les conflits de join si la query a déjà des joins
+    from sqlalchemy import or_
+    
+    # Sous-requête des produits ayant des mouvements dans la zone
+    subq_mouv = select(MouvementStock.produit_id)\
+        .join(EmplacementStock)\
+        .filter(EmplacementStock.zone_id == current_user.zone_id)\
+        .scalar_subquery()
+        
+    # Sous-requête des entrepôts de la zone
+    subq_emp = select(EmplacementStock.id).filter(EmplacementStock.zone_id == current_user.zone_id).scalar_subquery()
+    
+    # Filtrer par emplacement principal OU par présence de mouvements
+    query = query.filter(
+        or_(
+            Produit.emplacement_id.in_(subq_emp),
+            Produit.id.in_(subq_mouv)
+        )
+    )
+    
+    return query.distinct()
 
 
 def filter_mouvement_by_zone(query):

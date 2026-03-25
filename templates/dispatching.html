@@ -1047,41 +1047,41 @@
         const techniciens = JSON.parse('{{ techniciens_json|tojson|safe }}');
         const equipes = JSON.parse('{{ equipes_json|tojson|safe }}');
 
-    // Normaliser la zone de la demande
-    const demandeZoneNormalized = normalizeZone(demande.zone);
+        // Normaliser la zone de la demande
+        const demandeZoneNormalized = normalizeZone(demande.zone);
 
-    // Générer les options des techniciens avec compatibilité
-    let technicienOptions = '';
-    techniciens.forEach(function (technicien) {
-        const isCompatible = checkTechnicienCompatibility(
-            technicien.technologies,
-            technicien.zone,
-            demande.type_techno,
-            demande.zone
-        );
+        // Générer les options des techniciens avec compatibilité
+        let technicienOptions = '';
+        techniciens.forEach(function (technicien) {
+            const isCompatible = checkTechnicienCompatibility(
+                technicien.technologies,
+                technicien.zone,
+                demande.type_techno,
+                demande.zone
+            );
 
-        const style = isCompatible ?
-            'style="background-color: #d4edda; color: #155724;"' :
-            'style="background-color: #f8d7da; color: #721c24;"';
+            const style = isCompatible ?
+                'style="background-color: #d4edda; color: #155724;"' :
+                'style="background-color: #f8d7da; color: #721c24;"';
 
-        technicienOptions += `
+            technicienOptions += `
             <option value="${technicien.id}" ${style}
                 data-technologies="${technicien.technologies}"
                 data-zone="${technicien.zone}">
                 ${technicien.prenom} ${technicien.nom} (${technicien.technologies} - ${technicien.zone})
             </option>
         `;
-    });
+        });
 
-    // Filtrer les équipes selon la zone et la technologie
-    let equipeOptions = '';
-    equipes.forEach(function (equipe) {
-        if (equipe.zone.toLowerCase() === demandeZoneNormalized.toLowerCase()) {
-            equipeOptions += `<option value="${equipe.id}">${equipe.nom_equipe} (${equipe.technologies})</option>`;
-        }
-    });
+        // Filtrer les équipes selon la zone et la technologie
+        let equipeOptions = '';
+        equipes.forEach(function (equipe) {
+            if (equipe.zone.toLowerCase() === demandeZoneNormalized.toLowerCase()) {
+                equipeOptions += `<option value="${equipe.id}">${equipe.nom_equipe} (${equipe.technologies})</option>`;
+            }
+        });
 
-    return `
+        return `
         <div class="mb-3">
             <h6>Détails de la demande</h6>
             <p class="mb-1"><strong>Client:</strong> ${demande.nom_client} ${demande.prenom_client || ''}</p>
@@ -1122,13 +1122,13 @@
             </button>
         </div>
     `;
-}
+    }
 
     function updateCompatibilityHint() {
         const technicienSelect = document.getElementById('modalTechnicien');
         const hintDiv = document.getElementById('compatibilityHint');
         const hintMessage = document.getElementById('compatibilityMessage');
-        
+
         if (!technicienSelect.value) {
             hintDiv.style.display = 'none';
             return;
@@ -1137,17 +1137,17 @@
         const selectedOption = technicienSelect.options[technicienSelect.selectedIndex];
         const techs = selectedOption.dataset.technologies || 'Non spécifié';
         const zone = selectedOption.dataset.zone || 'Non spécifié';
-        
+
         // Récupérer les infos de la demande depuis le modal (chercher dans le contenu)
         const modalContent = document.getElementById('modalContent').textContent;
-        
+
         // Chercher les lignes de technologie et zone
         const techRegex = /Technologie:\s*(.+)/;
         const zoneRegex = /Zone:\s*(.+)/;
-        
+
         const techMatch = modalContent.match(techRegex);
         const zoneMatch = modalContent.match(zoneRegex);
-        
+
         const demandeTech = techMatch ? techMatch[1].trim() : '';
         const demandeZone = zoneMatch ? zoneMatch[1].trim() : '';
 
@@ -1190,17 +1190,17 @@
 
         // Récupérer la demande depuis le modal pour vérifier la compatibilité
         const demandeText = document.querySelector('#modalContent h6 + p')?.textContent || '';
-        
+
         // Les données de la demande sont déjà disponibles dans le générateur modal
         // Nous allons faire la vérification au moment de la sélection du technicien
-        
+
         affecterDemande(demandeId, technicienId, equipeId, commentaire);
     }
 
     // Fonction d'affectation améliorée
     function affecterDemande(demandeId, technicienId, equipeId, commentaire, mode = 'manuel') {
-        console.log('Début de l\'affectation:', {demandeId, technicienId, equipeId, commentaire, mode});
-        
+        console.log('Début de l\'affectation:', { demandeId, technicienId, equipeId, commentaire, mode });
+
         const data = {
             demande_id: demandeId,
             technicien_id: technicienId,
@@ -1228,7 +1228,7 @@
             showAlert('danger', 'Erreur: Token CSRF manquant. Rechargez la page.');
             throw new Error('CSRF token meta tag not found');
         }
-        
+
         return fetch('/affecter-demande', {
             method: 'POST',
             headers: {
@@ -1239,48 +1239,48 @@
             credentials: 'same-origin',
             body: JSON.stringify(data)
         })
-        .then(async response => {
-            const contentType = response.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-                const text = await response.text();
-                console.error('Réponse non-JSON reçue:', text);
-                throw new Error(`Réponse inattendue du serveur (${response.status}): ${text.substring(0, 200)}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
-                // Fermer la modal si elle existe et que c'est une affectation manuelle individuelle
-                if (mode === 'manuel') {
-                    const modal = document.getElementById('dispatchModal');
-                    if (modal) {
-                        const modalInstance = bootstrap.Modal.getInstance(modal);
-                        if (modalInstance) {
-                            modalInstance.hide();
+            .then(async response => {
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    console.error('Réponse non-JSON reçue:', text);
+                    throw new Error(`Réponse inattendue du serveur (${response.status}): ${text.substring(0, 200)}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    // Fermer la modal si elle existe et que c'est une affectation manuelle individuelle
+                    if (mode === 'manuel') {
+                        const modal = document.getElementById('dispatchModal');
+                        if (modal) {
+                            const modalInstance = bootstrap.Modal.getInstance(modal);
+                            if (modalInstance) {
+                                modalInstance.hide();
+                            }
+                        }
+
+                        // Supprimer la ligne avec animation
+                        const row = document.querySelector(`tr[data-demande-id="${demandeId}"]`);
+                        if (row) {
+                            row.style.transition = 'all 0.3s ease';
+                            row.style.opacity = '0';
+                            row.style.transform = 'translateX(-100%)';
+                            setTimeout(() => {
+                                row.remove();
+                                updateTableEmptyState();
+                            }, 300);
                         }
                     }
 
-                    // Supprimer la ligne avec animation
-                    const row = document.querySelector(`tr[data-demande-id="${demandeId}"]`);
-                    if (row) {
-                        row.style.transition = 'all 0.3s ease';
-                        row.style.opacity = '0';
-                        row.style.transform = 'translateX(-100%)';
-                        setTimeout(() => {
-                            row.remove();
-                            updateTableEmptyState();
-                        }, 300);
-                    }
+                    showAlert('success', data.message);
+                    updateStats();
+                    return data;
+                } else {
+                    showAlert('danger', 'Erreur: ' + data.error);
+                    throw new Error(data.error);
                 }
-
-                showAlert('success', data.message);
-                updateStats();
-                return data;
-            } else {
-                showAlert('danger', 'Erreur: ' + data.error);
-                throw new Error(data.error);
-            }
-        })
+            })
             .catch(error => {
                 console.error('Erreur:', error);
                 showAlert('danger', 'Erreur lors de l\'affectation');

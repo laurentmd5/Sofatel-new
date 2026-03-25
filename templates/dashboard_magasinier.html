@@ -308,6 +308,20 @@
                 <div class="stat-label">Mouvements (7 jours)</div>
             </div>
 
+            <!-- NOUVEAU: Réceptions en Attente -->
+            <div class="stat-card {% if nb_mouvements_attente > 0 %}alert{% else %}success{% endif %}">
+                <div class="stat-icon">🚚</div>
+                <div class="stat-number">{{ nb_mouvements_attente }}</div>
+                <div class="stat-label">Réceptions en Attente</div>
+                {% if nb_mouvements_attente > 0 %}
+                <div class="mt-auto text-center">
+                    <button class="btn btn-sm btn-outline-danger w-100" data-bs-toggle="modal" data-bs-target="#receptionsModal">
+                        Voir les transferts →
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+
             <!-- Demandes de Pièces -->
             <div class="stat-card {% if nb_reservations_attente > 0 %}alert{% else %}success{% endif %}">
                 <div class="stat-icon">🔧</div>
@@ -320,6 +334,55 @@
                     </a>
                 </div>
                 {% endif %}
+            </div>
+        </div>
+
+        <!-- MODAL RÉCEPTIONS EN ATTENTE -->
+        <div class="modal fade" id="receptionsModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">📦 Réceptions de stock en attente</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Référence</th>
+                                        <th>Date</th>
+                                        <th>Article</th>
+                                        <th>Quantité</th>
+                                        <th>Provenance</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for m in mouvements_en_attente %}
+                                    <tr>
+                                        <td><code>{{ m.reference }}</code></td>
+                                        <td>{{ m.date_mouvement.strftime('%d/%m/%Y %H:%M') if m.date_mouvement else 'N/A' }}</td>
+                                        <td>{{ m.produit_relation.nom if m.produit_relation else 'N/A' }}</td>
+                                        <td><strong>{{ m.quantite|int }}</strong></td>
+                                        <td>Dakar (Inter-zone)</td>
+                                        <td>
+                                            <button onclick="confirmerReception({{ m.id }})" class="btn btn-sm btn-success">
+                                                Confirmer
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                    {% if not mouvements_en_attente %}
+                                    <tr>
+                                        <td colspan="6" class="text-center py-4">Aucun transfert en attente</td>
+                                    </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -373,7 +436,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for mouvement in mouvements_zone|sort(attribute='date_mouvement', reverse=True)|list|first(10) %}
+                        {% for mouvement in mouvements_zone|sort(attribute='date_mouvement', reverse=True)|list|batch(10)|first %}
                         <tr>
                             <td>
                                 {% if mouvement.type_mouvement == 'entree' %}
@@ -437,6 +500,34 @@
             }
         }
     }
+
+    // Fonction pour confirmer la réception d'un transfert
+    window.confirmerReception = function(mouvementId) {
+        if (!confirm('Voulez-vous confirmer la réception de cet article ?')) return;
+        
+        const url = "{{ url_for('stock.recevoir_transfert', mouvement_id=0) }}".replace('/0', '/' + mouvementId);
+        
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': "{{ csrf_token() }}",
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Stock réceptionné avec succès !');
+                location.reload();
+            } else {
+                alert('Erreur: ' + data.error);
+            }
+        })
+        .catch(err => {
+            console.error('Erreur:', err);
+            alert('Une erreur réseau est survenue.');
+        });
+    };
 
     // Log dashboard view
     console.log('✅ Magasinier Dashboard loaded');

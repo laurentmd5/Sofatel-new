@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import List, Dict, Tuple, Optional, Any
 from flask import current_app
 from extensions import db
-from models import Produit, MouvementStock, EmplacementStock, User, Categorie
+from models import Produit, MouvementStock, EmplacementStock, User, Categorie, Zone
 from utils_audit import log_stock_entry
 
 logger = logging.getLogger(__name__)
@@ -16,8 +16,6 @@ class SonatelImportProcessor:
     """
     
     REQUIRED_COLUMNS = ['Articles', 'Total stock']
-    ZONE_COLUMNS = ['DAKAR', 'MBOUR', 'KAOLACK']
-    
     def __init__(self, user: User):
         self.user = user
         self.summary = {
@@ -26,6 +24,14 @@ class SonatelImportProcessor:
             'error_rows': 0,
             'errors': []
         }
+        # Dynamically load zones from DB
+        try:
+            db_zones = db.session.query(Zone).filter_by(actif=True).all()
+            self.ZONE_COLUMNS = [z.nom.upper() for z in db_zones]
+            logger.info(f"Dynamically loaded zones for import: {self.ZONE_COLUMNS}")
+        except Exception as e:
+            logger.error(f"Error loading zones for import: {e}")
+            self.ZONE_COLUMNS = ['DAKAR', 'MBOUR', 'KAOLACK'] # Fallback
 
     def process_excel(self, file_content: bytes) -> Dict[str, Any]:
         """Parse Excel and import into Dakar warehouse"""

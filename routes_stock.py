@@ -8,7 +8,7 @@ from models import db, Produit, MouvementStock, Categorie, EmplacementStock
 from sqlalchemy import func, extract, and_
 from extensions import db
 from forms import EntreeStockForm, SortieStockForm, ProduitForm, FournisseurForm
-from models import Produit, Categorie, MouvementStock, User, Fournisseur, EmplacementStock, Intervention, ReservationPiece
+from models import Produit, Categorie, MouvementStock, User, Fournisseur, EmplacementStock, Intervention, ReservationPiece, Zone
 import pandas as pd
 import traceback
 from io import BytesIO
@@ -1665,12 +1665,17 @@ def liste_produits():
     current_app.logger.info(f"Total produits: {total_produits}")
     current_app.logger.info("=========================")
     
+    # Récupérer les zones pour le dispatching (filtrage robuste pour MySQL/MariaDB)
+    toutes_zones = Zone.query.all()
+    zones = [z for z in toutes_zones if getattr(z, 'actif', True)]
+    
     return render_template('dashboard_gestion_stock.html', 
                          produits=produits,
                          sort=sort,
                          direction=direction,
                          emplacements=emplacements_liste,
                          total_produits=total_produits,
+                         zones=zones,
                          title='Liste des produits')
 
 @stock_bp.route('/produit/supprimer/<int:id>', methods=['POST'])
@@ -3083,11 +3088,29 @@ def initier_transfert():
         db.session.flush()
         
         # 4. Find target warehouse for the zone
-        target_warehouse = db.session.query(EmplacementStock).filter_by(zone_id=target_zone_id).first()
+        # a. Try by direct zone_id link
+        target_warehouse = db.session.query(EmplacementStock).filter_by(zone_id=target_zone_id, actif=True).first()
+        
         if not target_warehouse:
-            # Fallback to a special code like ZONE1, ZONE2 etc.
-            zone_code = f"ZONE{target_zone_id}"
-            target_warehouse = db.session.query(EmplacementStock).filter_by(code=zone_code).first()
+            # Get zone name for fallback lookup
+            target_zone = db.session.query(Zone).get(target_zone_id)
+            if target_zone:
+                # b. Try by designation matching zone name (e.g. "Zone 2 - Mbour" contains "Mbour")
+                target_warehouse = db.session.query(EmplacementStock).filter(
+                    EmplacementStock.designation.ilike(f"%{target_zone.nom}%"),
+                    EmplacementStock.actif == True
+                ).first()
+                
+                if not target_warehouse:
+                    # c. Last resort: Try by code (ZONE1, ZONE2...)
+                    zone_code = f"ZONE{target_zone_id}"
+                    target_warehouse = db.session.query(EmplacementStock).filter_by(code=zone_code, actif=True).first()
+            
+            # AUTO-LINK: Si on trouve l'emplacement par nom/code mais qu'il n'est pas lié à la zone, on le lie
+            if target_warehouse and target_warehouse.zone_id is None:
+                current_app.logger.info(f"🔗 Auto-linking warehouse {target_warehouse.code} to zone ID {target_zone_id}")
+                target_warehouse.zone_id = target_zone_id
+                db.session.flush()
             
         # 5. Create Pending Entree for Target
         mouvement_entree = MouvementStock(

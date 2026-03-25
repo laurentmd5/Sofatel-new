@@ -684,8 +684,9 @@
                         <label for="dispatchZone" class="form-label">Zone de destination</label>
                         <select class="form-select" id="dispatchZone" name="target_zone_id" required>
                             <option value="">Sélectionner une zone...</option>
-                            <option value="2">Mbour (Zone 2)</option>
-                            <option value="3">Kaolack (Zone 3)</option>
+                            {% for zone in zones %}
+                            <option value="{{ zone.id }}">{{ zone.nom }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                 </div>

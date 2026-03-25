@@ -282,7 +282,8 @@ class TeamForm(FlaskForm):
         
         # Charger dynamiquement les zones depuis la base de données
         from models import Zone
-        zones = Zone.query.filter_by(actif=True).order_by(Zone.nom).all()
+        toutes_zones = Zone.query.order_by(Zone.nom).all()
+        zones = [z for z in toutes_zones if getattr(z, 'actif', True)]
         
         # Créer les choix pour le SelectField
         zone_choices = [(0, 'Sélectionner une zone')]
@@ -859,7 +860,8 @@ class CreateUserForm(FlaskForm):
         super(CreateUserForm, self).__init__(*args, **kwargs)
         # Charger les zones depuis la BD dynamiquement
         from models import Zone
-        zones = Zone.query.filter_by(actif=True).order_by(Zone.nom).all()
+        toutes_zones = Zone.query.order_by(Zone.nom).all()
+        zones = [z for z in toutes_zones if getattr(z, 'actif', True)]
         print(f"DEBUG: Zones trouvées: {len(zones)}")  # Debug
         for zone in zones:
             print(f"DEBUG: Zone - ID: {zone.id}, Nom: {zone.nom}, Code: {zone.code}")  # Debug
@@ -930,9 +932,10 @@ class EditUserForm(FlaskForm):
         super(EditUserForm, self).__init__(*args, **kwargs)
         # Charger les zones depuis la BD dynamiquement
         from models import Zone
+        toutes_zones = Zone.query.order_by(Zone.nom).all()
         self.zone.choices = [(0, 'Sélectionner une zone')] + [
-            (zone.id, f"{zone.nom} ({zone.code})") 
-            for zone in Zone.query.filter_by(actif=True).order_by(Zone.nom).all()
+            (zone.id, f"{zone.nom} ({zone.code})")
+            for zone in toutes_zones if getattr(zone, 'actif', True)
         ]
 
     def validate_confirm_new_password(self, field):

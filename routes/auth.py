@@ -201,6 +201,14 @@ def register_auth_blueprint(app):
                 ReservationPiece.statut == ReservationPiece.STATUT_EN_ATTENTE
             ).count()
             
+            # NOUVEAU: Mouvements en attente de réception
+            mouvements_en_attente = MouvementStock.query.filter(
+                MouvementStock.type_mouvement == 'entree',
+                MouvementStock.workflow_state == 'EN_ATTENTE'
+            )
+            mouvements_en_attente = filter_mouvement_by_zone(mouvements_en_attente).all()
+            nb_mouvements_attente = len(mouvements_en_attente)
+            
             return render_template('dashboard_magasinier.html',
                                  zone=zone,
                                  total_articles=total_articles,
@@ -210,7 +218,9 @@ def register_auth_blueprint(app):
                                  mouvements_zone=mouvements_zone,
                                  entrees_7j=entrees,
                                  sorties_7j=sorties,
-                                 nb_reservations_attente=nb_reservations_attente)
+                                 nb_reservations_attente=nb_reservations_attente,
+                                 mouvements_en_attente=mouvements_en_attente,
+                                 nb_mouvements_attente=nb_mouvements_attente)
         elif current_user.role == 'rh':
             return redirect(url_for('dashboard_rh'))
         else:
@@ -265,6 +275,14 @@ def register_auth_blueprint(app):
             ReservationPiece.statut == ReservationPiece.STATUT_EN_ATTENTE
         ).count()
         
+        # NOUVEAU: Mouvements en attente de réception
+        mouvements_en_attente = MouvementStock.query.filter(
+            MouvementStock.type_mouvement == 'entree',
+            MouvementStock.workflow_state == 'EN_ATTENTE'
+        )
+        mouvements_en_attente = filter_mouvement_by_zone(mouvements_en_attente).all()
+        nb_mouvements_attente = len(mouvements_en_attente)
+        
         # Log activity
         log_activity(
             user_id=current_user.id,
@@ -283,7 +301,9 @@ def register_auth_blueprint(app):
                              mouvements_zone=mouvements_zone,
                              entrees_7j=entrees,
                              sorties_7j=sorties,
-                             nb_reservations_attente=nb_reservations_attente)
+                             nb_reservations_attente=nb_reservations_attente,
+                             mouvements_en_attente=mouvements_en_attente,
+                             nb_mouvements_attente=nb_mouvements_attente)
     
     @app.route('/dashboard/rh')
     @login_required
