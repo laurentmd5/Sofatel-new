@@ -53,6 +53,9 @@ def import_demandes():
             result = process_excel_file(filepath, form.service.data, current_user.id)
 
             if result['success']:
+                # ✨ NOUVEAU: Lancer le dispatching automatique pour les demandes importées
+                auto_count = auto_dispatch_logic()
+                
                 log_activity(
                     user_id=current_user.id,
                     action='import',
@@ -61,10 +64,14 @@ def import_demandes():
                     details={
                         'nb_lignes': result['nb_lignes'],
                         'service': form.service.data,
-                        'fichier': filename
+                        'fichier': filename,
+                        'auto_dispatched': auto_count
                     }
                 )
-                flash(f"Import réussi: {result['nb_lignes']} demandes importées.", 'success')
+                msg = f"Import réussi: {result['nb_lignes']} demandes importées."
+                if auto_count > 0:
+                    msg += f" {auto_count} interventions ont été affectées automatiquement aux équipes disponibles."
+                flash(msg, 'success')
             else:
                 flash(f"Erreur lors de l'import: {result['error']}", 'error')
 
@@ -146,7 +153,22 @@ def dispatching():
         ).paginate(page=page, per_page=per_page, error_out=False)
 
         techniciens = User.query.filter_by(role='technicien', actif=True).all()
-        equipes = Equipe.query.filter_by(actif=True).order_by(Equipe.date_creation.desc()).all()
+
+        # Récupérer les équipes actives
+        # On filtre par service si l'utilisateur est un chef pilote (sauf s'il gère les deux)
+        equipes_query = Equipe.query.filter_by(actif=True)
+        if current_user.role == 'chef_pilote' and current_user.service and current_user.service != 'SAV,Production':
+            equipes_query = equipes_query.filter_by(service=current_user.service)
+            
+        today = date.today()
+        equipes = equipes_query.order_by(
+            Equipe.publie.desc(), 
+            Equipe.date_publication.desc(),
+            Equipe.date_creation.desc()
+        ).all()
+        
+        # On garde une trace des équipes publiées aujourd'hui
+        equipes_publiees = [e for e in equipes if e.publie and e.date_publication == today]
     except OperationalError as e:
         # Likely DB schema mismatch (missing columns added recently). Log and show friendly message.
         current_app.logger.exception('Database OperationalError in dispatching: possibly missing columns')
@@ -184,10 +206,11 @@ def dispatching():
 
     equipes_json = [{
         'id': e.id,
-        'nom_equipe': e.nom_equipe,
+        'nom_equipe': f"★ {e.nom_equipe}" if e.publie and e.date_publication == today else e.nom_equipe,
         'zone': normalize_zone(e.zone),
         'technologies': e.technologies,
         'service': e.service,
+        'publie_aujourdhui': e.publie and e.date_publication == today,
         'membres': [
             {
                 'id': m.id,
@@ -363,3 +386,148 @@ def affecter_demande():
         db.session.rollback()
         print(f"Erreur lors de l'affectation: {str(e)}")
         return jsonify({'success': False, 'error': str(e)})
+
+
+def auto_dispatch_logic(demande_ids=None):
+    """Logique de dispatching automatique des demandes aux équipes disponibles."""
+    today = date.today()
+    
+    # 1. Récupérer les demandes à dispatcher
+    query = DemandeIntervention.query.filter(
+        DemandeIntervention.statut.in_(['nouveau', 'a_reaffecter'])
+    )
+    if demande_ids:
+        query = query.filter(DemandeIntervention.id.in_(demande_ids))
+    
+    demandes = query.order_by(
+        DemandeIntervention.priorite_traitement.desc(),
+        DemandeIntervention.date_demande_intervention.asc()
+    ).all()
+    
+    if not demandes:
+        return 0
+
+    # 2. Récupérer les équipes publiées aujourd'hui
+    # On reste sur aujourd'hui car une équipe "publiée" l'est pour la journée
+    equipes = Equipe.query.filter_by(
+        actif=True, 
+        publie=True, 
+        date_publication=today
+    ).all()
+    
+    if not equipes:
+        print(f"DEBUG: Aucune équipe publiée pour aujourd'hui ({today})")
+        return 0
+
+    assigned_count = 0
+    
+    # helper pour la zone — identique à la logique du dispatching
+    def normalize_zone_local(zone):
+        z = (zone or '').upper()
+        if any(x in z for x in ['MBOUR', 'KAOLACK', 'FATICK']):
+            if 'MBOUR' in z: return 'MBOUR'
+            if 'KAOLACK' in z: return 'KAOLACK'
+            if 'FATICK' in z: return 'FATICK'
+        return 'DAKAR'
+
+    for equipe in equipes:
+        # Trouver le technicien de l'équipe
+        membre_tech = next((m for m in equipe.membres if m.type_membre == 'technicien'), None)
+        
+        # S'il n'y a pas de membre marqué 'technicien', on prend le premier membre si l'équipe n'en a qu'un
+        # (Cas où l'utilisateur a créé l'équipe sans spécifier explicitement les rôles internes)
+        if not membre_tech and len(equipe.membres) == 1:
+            membre_tech = equipe.membres[0]
+            
+        if not membre_tech or not membre_tech.technicien_id:
+            continue
+            
+        technicien = User.query.get(membre_tech.technicien_id)
+        if not technicien:
+            continue
+
+        # Vérifier si le technicien est déjà occupé avec une intervention active (affecté, en cours, etc.)
+        # Important: Un technicien ne peut avoir qu'une intervention active à la fois dans ce mode
+        interv_active = Intervention.query.filter(
+            Intervention.technicien_id == technicien.id,
+            Intervention.statut.in_(['en_cours', 'affecte', 'nouveau'])
+        ).first()
+        
+        if interv_active:
+            print(f"DEBUG: Technicien {technicien.username} déjà occupé par l'intervention {interv_active.id}")
+            continue
+            
+        # Normaliser la zone de l'équipe
+        team_norm_zone = normalize_zone_local(equipe.zone)
+        
+        # Trouver une demande compatible pour cette équipe
+        for demande in demandes:
+            if demande.statut not in ['nouveau', 'a_reaffecter']:
+                continue
+                
+            # Vérifier zone (doivent être dans la même zone normalisée)
+            demand_norm_zone = normalize_zone_local(demande.zone)
+            if team_norm_zone != demand_norm_zone:
+                continue
+                
+            # Vérifier service (SAV ou Production - Supporte les équipes mixtes comme "SAV,Production")
+            team_services = [s.strip().upper() for s in (equipe.service or '').split(',')]
+            demand_service = (demande.service or '').strip().upper()
+            if demand_service not in team_services:
+                continue
+                
+            # Vérifier technologies
+            if not is_technicien_compatible(technicien, demande):
+                continue
+                
+            # Tout correspond ! On affecte.
+            try:
+                demande.technicien_id = technicien.id
+                demande.statut = 'affecte'
+                demande.date_affectation = datetime.now(timezone.utc)
+                
+                # Créer l'intervention
+                intervention = Intervention(
+                    demande_id=demande.id,
+                    technicien_id=technicien.id,
+                    equipe_id=equipe.id,
+                    date_debut=datetime.now(timezone.utc),
+                    statut='en_cours'
+                )
+                db.session.add(intervention)
+                
+                assigned_count += 1
+                # Demande marquée comme traitée pour cette boucle
+                demande.statut = 'assigned_internal' 
+                
+                print(f"DEBUG: Affectation automatique: Demande {demande.nd} -> Equipe {equipe.nom_equipe}")
+                
+                # Une seule demande par équipe à la fois
+                break 
+                
+            except Exception as e:
+                print(f"Erreur lors du dispatch auto de la demande {demande.id}: {e}")
+                db.session.rollback()
+
+    # Nettoyage du statut temporaire et commit final
+    for d in demandes:
+        if getattr(d, 'statut', '') == 'assigned_internal':
+            d.statut = 'affecte'
+            
+    db.session.commit()
+    return assigned_count
+
+
+@dispatch_bp.route('/dispatching-automatique', methods=['POST'])
+@login_required
+@csrf.exempt
+def dispatching_automatique():
+    """Endpoint API pour déclencher le dispatching automatique manuellement."""
+    if current_user.role not in ['chef_pur', 'chef_pilote', 'chef_zone']:
+        return jsonify({'success': False, 'error': 'Accès non autorisé'})
+        
+    count = auto_dispatch_logic()
+    return jsonify({
+        'success': True,
+        'message': f'{count} demandes ont été affectées automatiquement.'
+    })

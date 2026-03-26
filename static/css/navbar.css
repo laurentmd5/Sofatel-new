@@ -462,13 +462,18 @@
 }
 
 .navbar-nav.ms-auto .dropdown-menu:last-child .dropdown-item[href*="logout"]:hover {
-    background-color: rgba(220, 53, 69, 0.1);
-    color: #b02a37 !important;
+    background: linear-gradient(135deg, #d32f2f 0%, #c41e3a 100%);
+    color: #fff !important;
     transform: translateX(3px);
 }
 
 .navbar-nav.ms-auto .dropdown-menu:last-child .dropdown-item[href*="logout"] i {
     color: #dc3545;
+    transition: color 0.2s ease;
+}
+
+.navbar-nav.ms-auto .dropdown-menu:last-child .dropdown-item[href*="logout"]:hover i {
+    color: #fff;
 }
 
 /* Rôle utilisateur dans le dropdown */

@@ -183,7 +183,7 @@
                 {{ form.prix_vente.label(class="font-weight-bold") }}
                 <div class="input-group">
                   <div class="input-group-prepend">
-                    <span class="input-group-text">FCFA</span>
+                    <span class="input-group-text">CFA</span>
                   </div>
                   {{ form.prix_vente(class="form-control form-control-lg",
                   id="prix_unitaire", step="0.01", min="0",
@@ -252,11 +252,11 @@
                 <div class="col-md-6">
                   <p class="mb-1">
                     <strong>Prix unitaire :</strong>
-                    <span id="prix-unitaire-display">0.00</span> FCFA
+                    <span id="prix-unitaire-display">0.00</span> CFA
                   </p>
                   <p class="mb-1">
                     <strong>Montant total :</strong>
-                    <span id="montant-total">0.00</span> FCFA
+                    <span id="montant-total">0.00</span> CFA
                   </p>
                 </div>
               </div>
@@ -437,13 +437,13 @@
                 </td>
                 <td>
                   {% if mouvement.prix_unitaire is not none %}{{
-                  '%.2f'|format(mouvement.prix_unitaire) }} FCFA{% else %}N/A{%
+                  '%.2f'|format(mouvement.prix_unitaire) }} CFA{% else %}N/A{%
                   endif %}
                 </td>
                 <td>
                   {% if mouvement.prix_unitaire is not none %}{{
                   '%.2f'|format(mouvement.quantite * mouvement.prix_unitaire) }}
-                  FCFA{% else %}N/A{% endif %}
+                  CFA{% else %}N/A{% endif %}
                 </td>
                 <td>
                   {{ mouvement.utilisateur.username if mouvement.utilisateur

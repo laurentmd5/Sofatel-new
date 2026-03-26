@@ -323,7 +323,7 @@
             const form = document.createElement('form');
             form.method = 'POST';
             form.action = `/import-demandes/delete/${importId}`;
-            
+
             // Ajouter le jeton CSRF
             const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
             const csrfInput = document.createElement('input');
@@ -331,7 +331,7 @@
             csrfInput.name = 'csrf_token';
             csrfInput.value = csrfToken;
             form.appendChild(csrfInput);
-            
+
             document.body.appendChild(form);
             form.submit();
         }

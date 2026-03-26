@@ -25,34 +25,39 @@
     <div class="col-12">
         <div class="card">
             <div class="card-body">
-                <div class="row">
+                <form method="GET" action="{{ url_for('manage_users') }}" class="row">
                     <div class="col-md-3 mb-2">
-                        <select class="form-select" id="roleFilter">
+                        <select class="form-select" name="role" id="roleFilter" onchange="this.form.submit()">
                             <option value="">Tous les rôles</option>
-                            <option value="chef_pur">Chef PUR</option>
-                            <option value="chef_pilote">Chef Pilote</option>
-                            <option value="chef_zone">Chef Zone</option>
-                            <option value="technicien">Technicien</option>
+                            <option value="chef_pur" {% if current_role == 'chef_pur' %}selected{% endif %}>Chef PUR</option>
+                            <option value="chef_pilote" {% if current_role == 'chef_pilote' %}selected{% endif %}>Chef Pilote</option>
+                            <option value="chef_zone" {% if current_role == 'chef_zone' %}selected{% endif %}>Chef Zone</option>
+                            <option value="gestionnaire_stock" {% if current_role == 'gestionnaire_stock' %}selected{% endif %}>Gestionnaire Stock</option>
+                            <option value="magasinier" {% if current_role == 'magasinier' %}selected{% endif %}>Magasinier</option>
+                            <option value="technicien" {% if current_role == 'technicien' %}selected{% endif %}>Technicien</option>
                         </select>
                     </div>
                     <div class="col-md-3 mb-2">
-                        <select class="form-select" id="statusFilter">
+                        <select class="form-select" name="status" id="statusFilter" onchange="this.form.submit()">
                             <option value="">Tous les statuts</option>
-                            <option value="actif">Actifs</option>
-                            <option value="inactif">Inactifs</option>
+                            <option value="actif" {% if current_status == 'actif' %}selected{% endif %}>Actifs</option>
+                            <option value="inactif" {% if current_status == 'inactif' %}selected{% endif %}>Inactifs</option>
                         </select>
                     </div>
-                    <div class="col-md-4 mb-2">
-                        <input type="text" class="form-control" id="searchInput"
-                            placeholder="Rechercher par nom, prénom ou username...">
+                    <div class="col-md-3 mb-2">
+                        <input type="text" class="form-control" name="search" id="searchInput"
+                            placeholder="Recherche globale..." value="{{ search }}">
                     </div>
-                    <div class="col-md-2 mb-2">
-                        <button class="btn btn-outline-secondary w-100" onclick="clearFilters()">
-                            <i data-feather="x" class="me-1"></i>
-                            Effacer
+                    <div class="col-md-3 mb-2 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary flex-grow-1">
+                            <i data-feather="search" class="me-1"></i>
+                            Filtrer
                         </button>
+                        <a href="{{ url_for('manage_users') }}" class="btn btn-outline-secondary">
+                            <i data-feather="x" class="me-1"></i>
+                        </a>
                     </div>
-                </div>
+                </form>
             </div>
         </div>
     </div>
@@ -86,7 +91,7 @@
                             {% for user in users.items %}
                             <tr class="user-row" data-role="{{ user.role }}"
                                 data-status="{{ 'actif' if user.actif else 'inactif' }}"
-                                data-search="{{ (user.nom + ' ' + user.prenom + ' ' + user.username)|lower }}">
+                                data-search="{{ (user.nom + ' ' + (user.prenom if user.prenom else '') + ' ' + user.username + ' ' + (user.email if user.email else '') + ' ' + (user.telephone if user.telephone else ''))|lower }}">
                                 <td>
                                     <div class="d-flex align-items-center">
                                         <div
@@ -173,9 +178,10 @@
 
                 <!-- Pagination et contrôles -->
                 <div class="card-footer bg-light">
+                    {% set filters = {'search': search, 'role': current_role, 'status': current_status} %}
                     <div class="d-flex justify-content-between align-items-center">
-                        {{ render_per_page_selector(request.args.get('per_page', '25'), 'manage_users') }}
-                        {{ render_pagination(users, 'manage_users') }}
+                        {{ render_per_page_selector(request.args.get('per_page', 25, type=int), 'manage_users', current_filters=filters) }}
+                        {{ render_pagination(users, 'manage_users', current_filters=filters) }}
                     </div>
                 </div>
             </div>
@@ -213,40 +219,14 @@
         const searchInput = document.getElementById('searchInput');
         const userRows = document.querySelectorAll('.user-row');
 
-        // Filtrage des utilisateurs
+        // Filtrage des utilisateurs (Désactivé car maintenant géré côté serveur)
+        /*
         function filterUsers() {
-            const roleValue = roleFilter.value.toLowerCase();
-            const statusValue = statusFilter.value.toLowerCase();
-            const searchValue = searchInput.value.toLowerCase();
-
-            userRows.forEach(row => {
-                const userRole = row.dataset.role.toLowerCase();
-                const userStatus = row.dataset.status.toLowerCase();
-                const userSearch = row.dataset.search.toLowerCase();
-
-                const matchRole = !roleValue || userRole === roleValue;
-                const matchStatus = !statusValue || userStatus === statusValue;
-                const matchSearch = !searchValue || userSearch.includes(searchValue);
-
-                if (matchRole && matchStatus && matchSearch) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
-            });
+            ...
         }
+        */
 
-        roleFilter.addEventListener('change', filterUsers);
-        statusFilter.addEventListener('change', filterUsers);
-        searchInput.addEventListener('input', filterUsers);
-
-        // Effacer les filtres
-        window.clearFilters = function () {
-            roleFilter.value = '';
-            statusFilter.value = '';
-            searchInput.value = '';
-            filterUsers();
-        };
+        // Effacer les filtres (Géré par le lien 'X')
 
         // Toggle du statut utilisateur
         document.querySelectorAll('.status-toggle').forEach(toggle => {

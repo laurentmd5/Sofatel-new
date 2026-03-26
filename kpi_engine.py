@@ -215,8 +215,8 @@ class KpiScoringEngine:
         
         total_cost = sum(qty * (price or 0) for qty, price in consommations)
         
-        # Budget mensuel par technicien (estimé à 1000€)
-        monthly_budget = 1000
+        # Budget mensuel par technicien (estimé à 650 000 CFA)
+        monthly_budget = 650000
         days_in_period = (self.period_end - self.period_start).days + 1
         budget_allocated = monthly_budget * (days_in_period / 30)
         

@@ -382,12 +382,17 @@ def process_excel_file_production(filepath, service, importe_par, fichier_import
         }
 
 def is_technicien_compatible(technicien, demande):
-    """Vérifie si un technicien est compatible avec une demande"""
+    """Vérifie si un technicien est compatible avec une demande (case-insensitive)"""
+    # Si la demande ne spécifie pas de technologie, on autorise l'affectation par défaut
+    type_techno = str(demande.type_techno).strip().upper() if demande.type_techno else ''
+    if not type_techno or type_techno in ['-', '', 'NONE']:
+        return True
+        
     if not technicien.technologies:
         return False
     
-    technologies_technicien = [t.strip() for t in technicien.technologies.split(',')]
-    return demande.type_techno in technologies_technicien
+    technologies_technicien = [t.strip().upper() for t in str(technicien.technologies).split(',')]
+    return type_techno in technologies_technicien
 
 def find_best_technicien(demande):
     """Trouve le meilleur technicien pour une demande selon les critères"""

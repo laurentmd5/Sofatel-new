@@ -6,7 +6,7 @@
 // Fonction de normalisation des zones (comme dans utils.py)
 function normalizeZone(zone) {
     if (!zone) return 'DAKAR';
-    const z = zone.toUpperCase();
+    const z = String(zone).toUpperCase().trim();
     if (z.includes('MBOUR')) return 'MBOUR';
     if (z.includes('KAOLACK')) return 'KAOLACK';
     if (z.includes('FATICK')) return 'FATICK';
@@ -15,7 +15,9 @@ function normalizeZone(zone) {
 
 // Fonction de normalisation des technologies
 function normalizeTech(tech) {
-    return tech ? tech.charAt(0).toUpperCase() + tech.slice(1).toLowerCase() : '';
+    if (!tech) return '';
+    tech = String(tech).trim();
+    return tech.charAt(0).toUpperCase() + tech.slice(1).toLowerCase();
 }
 
 // État du module dispatching
@@ -228,29 +230,17 @@ function highlightCompatibleTechniciens(demandeRow) {
 function checkTechnicienCompatibility(techTechnologies, techZone, demandeTechno, demandeZone) {
     if (!techTechnologies) return false;
 
-    // Normaliser les valeurs
-    const techNormalized = normalizeTech(demandeTechno);
-    const zoneNormalized = normalizeZone(demandeZone);
-    const techCompat = techTechnologies.split(',').map(t => normalizeTech(t.trim()));
-    const zoneCompat = techZone ? [normalizeZone(techZone)] : [];
-
-    console.log('Vérification compatibilité:', {
-        demande: { tech: techNormalized, zone: zoneNormalized },
-        technicien: { tech: techCompat, zone: zoneCompat }
-    });
-
     // Vérifier la technologie
-    const techCompatible = DispatchingModule.config.compatibilityMatrix[techNormalized]?.some(compat =>
-        techCompat.includes(compat)
-    ) || false;
+    const dt = String(demandeTechno || '').toUpperCase().trim();
+    const techTechs = techTechnologies.toUpperCase().split(',').map(t => t.trim());
+    const techCompatible = dt === '' || techTechs.includes(dt);
 
     // Vérifier la zone
-    const zoneCompatible = DispatchingModule.config.zoneCompatibility[zoneNormalized]?.some(compat =>
-        zoneCompat.includes(compat)
-    ) || false;
+    const techZoneNorm = normalizeZone(techZone);
+    const demandeZoneNorm = normalizeZone(demandeZone);
+    const zoneCompatible = techZoneNorm === demandeZoneNorm || techZoneNorm === 'TOUTES' || techZone === 'Toutes';
 
     console.log('Résultat compatibilité:', { techCompatible, zoneCompatible });
-
     return techCompatible && zoneCompatible;
 }
 

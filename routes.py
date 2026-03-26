@@ -3426,10 +3426,34 @@ def manage_users():
 
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 25, type=int)
-    users = User.query.order_by(User.date_creation.desc()).paginate(
+    search = request.args.get('search', '').strip()
+    role = request.args.get('role', '')
+    status = request.args.get('status', '')
+
+    query = User.query
+
+    if search:
+        search_filter = f"%{search}%"
+        query = query.filter(
+            db.or_(
+                User.username.ilike(search_filter),
+                User.email.ilike(search_filter),
+                User.nom.ilike(search_filter),
+                User.prenom.ilike(search_filter),
+                User.telephone.ilike(search_filter)
+            )
+        )
+    
+    if role:
+        query = query.filter(User.role == role)
+    
+    if status:
+        query = query.filter(User.actif == (status == 'actif'))
+
+    users = query.order_by(User.date_creation.desc()).paginate(
         page=page, per_page=per_page, error_out=False
     )
-    return render_template('manage_users.html', users=users)
+    return render_template('manage_users.html', users=users, search=search, current_role=role, current_status=status)
 
 
 @app.route('/edit-user/<int:user_id>', methods=['GET', 'POST'])

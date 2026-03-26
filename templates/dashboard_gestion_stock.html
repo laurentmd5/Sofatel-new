@@ -617,7 +617,7 @@
                     <div class="card bg-light">
                         <div class="card-body">
                             <h6 class="card-title">Valeur de réapprovisionnement</h6>
-                            <h3 id="valeurReapprovisionnement" class="text-info">0 €</h3>
+                            <h3 id="valeurReapprovisionnement" class="text-info">0 CFA</h3>
                         </div>
                     </div>
                 </div>
@@ -1059,7 +1059,7 @@
                             return parseFloat(data).toLocaleString('fr-FR', {
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 2
-                            }) + ' FCFA';
+                            }) + ' CFA';
                         },
                         className: 'text-end',
                         defaultContent: '-'
@@ -1074,14 +1074,14 @@
                                     return montant.toLocaleString('fr-FR', {
                                         minimumFractionDigits: 2,
                                         maximumFractionDigits: 2
-                                    }) + ' FCFA';
+                                    }) + ' CFA';
                                 }
                                 return '-';
                             }
                             return parseFloat(data).toLocaleString('fr-FR', {
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 2
-                            }) + ' FCFA';
+                            }) + ' CFA';
                         },
                         className: 'text-end fw-bold',
                         defaultContent: '-'
@@ -1427,7 +1427,7 @@
                         tbody.innerHTML = '<tr><td colspan="9" class="text-center text-success"><strong>Tous les produits ont un stock suffisant!</strong></td></tr>';
                         document.getElementById('totalFaiblesStocks').textContent = '0';
                         document.getElementById('totalCommandeNecessaire').textContent = '0';
-                        document.getElementById('valeurReapprovisionnement').textContent = '0 €';
+                        document.getElementById('valeurReapprovisionnement').textContent = '0 CFA';
                         return;
                     }
 
@@ -1480,7 +1480,7 @@
                         valeurReapprovisionnement.toLocaleString('fr-FR', {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2
-                        }) + ' €';
+                        }) + ' CFA';
                 })
                 .catch(error => {
                     console.error('Erreur lors du chargement des produits en faible stock:', error);
@@ -1534,11 +1534,11 @@
 
                     // Formater les prix avec vérification de null
                     const prixAchat = produit.prix_achat !== undefined && produit.prix_achat !== null ?
-                        parseFloat(produit.prix_achat).toFixed(2) + ' FCFA' : 'Non défini';
+                        parseFloat(produit.prix_achat).toFixed(2) + ' CFA' : 'Non défini';
                     modal.find('#modal-prix-achat').text(prixAchat);
 
                     const prixVente = produit.prix_vente !== undefined && produit.prix_vente !== null ?
-                        parseFloat(produit.prix_vente).toFixed(2) + ' FCFA' : 'Non défini';
+                        parseFloat(produit.prix_vente).toFixed(2) + ' CFA' : 'Non défini';
                     modal.find('#modal-prix-vente').text(prixVente);
                     // Mettre à jour le tableau des mouvements
                     const tbody = $('#mouvementsProduitTable tbody');
@@ -1554,7 +1554,7 @@
                         const typeClass = mvt.type_mouvement === 'entree' ? 'success' : 'danger';
                         const typeText = mvt.type_mouvement === 'entree' ? 'Entrée' : 'Sortie';
                         const date = new Date(mvt.date_mouvement).toLocaleDateString('fr-FR');
-                        const prix = mvt.prix_unitaire ? parseFloat(mvt.prix_unitaire).toFixed(2) + ' FCFA' : '-';
+                        const prix = mvt.prix_unitaire ? parseFloat(mvt.prix_unitaire).toFixed(2) + ' CFA' : '-';
 
                         tbody.append(`
                     <tr>

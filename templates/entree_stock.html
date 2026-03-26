@@ -111,7 +111,7 @@
                                 {{ form.prix_unitaire.label(class="font-weight-bold") }}
                                 <div class="input-group">
                                     <div class="input-group-prepend">
-                                        <span class="input-group-text bg-light">FCFA</span>
+                                        <span class="input-group-text bg-light">CFA</span>
                                     </div>
                                     {{ form.prix_unitaire(class="form-control form-control-lg",
                                     id="prix_unitaire",
@@ -187,7 +187,7 @@
                                             produit.unite_mesure else 'unité' }}</strong>
                                     </p>
                                     <p class="mb-0 mt-2">
-                                        Montant total: <strong><span id="montant-total">0.00</span> FCFA</strong>
+                                        Montant total: <strong><span id="montant-total">0.00</span> CFA</strong>
                                     </p>
                                 </div>
                             </div>
@@ -298,7 +298,7 @@
                                     <div class="text-right">
                                         <div class="font-weight-bold text-success">
                                             {% if entree.prix_unitaire is not none %}
-                                            {{ '%.2f'|format(entree.prix_unitaire) }} FCFA
+                                            {{ '%.2f'|format(entree.prix_unitaire) }} CFA
                                             {% else %}
                                             N/A
                                             {% endif %}
@@ -404,9 +404,9 @@
                                 <td>{{ '%.2f'|format(mouvement.quantite) }} {{ produit.unite_mesure if
                                     produit.unite_mesure else 'unité' }}</td>
                                 <td>{% if mouvement.prix_unitaire is not none %}{{
-                                    '%.2f'|format(mouvement.prix_unitaire) }} FCFA{% else %}N/A{% endif %}</td>
+                                    '%.2f'|format(mouvement.prix_unitaire) }} CFA{% else %}N/A{% endif %}</td>
                                 <td>{% if mouvement.prix_unitaire is not none %}{{ '%.2f'|format(mouvement.quantite *
-                                    mouvement.prix_unitaire) }} FCFA{% else %}N/A{% endif %}</td>
+                                    mouvement.prix_unitaire) }} CFA{% else %}N/A{% endif %}</td>
                                 <td>{{ mouvement.utilisateur.username if mouvement.utilisateur else 'Système' }}</td>
                                 <td>{{ mouvement.commentaire|default('', true) }}</td>
                             </tr>

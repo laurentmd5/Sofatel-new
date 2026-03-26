@@ -534,8 +534,13 @@
             // Supprime les anciennes alertes
             $('.alert').alert('close');
 
-            // Affiche la nouvelle alerte
-            $('main.container').prepend(alertHtml);
+            // Affiche la nouvelle alerte dans le conteneur principal
+            const $container = $('#main-content');
+            if ($container.length) {
+                $container.prepend(alertHtml);
+            } else {
+                $('.container, .container-fluid').first().prepend(alertHtml);
+            }
         }
     </script>
 

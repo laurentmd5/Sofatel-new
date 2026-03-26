@@ -571,7 +571,9 @@
                         <select class="form-select" id="groupEquipe">
                             <option value="">Aucune équipe</option>
                             {% for equipe in equipes %}
-                            <option value="{{ equipe.id }}">
+                            <option value="{{ equipe.id }}"
+                                data-technologies="{{ equipe.technologies }}"
+                                data-zone="{{ equipe.zone }}">
                                 {{ equipe.nom_equipe }} ({{ equipe.technologies }} - {{ equipe.zone }})
                             </option>
                             {% endfor %}
@@ -805,7 +807,7 @@
     // Fonctions de normalisation
     function normalizeZone(zone) {
         if (!zone) return 'DAKAR';
-        const z = zone.toUpperCase();
+        const z = String(zone).toUpperCase().trim();
         if (z.includes('MBOUR')) return 'MBOUR';
         if (z.includes('KAOLACK')) return 'KAOLACK';
         if (z.includes('FATICK')) return 'FATICK';
@@ -813,28 +815,25 @@
     }
 
     function normalizeTech(tech) {
-        return tech ? tech.charAt(0).toUpperCase() + tech.slice(1).toLowerCase() : '';
+        if (!tech) return '';
+        tech = String(tech).trim();
+        return tech.charAt(0).toUpperCase() + tech.slice(1).toLowerCase();
     }
 
     // Fonction de vérification de compatibilité
     function checkTechnicienCompatibility(techTechnologies, techZone, demandeTechno, demandeZone) {
         if (!techTechnologies) return false;
 
-        // Normaliser les valeurs
-        const techNormalized = normalizeTech(demandeTechno);
-        const zoneNormalized = normalizeZone(demandeZone);
-        const techCompat = techTechnologies.split(',').map(t => normalizeTech(t.trim()));
-        const zoneCompat = techZone ? [normalizeZone(techZone)] : [];
-
         // Vérifier la technologie
-        const techCompatible = DispatchingModule.config.compatibilityMatrix[techNormalized]?.some(compat =>
-            techCompat.includes(compat)
-        ) || false;
+        const dt = String(demandeTechno || '').toUpperCase().trim();
+        const techTechs = techTechnologies.toUpperCase().split(',').map(t => t.trim());
+        // Simple logic: the technician must have the requested technology
+        const techCompatible = dt === '' || techTechs.includes(dt);
 
         // Vérifier la zone
-        const zoneCompatible = DispatchingModule.config.zoneCompatibility[zoneNormalized]?.some(compat =>
-            zoneCompat.includes(compat)
-        ) || false;
+        const techZoneNorm = normalizeZone(techZone);
+        const demandeZoneNorm = normalizeZone(demandeZone);
+        const zoneCompatible = techZoneNorm === demandeZoneNorm || techZoneNorm === 'TOUTES' || techZone === 'Toutes';
 
         return techCompatible && zoneCompatible;
     }
@@ -1073,13 +1072,62 @@
         `;
         });
 
-        // Filtrer les équipes selon la zone et la technologie
+        // Filtrer les équipes selon la zone, technologie et service
         let equipeOptions = '';
+        let equipesRecommandees = [];
+        let equipesZoneCorrespondante = [];
+        let equipesAutreZone = [];
+
         equipes.forEach(function (equipe) {
-            if (equipe.zone.toLowerCase() === demandeZoneNormalized.toLowerCase()) {
-                equipeOptions += `<option value="${equipe.id}">${equipe.nom_equipe} (${equipe.technologies})</option>`;
+            const equipeZoneNorm = normalizeZone(equipe.zone);
+            const equipeZoneRaw = (equipe.zone || '').toLowerCase().trim();
+            const isToutes = equipeZoneRaw === 'toutes' || equipeZoneRaw === 'all';
+            
+            // Compatibilité Zone
+            const zoneMatch = equipeZoneNorm === demandeZoneNormalized || isToutes;
+            
+            // Compatibilité Technologie & Service
+            const technoMatch = (equipe.technologies || '').includes(demande.type_techno);
+            const serviceMatch = (equipe.service || '') === (demande.service || '');
+            
+            const isPublieToday = equipe.publie_aujourdhui === true;
+
+            if (zoneMatch && technoMatch && (serviceMatch || !demande.service)) {
+                equipesRecommandees.push(equipe);
+            } else if (zoneMatch) {
+                equipesZoneCorrespondante.push(equipe);
+            } else {
+                equipesAutreZone.push(equipe);
             }
         });
+
+        // 1. Équipes recommandées (Zone + Techno + Service)
+        if (equipesRecommandees.length > 0) {
+            equipeOptions += `<optgroup label="✨ Équipes recommandées (Zone & Techno)">`;
+            equipesRecommandees.forEach(function (equipe) {
+                const badge = equipe.publie_aujourdhui ? ' [PUBLIÉE]' : '';
+                equipeOptions += `<option value="${equipe.id}" style="font-weight:bold; color:#0d6efd;">${equipe.nom_equipe} (${equipe.technologies} - ${equipe.zone})${badge}</option>`;
+            });
+            equipeOptions += `</optgroup>`;
+        }
+
+        // 2. Autres équipes de la zone
+        if (equipesZoneCorrespondante.length > 0) {
+            equipeOptions += `<optgroup label="📍 Autres équipes de la zone">`;
+            equipesZoneCorrespondante.forEach(function (equipe) {
+                equipeOptions += `<option value="${equipe.id}">${equipe.nom_equipe} (${equipe.technologies} - ${equipe.zone})</option>`;
+            });
+            equipeOptions += `</optgroup>`;
+        }
+
+        // 3. Équipes hors zone
+        if (equipesAutreZone.length > 0) {
+            equipeOptions += `<optgroup label="🌍 Autres zones">`;
+            equipesAutreZone.forEach(function (equipe) {
+                equipeOptions += `<option value="${equipe.id}" style="color:#888;">${equipe.nom_equipe} (${equipe.technologies} - ${equipe.zone})</option>`;
+            });
+            equipeOptions += `</optgroup>`;
+        }
 
         return `
         <div class="mb-3">
@@ -1135,15 +1183,15 @@
         }
 
         const selectedOption = technicienSelect.options[technicienSelect.selectedIndex];
-        const techs = selectedOption.dataset.technologies || 'Non spécifié';
-        const zone = selectedOption.dataset.zone || 'Non spécifié';
+        const techs = selectedOption.dataset.technologies || '';
+        const zone = selectedOption.dataset.zone || '';
 
         // Récupérer les infos de la demande depuis le modal (chercher dans le contenu)
         const modalContent = document.getElementById('modalContent').textContent;
 
         // Chercher les lignes de technologie et zone
-        const techRegex = /Technologie:\s*(.+)/;
-        const zoneRegex = /Zone:\s*(.+)/;
+        const techRegex = /Technologie:\s*([^\n]+)/;
+        const zoneRegex = /Zone:\s*([^\n]+)/;
 
         const techMatch = modalContent.match(techRegex);
         const zoneMatch = modalContent.match(zoneRegex);
@@ -1151,8 +1199,13 @@
         const demandeTech = techMatch ? techMatch[1].trim() : '';
         const demandeZone = zoneMatch ? zoneMatch[1].trim() : '';
 
-        const isTechCompatible = techs === 'Non spécifié' ? false : techs.includes(demandeTech);
-        const isZoneCompatible = zone.toUpperCase() === demandeZone.toUpperCase();
+        const dt = String(demandeTech || '').toUpperCase().trim();
+        const techTechs = techs.toUpperCase().split(',').map(t => t.trim());
+        const isTechCompatible = dt === '' || techTechs.includes(dt);
+        
+        const techZoneNorm = normalizeZone(zone);
+        const demandeZoneNorm = normalizeZone(demandeZone);
+        const isZoneCompatible = techZoneNorm === demandeZoneNorm || techZoneNorm === 'TOUTES' || zone === 'Toutes';
 
         if (!isTechCompatible || !isZoneCompatible) {
             const issues = [];
