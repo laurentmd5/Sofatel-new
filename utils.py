@@ -6,6 +6,7 @@ from models import *
 from flask_mail import Message as MailMessage
 from flask import current_app, request
 import json
+from sqlalchemy import case, not_, func, or_, and_
 
 
 def determine_file_type(df_columns):
@@ -533,101 +534,107 @@ def get_chef_pur_stats(zone=None):
     """Statistiques pour le Chef PUR (optionnellement filtrées par zone)"""
     today = datetime.now().date()
     
-    # Statistiques des équipes avec technicien principal
-    equipes_query = Equipe.query.filter_by(actif=True)
+    # 1. OPTIMISATION: Récupérer tous les techniciens principaux des équipes actives en une seule requête jointe
+    principal_techs_query = db.session.query(MembreEquipe, Equipe).join(
+        Equipe, MembreEquipe.equipe_id == Equipe.id
+    ).filter(
+        Equipe.actif == True,
+        MembreEquipe.type_membre == 'technicien'
+    )
     if zone:
-        equipes_query = equipes_query.filter_by(zone=zone)
-    equipes_stats = []
-    for equipe in equipes_query.all():
-        technicien_principal = MembreEquipe.query.filter_by(
-            equipe_id=equipe.id, 
-            type_membre='technicien'
-        ).first()
+        principal_techs_query = principal_techs_query.filter(Equipe.zone == zone)
+    
+    principal_techs = principal_techs_query.all()
+    tech_ids = [mt.technicien_id for mt, eq in principal_techs if mt.technicien_id]
+    
+    # 2. OPTIMISATION: Récupérer tous les comptes de statuts pour ces techniciens en une seule requête groupée
+    stats_data = {}
+    if tech_ids:
+        bulk_counts = db.session.query(
+            DemandeIntervention.technicien_id,
+            DemandeIntervention.statut,
+            func.count(DemandeIntervention.id)
+        ).filter(
+            DemandeIntervention.technicien_id.in_(tech_ids)
+        )
+        if zone:
+            bulk_counts = bulk_counts.filter(DemandeIntervention.zone == zone)
         
-        if technicien_principal and technicien_principal.technicien_id:
-            demandes_orientees = DemandeIntervention.query.filter_by(
-                technicien_id=technicien_principal.technicien_id,
-                statut='affecte'
-            )
-            demandes_acceptees = DemandeIntervention.query.filter_by(
-                technicien_id=technicien_principal.technicien_id,
-                statut='en_cours'
-            )
-            demandes_rejetees = DemandeIntervention.query.filter_by(
-                technicien_id=technicien_principal.technicien_id,
-                statut='rejete'
-            )
-            demandes_traitees = DemandeIntervention.query.filter_by(
-                technicien_id=technicien_principal.technicien_id,
-                statut='termine'
-            )
-            demandes_validees = DemandeIntervention.query.filter_by(
-                technicien_id=technicien_principal.technicien_id,
-                statut='valide'
-            )
-            # Si filtrage zone, on filtre aussi sur la zone de la demande
-            if zone:
-                demandes_orientees = demandes_orientees.filter_by(zone=zone)
-                demandes_acceptees = demandes_acceptees.filter_by(zone=zone)
-                demandes_rejetees = demandes_rejetees.filter_by(zone=zone)
-                demandes_traitees = demandes_traitees.filter_by(zone=zone)
-                demandes_validees = demandes_validees.filter_by(zone=zone)
-            demandes_orientees = demandes_orientees.count()
-            demandes_acceptees = demandes_acceptees.count()
-            demandes_rejetees = demandes_rejetees.count()
-            demandes_traitees = demandes_traitees.count()
-            demandes_validees = demandes_validees.count()
-            total_demandes = (demandes_orientees + demandes_acceptees +
-                              demandes_rejetees + demandes_traitees + demandes_validees)
-            productivite = round((demandes_validees / total_demandes * 100) if total_demandes > 0 else 0, 1)
-            equipes_stats.append({
-                'nom_equipe': equipe.nom_equipe,
-                'technicien_principal': f"{technicien_principal.nom} {technicien_principal.prenom}",
-                'demandes_orientees': demandes_orientees,
-                'demandes_acceptees': demandes_acceptees,
-                'demandes_rejetees': demandes_rejetees,
-                'demandes_traitees': demandes_traitees,
-                'demandes_validees': demandes_validees,
-                'productivite': productivite,
-                'zone': equipe.zone,
-                'service': equipe.service,
-                'technologies': equipe.technologies
-            })
+        bulk_counts = bulk_counts.group_by(
+            DemandeIntervention.technicien_id, 
+            DemandeIntervention.statut
+        ).all()
+        
+        # Organiser les données par technicien_id
+        for tid, status, count in bulk_counts:
+            if tid not in stats_data:
+                stats_data[tid] = {}
+            stats_data[tid][status] = count
+
+    equipes_stats = []
+    for mt, eq in principal_techs:
+        tid = mt.technicien_id
+        counts = stats_data.get(tid, {})
+        
+        do = counts.get('affecte', 0)
+        da = counts.get('en_cours', 0)
+        dr = counts.get('rejete', 0)
+        dt = counts.get('termine', 0)
+        dv = counts.get('valide', 0)
+        
+        total = do + da + dr + dt + dv
+        prod = round((dv / total * 100) if total > 0 else 0, 1)
+        
+        equipes_stats.append({
+            'nom_equipe': eq.nom_equipe,
+            'technicien_principal': f"{mt.nom} {mt.prenom}",
+            'demandes_orientees': do,
+            'demandes_acceptees': da,
+            'demandes_rejetees': dr,
+            'demandes_traitees': dt,
+            'demandes_validees': dv,
+            'productivite': prod,
+            'zone': eq.zone,
+            'service': eq.service,
+            'technologies': eq.technologies
+        })
     
-    # Statistiques par activité (SAV/Production) par zone et technologie
+    # 3. OPTIMISATION: Statistiques par activité en utilisant group_by
     activites_stats = []
-    zones_technos_query = db.session.query(
-        Equipe.zone, 
-        Equipe.technologies, 
-        Equipe.service
-    ).filter_by(actif=True)
+    agg_stats_query = db.session.query(
+        User.zone,
+        Equipe.technologies,
+        DemandeIntervention.service,
+        func.count(DemandeIntervention.id)
+    ).join(
+        DemandeIntervention, DemandeIntervention.technicien_id == User.id
+    ).join(
+        MembreEquipe, MembreEquipe.technicien_id == User.id
+    ).join(
+        Equipe, MembreEquipe.equipe_id == Equipe.id
+    ).filter(
+        Equipe.actif == True,
+        User.actif == True
+    )
+
     if zone:
-        zones_technos_query = zones_technos_query.filter(Equipe.zone == zone)
-    zones_technos = zones_technos_query.distinct().all()
+        agg_stats_query = agg_stats_query.filter(User.zone == zone)
     
-    for zone_val, techno, service in zones_technos:
-        services = service.split(',') if service else []
-        for srv in services:
-            srv = srv.strip()
-            demandes_zone_techno = DemandeIntervention.query.join(
-                User, DemandeIntervention.technicien_id == User.id
-            ).filter(
-                User.zone == zone_val,
-                DemandeIntervention.type_techno.contains(techno.split(',')[0]),
-                DemandeIntervention.service == srv
-            )
-            if zone:
-                demandes_zone_techno = demandes_zone_techno.filter(DemandeIntervention.zone == zone)
-            demandes_zone_techno = demandes_zone_techno.count()
-            if demandes_zone_techno > 0:
-                activites_stats.append({
-                    'zone': zone_val,
-                    'technologie': techno,
-                    'activite': srv,
-                    'demandes_total': demandes_zone_techno
-                })
+    agg_stats = agg_stats_query.group_by(
+        User.zone,
+        Equipe.technologies,
+        DemandeIntervention.service
+    ).all()
+
+    for zone_val, technologies, service, count in agg_stats:
+        activites_stats.append({
+            'zone': zone_val,
+            'technologie': technologies,
+            'activite': service,
+            'demandes_total': count
+        })
     
-    # Statistiques globales filtrées si besoin
+    # Statistiques globales
     demandes_query = DemandeIntervention.query
     interventions_query = Intervention.query.join(DemandeIntervention)
     equipes_actives_query = Equipe.query.filter_by(actif=True, publie=True, date_publication=today)
@@ -638,7 +645,7 @@ def get_chef_pur_stats(zone=None):
         equipes_actives_query = equipes_actives_query.filter_by(zone=zone)
         techniciens_actifs_query = techniciens_actifs_query.filter_by(zone=zone)
     
-    # Détail des demandes du jour par age, priorite_traitement et offre
+    # Détail des demandes du jour (Déjà optimisé avec with_entities)
     demandes_jour_query = demandes_query.filter(
         db.func.date(DemandeIntervention.date_creation) == today
     )
@@ -646,10 +653,11 @@ def get_chef_pur_stats(zone=None):
     priorite_stats = demandes_jour_query.with_entities(DemandeIntervention.priorite_traitement, db.func.count()).group_by(DemandeIntervention.priorite_traitement).all()
     offre_stats = demandes_jour_query.with_entities(DemandeIntervention.offre, db.func.count()).group_by(DemandeIntervention.offre).all()
 
-    #demandes du jour par service
+    # Demandes du jour par service (Déjà simple)
     demandes_jour_sav = demandes_jour_query.filter(DemandeIntervention.service == 'SAV').count()
     demandes_jour_production = demandes_jour_query.filter(DemandeIntervention.service == 'Production').count()
-    #interventions validées par service
+    
+    # Interventions validées par service
     interventions_validees_sav = interventions_query.filter(
         Intervention.statut == 'valide',
         db.func.date(Intervention.date_validation) == today,
@@ -661,6 +669,7 @@ def get_chef_pur_stats(zone=None):
         db.func.date(Intervention.date_validation) == today,
         DemandeIntervention.service == 'Production'
     ).count()
+
     return {
         'total_demandes': demandes_query.count(),
         'demandes_jour': demandes_jour_query.count(),
@@ -683,6 +692,7 @@ def get_chef_pur_stats(zone=None):
         'equipes_stats': equipes_stats,
         'activites_stats': activites_stats,
     }
+
 
 def get_chef_pilote_stats(service, current_user=None):
     """Statistiques pour les Chefs Pilotes avec gestion du chef pilote principal"""
@@ -992,52 +1002,87 @@ def send_orange_sms(to, message, sender=None):
     print(f"Orange SMS API status: {resp.status_code}, réponse: {resp.text}", flush=True)
     return resp.status_code == 201
 
+
+
 def build_stats_by_zone_tech():
     services = ['SAV', 'Production']
-    zones = ['MBOUR', 'KAOLACK', 'DAKAR']
+    zones_list = ['MBOUR', 'KAOLACK', 'DAKAR']
     technologies = ['Fibre', 'Cuivre', '5G']
+
+    # OPTIMISATION: Une seule requête agrégée pour toutes les stats
+    # On récupère les comptes groupés par service, zone et technologie
+    query_results = db.session.query(
+        DemandeIntervention.service,
+        DemandeIntervention.zone,
+        DemandeIntervention.type_techno,
+        func.count(DemandeIntervention.id).label('total'),
+        func.sum(case((DemandeIntervention.statut == 'affecte', 1), else_=0)).label('ot_oriente'),
+        func.sum(case((DemandeIntervention.statut == 'valide', 1), else_=0)).label('ot_cloture'),
+        func.sum(case((Intervention.statut == 'en_cours', 1), else_=0)).label('ot_traite'),
+        func.sum(case((Intervention.statut == 'termine', 1), else_=0)).label('ot_non_cloture')
+    ).outerjoin(
+        Intervention, DemandeIntervention.id == Intervention.demande_id
+    ).group_by(
+        DemandeIntervention.service,
+        DemandeIntervention.zone,
+        DemandeIntervention.type_techno
+    ).all()
+
+    # Transformer les résultats en dictionnaire pour accès rapide
+    raw_data = {}
+    for r in query_results:
+        # Normaliser la zone pour le regroupement DAKAR
+        zone_name = r.zone.upper() if r.zone else ""
+        raw_data[(r.service, zone_name, r.type_techno.lower())] = r
 
     stats_by_zone_tech = {}
 
     for service in services:
-        for zone in zones:
+        for zone in zones_list:
             for tech in technologies:
+                tech_lower = tech.lower()
                 tech_db = tech[0].upper() + tech[1:].lower()
-                # Pour la zone "DAKAR", on regroupe toutes les zones sauf MBOUR et KAOLACK
-                if zone == 'DAKAR':
-                    demandes = DemandeIntervention.query.filter(
-                        DemandeIntervention.service == service,
-                        DemandeIntervention.type_techno == tech_db,
-                        ~DemandeIntervention.zone.in_(['MBOUR', 'KAOLACK'])
-                    )
-                else:
-                    demandes = DemandeIntervention.query.filter_by(
-                        service=service,
-                        zone=zone,
-                        type_techno=tech_db
-                    )
-
-                ot_oriente = demandes.filter_by(statut='affecte').count()
+                
+                key = (service, zone, tech_lower)
+                
+                # Initialiser les compteurs
+                total_demandes = 0
+                ot_oriente = 0
                 ot_traite = 0
-                for demande in demandes:
-                    if demande.intervention and demande.intervention.statut == 'en_cours':
-                        ot_traite += 1
-                ot_cloture = demandes.filter_by(statut='valide').count()
+                ot_cloture = 0
                 ot_non_cloture = 0
-                for demande in demandes:
-                    if demande.intervention and demande.intervention.statut in ['termine']:
-                        ot_non_cloture += 1
-                total_demandes = demandes.count()
+
+                if zone == 'DAKAR':
+                    # Regrouper tout ce qui n'est pas MBOUR ou KAOLACK
+                    for (srv, z, t), data in raw_data.items():
+                        if srv == service and t == tech_lower and z not in ['MBOUR', 'KAOLACK']:
+                            total_demandes += data.total
+                            ot_oriente += data.ot_oriente
+                            ot_traite += data.ot_traite
+                            ot_cloture += data.ot_cloture
+                            ot_non_cloture += data.ot_non_cloture
+                else:
+                    # Données spécifiques à la zone
+                    data = raw_data.get((service, zone, tech_lower))
+                    if data:
+                        total_demandes = data.total
+                        ot_oriente = data.ot_oriente
+                        ot_traite = data.ot_traite
+                        ot_cloture = data.ot_cloture
+                        ot_non_cloture = data.ot_non_cloture
+
                 productivite = f"{round((ot_cloture / total_demandes * 100) if total_demandes > 0 else 0, 1)}%"
 
-                stats_by_zone_tech[(service, zone, tech.lower())] = {
-                    'ot_oriente': ot_oriente,
-                    'ot_traite': ot_traite,
-                    'ot_cloture': ot_cloture,
-                    'ot_non_cloture': ot_non_cloture,
+                stats_by_zone_tech[key] = {
+                    'ot_oriente': int(ot_oriente),
+                    'ot_traite': int(ot_traite),
+                    'ot_cloture': int(ot_cloture),
+                    'ot_non_cloture': int(ot_non_cloture),
                     'productivite': productivite
                 }
+                
     return stats_by_zone_tech
+
 
 def log_activity(user_id, action, module, entity_id=None, entity_name=None, details=None, ip_address=None):
     """Log une activité utilisateur"""

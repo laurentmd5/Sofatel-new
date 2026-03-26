@@ -9,6 +9,7 @@ from app import db
 from models import User, Equipe, MembreEquipe, Intervention, DemandeIntervention, FichierImport
 from kpi_models import KpiScore, KpiAlerte
 from extensions import cache
+from sqlalchemy import func
 import logging
 import json
 
@@ -98,64 +99,106 @@ def get_unified_performance_data(zone=None, period='day', sort_by='score'):
         if zone:
             equipes_query = equipes_query.filter_by(zone=zone)
         
-        for equipe in equipes_query.all():
-            members = MembreEquipe.query.filter_by(equipe_id=equipe.id).all()
-            member_ids = [m.technicien_id for m in members if m.technicien_id]
+        # ===== PRÉ-CHARGEMENT DES DONNÉES (OPTIMISATION) =====
+        equipes = equipes_query.all()
+        equipe_ids = [e.id for e in equipes]
+        
+        techniciens = techniciens_query.all()
+        tech_ids = [t.id for t in techniciens]
+        
+        # Charger tous les membres d'équipe en une fois
+        all_members = MembreEquipe.query.filter(MembreEquipe.equipe_id.in_(equipe_ids)).all() if equipe_ids else []
+        equipe_to_techs = {}
+        for m in all_members:
+            if m.technicien_id:
+                if m.equipe_id not in equipe_to_techs:
+                    equipe_to_techs[m.equipe_id] = []
+                equipe_to_techs[m.equipe_id].append(m.technicien_id)
+        
+        # Liste de tous les techniciens impliqués (ceux filtrés + membres des équipes filtrées)
+        involved_tech_ids = list(set(tech_ids + [m.technicien_id for m in all_members if m.technicien_id]))
+        
+        # Charger TOUS les KPI scores en une seule requête
+        all_kpis = KpiScore.query.filter(
+            KpiScore.technicien_id.in_(involved_tech_ids),
+            KpiScore.periode_fin >= period_start,
+            KpiScore.periode_fin <= today
+        ).all() if involved_tech_ids else []
+        
+        # Organiser les KPI par technicien_id
+        tech_kpi_map = {}
+        for s in all_kpis:
+            if s.technicien_id not in tech_kpi_map:
+                tech_kpi_map[s.technicien_id] = []
+            tech_kpi_map[s.technicien_id].append(s)
             
-            if not member_ids:
-                continue
+        # Pré-calculer les counts d'interventions pour le fallback (si KPI manquants)
+        # Pour les équipes
+        eq_interv_counts = {}
+        if equipe_ids:
+            counts = db.session.query(
+                Intervention.equipe_id, 
+                Intervention.statut, 
+                func.count(Intervention.id)
+            ).filter(Intervention.equipe_id.in_(equipe_ids)).group_by(Intervention.equipe_id, Intervention.statut).all()
+            for eid, status, count in counts:
+                if eid not in eq_interv_counts: eq_interv_counts[eid] = {'total': 0, 'valide': 0}
+                eq_interv_counts[eid]['total'] += count
+                if status == 'valide': eq_interv_counts[eid]['valide'] = count
+
+        # Pour les techniciens
+        tech_interv_counts = {}
+        if tech_ids:
+            counts = db.session.query(
+                Intervention.technicien_id, 
+                Intervention.statut, 
+                func.count(Intervention.id)
+            ).filter(Intervention.technicien_id.in_(tech_ids)).group_by(Intervention.technicien_id, Intervention.statut).all()
+            for tid, status, count in counts:
+                if tid not in tech_interv_counts: tech_interv_counts[tid] = {'total': 0, 'valide': 0}
+                tech_interv_counts[tid]['total'] += count
+                if status == 'valide': tech_interv_counts[tid]['valide'] = count
+
+        # ===== EQUIPES - CONSTRUCTION =====
+        equipes_data = []
+        for equipe in equipes:
+            member_ids = equipe_to_techs.get(equipe.id, [])
+            if not member_ids: continue
             
-            # Get KPI scores for this team in period
-            kpi_scores = KpiScore.query.filter(
-                KpiScore.technicien_id.in_(member_ids),
-                KpiScore.periode_fin >= period_start,
-                KpiScore.periode_fin <= today
-            ).all()
+            # Récupérer les KPI pour cette équipe
+            kpi_scores = []
+            for mid in member_ids:
+                kpi_scores.extend(tech_kpi_map.get(mid, []))
             
             if kpi_scores:
-                # Calculate averages from KPI scores
-                avg_kpi_total = sum(s.score_total for s in kpi_scores if s.score_total) / len([s for s in kpi_scores if s.score_total]) if kpi_scores else 0
-                avg_kpi_1ere = sum(s.score_resolution_1ere_visite for s in kpi_scores if s.score_resolution_1ere_visite) / len([s for s in kpi_scores if s.score_resolution_1ere_visite]) if kpi_scores else 0
-                avg_kpi_sla = sum(s.score_respect_sla for s in kpi_scores if s.score_respect_sla) / len([s for s in kpi_scores if s.score_respect_sla]) if kpi_scores else 0
-                avg_kpi_qualite = sum(s.score_qualite_rapports for s in kpi_scores if s.score_qualite_rapports) / len([s for s in kpi_scores if s.score_qualite_rapports]) if kpi_scores else 0
-                avg_kpi_satisfaction = sum(s.score_satisfaction_client for s in kpi_scores if s.score_satisfaction_client) / len([s for s in kpi_scores if s.score_satisfaction_client]) if kpi_scores else 0
-                avg_kpi_stock = sum(s.score_consommation_stock for s in kpi_scores if s.score_consommation_stock) / len([s for s in kpi_scores if s.score_consommation_stock]) if kpi_scores else 0
+                valid_scores = [s for s in kpi_scores if s.score_total is not None]
+                n = len(valid_scores) if valid_scores else 1
+                avg_kpi_total = sum(s.score_total for s in valid_scores) / n if valid_scores else 0
+                avg_kpi_1ere = sum(s.score_resolution_1ere_visite for s in valid_scores if s.score_resolution_1ere_visite) / n if valid_scores else 0
+                avg_kpi_sla = sum(s.score_respect_sla for s in valid_scores if s.score_respect_sla) / n if valid_scores else 0
+                avg_kpi_qualite = sum(s.score_qualite_rapports for s in valid_scores if s.score_qualite_rapports) / n if valid_scores else 0
+                avg_kpi_satisfaction = sum(s.score_satisfaction_client for s in valid_scores if s.score_satisfaction_client) / n if valid_scores else 0
+                avg_kpi_stock = sum(s.score_consommation_stock for s in valid_scores if s.score_consommation_stock) / n if valid_scores else 0
                 
-                # Determine trend (use latest score if available)
                 latest_score = sorted(kpi_scores, key=lambda x: x.periode_fin)[-1] if kpi_scores else None
                 tendance = latest_score.tendance if latest_score else '→'
                 variation = latest_score.variation_periode_precedente if latest_score else 0
             else:
-                # Fallback: calculate from interventions
-                total = Intervention.query.filter_by(equipe_id=equipe.id).count()
-                success = Intervention.query.filter_by(equipe_id=equipe.id, statut='valide').count()
-                taux = (success / total * 100) if total > 0 else 0
-                
+                # Fallback optimisé
+                stats = eq_interv_counts.get(equipe.id, {'total': 0, 'valide': 0})
+                taux = (stats['valide'] / stats['total'] * 100) if stats['total'] > 0 else 0
                 avg_kpi_total = taux
-                avg_kpi_1ere = taux
-                avg_kpi_sla = 0
-                avg_kpi_qualite = 0
-                avg_kpi_satisfaction = 0
-                avg_kpi_stock = 0
-                tendance = '→'
-                variation = 0
+                avg_kpi_1ere, avg_kpi_sla, avg_kpi_qualite, avg_kpi_satisfaction, avg_kpi_stock = taux, 0, 0, 0, 0
+                tendance, variation = '→', 0
             
-            # Determine performance level (color coding)
-            if avg_kpi_total >= 80:
-                perf_level = 'green'
-            elif avg_kpi_total >= 60:
-                perf_level = 'yellow'
-            else:
-                perf_level = 'red'
+            perf_level = 'green' if avg_kpi_total >= 80 else ('yellow' if avg_kpi_total >= 60 else 'red')
             
             equipes_data.append({
                 'nom_equipe': equipe.nom_equipe,
                 'zone': equipe.zone,
                 'prestataire': equipe.prestataire or '',
                 'technologies': equipe.technologies,
-                # OLD FIELD (backward compat)
                 'taux_reussite': round(avg_kpi_total, 1),
-                # NEW KPI FIELDS
                 'kpi_score_total': round(avg_kpi_total, 2),
                 'kpi_resolution_1ere_visite': round(avg_kpi_1ere, 1),
                 'kpi_sla': round(avg_kpi_sla, 1),
@@ -165,64 +208,38 @@ def get_unified_performance_data(zone=None, period='day', sort_by='score'):
                 'tendance': tendance,
                 'variation': round(variation, 1) if variation else 0,
                 'performance_level': perf_level,
-                'interventions_realisees': Intervention.query.filter_by(equipe_id=equipe.id, statut='valide').count()
+                'interventions_realisees': eq_interv_counts.get(equipe.id, {}).get('valide', 0)
             })
         
-        # Sort equipes
-        if sort_by == 'taux':
-            equipes_data.sort(key=lambda x: x['taux_reussite'], reverse=True)
-        elif sort_by == 'anomalie':
-            # Not implemented yet, default to score
-            equipes_data.sort(key=lambda x: x['kpi_score_total'], reverse=True)
-        else:  # score (default)
-            equipes_data.sort(key=lambda x: x['kpi_score_total'], reverse=True)
+        # Sort équipes
+        equipes_data.sort(key=lambda x: x['kpi_score_total'], reverse=True)
         
-        # ===== TECHNICIENS =====
+        # ===== TECHNICIENS - CONSTRUCTION =====
         techniciens_data = []
-        techniciens_query = User.query.filter_by(role='technicien', actif=True)
-        if zone:
-            techniciens_query = techniciens_query.filter_by(zone=zone)
-        
-        for tech in techniciens_query.all():
-            kpi_scores = KpiScore.query.filter(
-                KpiScore.technicien_id == tech.id,
-                KpiScore.periode_fin >= period_start,
-                KpiScore.periode_fin <= today
-            ).all()
+        for tech in techniciens:
+            kpi_scores = tech_kpi_map.get(tech.id, [])
             
             if kpi_scores:
-                avg_kpi_total = sum(s.score_total for s in kpi_scores if s.score_total) / len([s for s in kpi_scores if s.score_total]) if kpi_scores else 0
-                avg_kpi_1ere = sum(s.score_resolution_1ere_visite for s in kpi_scores if s.score_resolution_1ere_visite) / len([s for s in kpi_scores if s.score_resolution_1ere_visite]) if kpi_scores else 0
-                avg_kpi_sla = sum(s.score_respect_sla for s in kpi_scores if s.score_respect_sla) / len([s for s in kpi_scores if s.score_respect_sla]) if kpi_scores else 0
-                avg_kpi_qualite = sum(s.score_qualite_rapports for s in kpi_scores if s.score_qualite_rapports) / len([s for s in kpi_scores if s.score_qualite_rapports]) if kpi_scores else 0
-                avg_kpi_satisfaction = sum(s.score_satisfaction_client for s in kpi_scores if s.score_satisfaction_client) / len([s for s in kpi_scores if s.score_satisfaction_client]) if kpi_scores else 0
-                avg_kpi_stock = sum(s.score_consommation_stock for s in kpi_scores if s.score_consommation_stock) / len([s for s in kpi_scores if s.score_consommation_stock]) if kpi_scores else 0
+                valid_scores = [s for s in kpi_scores if s.score_total is not None]
+                n = len(valid_scores) if valid_scores else 1
+                avg_kpi_total = sum(s.score_total for s in valid_scores) / n if valid_scores else 0
+                avg_kpi_1ere = sum(s.score_resolution_1ere_visite for s in valid_scores if s.score_resolution_1ere_visite) / n if valid_scores else 0
+                avg_kpi_sla = sum(s.score_respect_sla for s in valid_scores if s.score_respect_sla) / n if valid_scores else 0
+                avg_kpi_qualite = sum(s.score_qualite_rapports for s in valid_scores if s.score_qualite_rapports) / n if valid_scores else 0
+                avg_kpi_satisfaction = sum(s.score_satisfaction_client for s in valid_scores if s.score_satisfaction_client) / n if valid_scores else 0
+                avg_kpi_stock = sum(s.score_consommation_stock for s in valid_scores if s.score_consommation_stock) / n if valid_scores else 0
                 
                 latest_score = sorted(kpi_scores, key=lambda x: x.periode_fin)[-1] if kpi_scores else None
                 tendance = latest_score.tendance if latest_score else '→'
                 variation = latest_score.variation_periode_precedente if latest_score else 0
             else:
-                # Fallback
-                total = Intervention.query.filter_by(technicien_id=tech.id).count()
-                success = Intervention.query.filter_by(technicien_id=tech.id, statut='valide').count()
-                taux = (success / total * 100) if total > 0 else 0
-                
+                stats = tech_interv_counts.get(tech.id, {'total': 0, 'valide': 0})
+                taux = (stats['valide'] / stats['total'] * 100) if stats['total'] > 0 else 0
                 avg_kpi_total = taux
-                avg_kpi_1ere = taux
-                avg_kpi_sla = 0
-                avg_kpi_qualite = 0
-                avg_kpi_satisfaction = 0
-                avg_kpi_stock = 0
-                tendance = '→'
-                variation = 0
+                avg_kpi_1ere, avg_kpi_sla, avg_kpi_qualite, avg_kpi_satisfaction, avg_kpi_stock = taux, 0, 0, 0, 0
+                tendance, variation = '→', 0
             
-            # Determine performance level
-            if avg_kpi_total >= 80:
-                perf_level = 'green'
-            elif avg_kpi_total >= 60:
-                perf_level = 'yellow'
-            else:
-                perf_level = 'red'
+            perf_level = 'green' if avg_kpi_total >= 80 else ('yellow' if avg_kpi_total >= 60 else 'red')
             
             techniciens_data.append({
                 'id': tech.id,
@@ -230,9 +247,7 @@ def get_unified_performance_data(zone=None, period='day', sort_by='score'):
                 'prenom': tech.prenom,
                 'zone': tech.zone,
                 'technologies': tech.technologies,
-                # OLD FIELD
                 'taux_reussite': round(avg_kpi_total, 1),
-                # NEW KPI FIELDS
                 'kpi_score_total': round(avg_kpi_total, 2),
                 'kpi_resolution_1ere_visite': round(avg_kpi_1ere, 1),
                 'kpi_sla': round(avg_kpi_sla, 1),
@@ -242,11 +257,11 @@ def get_unified_performance_data(zone=None, period='day', sort_by='score'):
                 'tendance': tendance,
                 'variation': round(variation, 1) if variation else 0,
                 'performance_level': perf_level,
-                'interventions_realisees': Intervention.query.filter_by(technicien_id=tech.id, statut='valide').count()
+                'interventions_realisees': tech_interv_counts.get(tech.id, {}).get('valide', 0)
             })
         
-        # Sort techniciens
         techniciens_data.sort(key=lambda x: x['kpi_score_total'], reverse=True)
+
         
         # ===== ZONES =====
         zones_data = []

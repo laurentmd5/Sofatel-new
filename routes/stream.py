@@ -208,12 +208,17 @@ def stream_interventions():
     return Response(generate_events(), mimetype='text/event-stream')
 
 
+from extensions import cache
+from sqlalchemy import func
+
 @stream_bp.route('/api/stream/dashboard-summary', methods=['GET'])
 @login_required
+@cache.cached(timeout=60, query_string=True)
 def get_dashboard_summary():
     """Get current dashboard summary (instant snapshot, not streaming).
     
     Used for initial page load and periodic polling.
+    Optimised for performance with SQL aggregation and Redis caching.
     """
     try:
         days = int(request.args.get('days', 30))
@@ -221,22 +226,28 @@ def get_dashboard_summary():
         days = 30
 
     cutoff = datetime.utcnow() - timedelta(days=days)
-    intervs = Intervention.query.filter(Intervention.date_creation >= cutoff).all()
+    
+    # OPTIMISATION: Utiliser une agrégation SQL au lieu de récupérer tous les objets
+    counts_query = db.session.query(
+        Intervention.statut, 
+        func.count(Intervention.id)
+    ).filter(
+        Intervention.date_creation >= cutoff
+    ).group_by(Intervention.statut).all()
 
-    counters = defaultdict(int)
-    for it in intervs:
-        state = it.state or it.statut
-        counters[state] += 1
+    counters = {status: count for status, count in counts_query}
+    total = sum(counters.values())
 
     return jsonify({
         'success': True,
         'summary': {
-            'total': len(intervs),
-            'counters': dict(counters),
+            'total': total,
+            'counters': counters,
             'timestamp': datetime.utcnow().isoformat(),
             'current_user_id': current_user.id,
         }
     })
+
 
 
 @stream_bp.route('/api/stream/events/recent', methods=['GET'])

@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 
 from app import db
 from forms import LoginForm
-from models import User, Produit, MouvementStock, ReservationPiece, Intervention, Equipe
+from models import User, Produit, MouvementStock, ReservationPiece, Intervention, Equipe, MembreEquipe
 from utils import log_activity, get_chef_pur_stats, get_chef_pilote_stats, get_chef_zone_stats, get_technicien_interventions, get_performance_data, build_stats_by_zone_tech
 from extensions import csrf  # needed to exempt login in tests
 from cache_decorators import cache_kpi_data
@@ -92,22 +92,40 @@ def register_auth_blueprint(app):
     @login_required
     def dashboard():
         if current_user.role == 'chef_pur':
+            # Utilisation de get_performance_data (qui est déjà mis en cache via unified_kpi)
             performance_data = get_performance_data()
+            
+            # Utilisation de build_stats_by_zone_tech optimisé
             stats_by_zone_tech = build_stats_by_zone_tech()
+            
             last_update = datetime.now(timezone.utc).strftime('%d/%m/%Y %H:%M')
+            
+            # Préchauffer les données pour éviter les requêtes en boucle
             techniciens = User.query.filter_by(role='technicien', actif=True).all()
             equipes = Equipe.query.filter_by(actif=True).order_by(Equipe.date_creation.desc()).all()
             
             def normalize_zone(zone):
                 z = (zone or '').upper()
-                if any(x in z for x in ['MBOUR', 'KAOLACK', 'FATICK']):
-                    if 'MBOUR' in z:
-                        return 'MBOUR'
-                    if 'KAOLACK' in z:
-                        return 'KAOLACK'
-                    if 'FATICK' in z:
-                        return 'FATICK'
+                for known_zone in ['MBOUR', 'KAOLACK', 'FATICK']:
+                    if known_zone in z:
+                        return known_zone
                 return 'DAKAR'
+
+            # Optimisation: Construire un mapping tech_id -> list of equipe objects en une passe
+            # au lieu de faire une boucle imbriquée N*M
+            all_members = MembreEquipe.query.filter(
+                MembreEquipe.equipe_id.in_([e.id for e in equipes])
+            ).all()
+            
+            tech_to_equipes = {}
+            for m in all_members:
+                if m.technicien_id:
+                    if m.technicien_id not in tech_to_equipes:
+                        tech_to_equipes[m.technicien_id] = []
+                    # Trouver l'objet équipe correspondant
+                    eq_obj = next((e for e in equipes if e.id == m.equipe_id), None)
+                    if eq_obj:
+                        tech_to_equipes[m.technicien_id].append(eq_obj)
 
             techniciens_json = [{
                 'id': t.id,
@@ -116,20 +134,16 @@ def register_auth_blueprint(app):
                 'technologies': t.technologies,
                 'zone': normalize_zone(t.zone)
             } for t in techniciens]
+
             equipes_json = [{
                 'id': e.id,
                 'nom_equipe': e.nom_equipe,
                 'technologies': e.technologies,
                 'zone': normalize_zone(e.zone)
             } for e in equipes]
-            equipes_mapping = {}
-            for technicien in techniciens:
-                technicien_zone = normalize_zone(technicien.zone)
-                equipes_mapping[technicien.id] = [
-                    equipe for equipe in equipes
-                    if normalize_zone(equipe.zone) == technicien_zone and any(
-                        m.technicien_id == technicien.id for m in equipe.membres)
-                ]
+
+            equipes_mapping = {t.id: tech_to_equipes.get(t.id, []) for t in techniciens}
+
             return render_template('dashboard_chef_pur.html',
                                    stats=get_chef_pur_stats(),
                                    stats_by_zone_tech=stats_by_zone_tech,
@@ -140,6 +154,7 @@ def register_auth_blueprint(app):
                                    techniciens_json=techniciens_json,
                                    equipes_json=equipes_json,
                                    equipes_mapping=equipes_mapping)
+
         
         elif current_user.role == 'chef_pilote':
             return render_template('dashboard_chef_pilote.html',

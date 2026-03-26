@@ -1800,8 +1800,8 @@ function affecterDemande(demandeId, technicienId, equipeId, commentaire) {
 
 // Configuration des mises à jour temps réel
 const REALTIME_CONFIG = {
-    SSE_ENDPOINT: '/api/stream/interventions?interval=10&limit=100',
-    POLLING_INTERVAL: 10000,  // 10 secondes fallback
+    SSE_ENDPOINT: '/api/stream/interventions?interval=30&limit=100',
+    POLLING_INTERVAL: 30000,  // 30 secondes fallback
     RECONNECT_DELAY: 5000,    // Reconnexion après 5s en cas d'erreur
     MAX_RETRIES: 5,           // Nombre max de tentatives de reconnexion
     DEBUG: true               // Activer logs console
@@ -2213,8 +2213,8 @@ function initMap() {
         // Fetch initial interventions
         fetchInterventionsForMap();
         
-        // Auto-refresh every 30 seconds
-        mapState.updateInterval = setInterval(fetchInterventionsForMap, 30000);
+        // Auto-refresh every 60 seconds (instead of 30)
+        mapState.updateInterval = setInterval(fetchInterventionsForMap, 60000);
         
     } catch (error) {
         console.error('❌ Map initialization failed:', error);

@@ -78,6 +78,20 @@ class TechnicianLocationCache:
                 ActivityLog.timestamp >= cutoff
             ).order_by(ActivityLog.user_id, ActivityLog.timestamp.desc()).all()
             
+            if not latest_logs:
+                return
+
+            # OPTIMISATION: Récupérer toutes les interventions en cours en une seule requête bulk
+            # pour éviter le N+1 query pattern (1 query par technicien dans la boucle)
+            user_ids = list(set([log.user_id for log in latest_logs]))
+            active_interv_query = Intervention.query.filter(
+                Intervention.technicien_id.in_(user_ids),
+                Intervention.statut == 'en_cours'
+            ).all()
+            
+            # Mapper tech_id -> intervention_id
+            tech_to_interv = {it.technicien_id: it.id for it in active_interv_query}
+            
             seen_users = set()
             for log in latest_logs:
                 if log.user_id in seen_users:
@@ -87,12 +101,7 @@ class TechnicianLocationCache:
                 
                 try:
                     details = json.loads(log.details)
-                    
-                    # Get current intervention
-                    intervention = Intervention.query.filter_by(
-                        technicien_id=log.user_id,
-                        statut='en_cours'
-                    ).first()
+                    interv_id = tech_to_interv.get(log.user_id) or details.get('intervention_id')
                     
                     self.positions[log.user_id] = {
                         'technicien_id': log.user_id,
@@ -100,11 +109,12 @@ class TechnicianLocationCache:
                         'longitude': details.get('longitude'),
                         'status': details.get('status', 'en_route'),
                         'accuracy': details.get('accuracy'),
-                        'intervention_id': intervention.id if intervention else details.get('intervention_id'),
+                        'intervention_id': interv_id,
                         'timestamp': log.timestamp.isoformat()
                     }
                 except Exception as e:
                     current_app.logger.error(f"Error parsing tracking log: {str(e)}")
+
 
 
 # Global location cache
