@@ -100,50 +100,6 @@ def register_auth_blueprint(app):
             
             last_update = datetime.now(timezone.utc).strftime('%d/%m/%Y %H:%M')
             
-            # Préchauffer les données pour éviter les requêtes en boucle
-            techniciens = User.query.filter_by(role='technicien', actif=True).all()
-            equipes = Equipe.query.filter_by(actif=True).order_by(Equipe.date_creation.desc()).all()
-            
-            def normalize_zone(zone):
-                z = (zone or '').upper()
-                for known_zone in ['MBOUR', 'KAOLACK', 'FATICK']:
-                    if known_zone in z:
-                        return known_zone
-                return 'DAKAR'
-
-            # Optimisation: Construire un mapping tech_id -> list of equipe objects en une passe
-            # au lieu de faire une boucle imbriquée N*M
-            all_members = MembreEquipe.query.filter(
-                MembreEquipe.equipe_id.in_([e.id for e in equipes])
-            ).all()
-            
-            tech_to_equipes = {}
-            for m in all_members:
-                if m.technicien_id:
-                    if m.technicien_id not in tech_to_equipes:
-                        tech_to_equipes[m.technicien_id] = []
-                    # Trouver l'objet équipe correspondant
-                    eq_obj = next((e for e in equipes if e.id == m.equipe_id), None)
-                    if eq_obj:
-                        tech_to_equipes[m.technicien_id].append(eq_obj)
-
-            techniciens_json = [{
-                'id': t.id,
-                'prenom': t.prenom,
-                'nom': t.nom,
-                'technologies': t.technologies,
-                'zone': normalize_zone(t.zone)
-            } for t in techniciens]
-
-            equipes_json = [{
-                'id': e.id,
-                'nom_equipe': e.nom_equipe,
-                'technologies': e.technologies,
-                'zone': normalize_zone(e.zone)
-            } for e in equipes]
-
-            equipes_mapping = {t.id: tech_to_equipes.get(t.id, []) for t in techniciens}
-
             return render_template('dashboard_chef_pur.html',
                                    stats=get_chef_pur_stats(),
                                    stats_by_zone_tech=stats_by_zone_tech,
@@ -151,9 +107,8 @@ def register_auth_blueprint(app):
                                    performance_data=performance_data,
                                    zones=performance_data.get('zones', []),
                                    pilots=performance_data.get('pilots', []),
-                                   techniciens_json=techniciens_json,
-                                   equipes_json=equipes_json,
-                                   equipes_mapping=equipes_mapping)
+                                   techniciens_json=performance_data.get('techniciens', []),
+                                   equipes_json=performance_data.get('equipes', []))
 
         
         elif current_user.role == 'chef_pilote':

@@ -74,7 +74,7 @@
 <div class="row mb-4 g-3">
     <!-- Performance Chart - 70% -->
     <div class="col-lg-8">
-        <div class="card h-100 chart-card" onclick="openChartModal('teamPerformanceChart', 'Performance des équipes')">
+        <div class="card h-100 chart-card" onclick="openChartModal('performanceChart', 'Performance des équipes et techniciens')">
             <div class="card-header bg-primary text-white chart-header">
                 <h5 class="mb-0">
                     <i data-feather="bar-chart-2" class="me-2"></i>
@@ -82,7 +82,7 @@
                 </h5>
             </div>
             <div class="card-body" style="height: 350px;">
-                <canvas id="teamPerformanceChart"></canvas>
+                <canvas id="performanceChart"></canvas>
             </div>
         </div>
     </div>
@@ -1272,41 +1272,12 @@ function getStatusColor(status) {
                 }
 
                 try {
-                    // Équipes
-                    if (data.teams && Array.isArray(data.teams) && data.teams.length > 0) {
-                        const teamChart = new Chart(document.getElementById('teamPerformanceChart'), {
-                            type: 'bar',
-                            data: {
-                                labels: data.teams.map(e => e.name + ' (' + e.principal + ')'),
-                                datasets: [{
-                                    label: 'Interventions validées',
-                                    data: data.teams.map(e => e.validated),
-                                    backgroundColor: '#28a745'
-                                }]
-                            },
-                            options: {
-                                responsive: true,
-                                plugins: {
-                                    tooltip: {
-                                        callbacks: {
-                                            label: function (context) {
-                                                const e = data.teams[context.dataIndex];
-                                                return `${e.name} | Principal: ${e.principal} | Nb_Accompagnants: ${e.accompagnants} | Accompagnants: ${e.accompagnant_names} | ${e.validated} interventions validées`;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        });
-                        // Enregistrer l'instance du chart pour le modal
-                        if (typeof registerChartInstance === 'function') {
-                            registerChartInstance('teamPerformanceChart', teamChart);
-                        }
-                    } else {
-                        console.warn('Pas de données teams disponibles');
-                    }
+                    // Les diagrammes de performance sont maintenant gérés par createPerformanceChart
+                    // qui utilise les données unifiées de performance.
+                    // On ne redessine plus le graphique ici pour éviter l'écrasement partiel.
+                    console.log('Utilisation du graphique de performance unifié pré-chargé');
                 } catch (e) {
-                    console.error('Erreur création teamPerformanceChart:', e);
+                    console.error('Erreur lors de la gestion du graphique unifié:', e);
                 }
 
                 try {
@@ -1549,16 +1520,17 @@ function getStatusColor(status) {
         }
     });
 
-    new Chart(ctx, {
+    const performanceChart = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: labels,
             datasets: [{
-                label: 'KPI Score (0-100)',
+                label: 'KPI Score (%)',
                 data: scoreData,
                 backgroundColor: backgroundColors,
                 borderColor: backgroundColors,
-                borderWidth: 1
+                borderWidth: 1,
+                borderRadius: 4
             }]
         },
         options: {
@@ -1573,7 +1545,7 @@ function getStatusColor(status) {
                         label: function (context) {
                             const item = displayData[context.dataIndex];
                             const typeLabel = item.type === 'equipe' ? 'Équipe' : 'Technicien';
-                            const scoreLabel = item.kpi_score !== undefined ? `KPI Score: ${item.kpi_score.toFixed(2)}/100` : `Taux: ${item.taux}%`;
+                            const scoreLabel = item.kpi_score !== undefined ? `KPI Score: ${item.kpi_score.toFixed(1)}/100` : `Taux: ${item.taux}%`;
                             return [
                                 `${typeLabel}: ${item.name}`,
                                 scoreLabel,
@@ -1611,7 +1583,7 @@ function getStatusColor(status) {
                 x: {
                     title: {
                         display: true,
-                        text: 'Top 15 - Équipes et Techniciens (Classé par KPI Score)'
+                        text: 'Top 15 - Performance Unifiée'
                     },
                     ticks: {
                         maxRotation: 45,
@@ -1621,9 +1593,13 @@ function getStatusColor(status) {
             }
         }
     });
+    
+    // Enregistrer l'instance du chart pour le modal
+    if (typeof registerChartInstance === 'function') {
+        registerChartInstance('performanceChart', performanceChart);
+    }
+    
     console.log('Performance Chart créé avec données KPI unifiées');
-    console.log(zonesData);
-    console.log(pilotsData);
     }
 
     // Enregistrer le listener pour charger les graphiques de performance

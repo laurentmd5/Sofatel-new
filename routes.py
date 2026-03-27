@@ -18,8 +18,9 @@ import io
 from app import app, db
 from models import *
 from forms import *
-from utils import *
-from extensions import csrf  # Import de csrf depuis extensions
+from utils import log_activity, get_chef_pur_stats, get_chef_pilote_stats, get_chef_zone_stats, get_technicien_interventions, get_performance_data, build_stats_by_zone_tech
+from kpi_utils import get_unified_performance_data
+from extensions import csrf  # needed to exempt login in tests
 
 @app.route('/')
 def index():
@@ -3051,107 +3052,17 @@ def api_stats_performance():
         return jsonify({'error': 'Accès refusé'}), 403
 
     try:
-        from datetime import date
+        # Utilisation de la fonction unifiée et optimisée
+        perf_data = get_unified_performance_data(period=request.args.get('period', 'day'))
         
-        # ===== TEAMS (ÉQUIPES) =====
-        teams = []
-        for equipe in Equipe.query.filter_by(actif=True).all():
-            # Récupérer le technicien principal (type='technicien')
-            principal = MembreEquipe.query.filter_by(
-                equipe_id=equipe.id, type_membre='technicien').first()
-            
-            # Compter les interventions validées pour cette équipe
-            validated_count = Intervention.query.filter_by(
-                equipe_id=equipe.id, statut='valide').count()
-            
-            # Récupérer les accompagnants
-            accompagnants = MembreEquipe.query.filter_by(
-                equipe_id=equipe.id, type_membre='accompagnant').all()
-            nb_accompagnants = len(accompagnants)
-            
-            teams.append({
-                'name': equipe.nom_equipe,
-                'principal': f"{principal.nom} {principal.prenom}" if principal else 'N/A',
-                'validated': validated_count,
-                'accompagnants': nb_accompagnants,
-                'accompagnant_names': ', '.join([f"{m.nom} {m.prenom}" for m in accompagnants]) if accompagnants else 'Aucun'
-            })
-
-        # ===== ZONES (CHEFS ZONE) =====
-        zones = []
-        today = date.today()
-        
-        for chef_zone in User.query.filter_by(role='chef_zone', actif=True).all():
-            # Équipes gérées par ce chef_zone
-            equipes_creees = Equipe.query.filter_by(
-                chef_zone_id=chef_zone.id, actif=True).count()
-            
-            equipes_publiees = Equipe.query.filter_by(
-                chef_zone_id=chef_zone.id, 
-                publie=True, 
-                date_publication=today,
-                actif=True).count()
-            
-            # Demandes affectées dans cette zone (interventions en cours ou terminées)
-            demandes_affectees = Intervention.query.join(
-                User, Intervention.technicien_id == User.id).filter(
-                User.zone == chef_zone.zone,
-                Intervention.statut.in_(['en_cours', 'termine', 'valide'])).count()
-            
-            # Demandes validées dans cette zone
-            demandes_validees = Intervention.query.join(
-                User, Intervention.technicien_id == User.id).filter(
-                User.zone == chef_zone.zone,
-                Intervention.statut == 'valide').count()
-            
-            zones.append({
-                'name': chef_zone.zone,
-                'chef_zone': f"{chef_zone.nom} {chef_zone.prenom}",
-                'created': equipes_creees,
-                'published': equipes_publiees,
-                'affected': demandes_affectees,
-                'validated': demandes_validees
-            })
-
-        # ===== PILOTS (CHEFS PILOTE) =====
-        pilots = []
-        
-        for chef_pilote in User.query.filter_by(role='chef_pilote', actif=True).all():
-            # Demandes importées par ce chef
-            demandes_importees = FichierImport.query.filter_by(
-                importe_par=chef_pilote.id).count()
-            
-            # Demandes dispatchées (affectées, en cours ou validées)
-            demandes_dispatch = DemandeIntervention.query.filter_by(
-                service=chef_pilote.service).filter(
-                DemandeIntervention.statut.in_(['affecte', 'en_cours', 'valide'])).count()
-            
-            # Interventions validées pour ce service
-            demande_ids = [d.id for d in DemandeIntervention.query.filter_by(
-                service=chef_pilote.service).all()]
-            
-            interventions_validees = 0
-            if demande_ids:
-                interventions_validees = Intervention.query.filter(
-                    Intervention.demande_id.in_(demande_ids),
-                    Intervention.statut == 'valide').count()
-            
-            pilots.append({
-                'name': f"{chef_pilote.nom} {chef_pilote.prenom}",
-                'service': chef_pilote.service or 'N/A',
-                'imported': demandes_importees,
-                'dispatched': demandes_dispatch,
-                'validated': interventions_validees
-            })
-
-        # ===== RETOUR =====
         return jsonify({
-            'teams': teams,
-            'zones': zones,
-            'pilots': pilots,
+            'teams': perf_data.get('equipes', []),
+            'zones': perf_data.get('zones', []),
+            'pilots': perf_data.get('pilots', []),
+            'technicians': perf_data.get('techniciens', []),
             'metadata': {
                 'timestamp': datetime.now(timezone.utc).isoformat(),
-                'source': 'api_stats_performance'
+                'source': 'unified_kpi_engine'
             }
         })
 

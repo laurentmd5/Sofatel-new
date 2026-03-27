@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # PHASE 1: UNIFIED PERFORMANCE DATA WITH REDIS CACHING & KPI CONSOLIDATION
 # ============================================================================
 
-def get_unified_performance_data(zone=None, period='day', sort_by='score'):
+def get_unified_performance_data(zone=None, period='day', sort_by='kpi'):
     """
     🎯 UNIFIED PERFORMANCE DATA - CONSOLIDATION OF TWO SYSTEMS
     
@@ -103,17 +103,28 @@ def get_unified_performance_data(zone=None, period='day', sort_by='score'):
         equipes = equipes_query.all()
         equipe_ids = [e.id for e in equipes]
         
+        # Définition de la requête pour les techniciens (manquait dans l'optimisation précédente)
+        techniciens_query = User.query.filter_by(role='technicien', actif=True)
+        if zone:
+            techniciens_query = techniciens_query.filter_by(zone=zone)
+            
         techniciens = techniciens_query.all()
+
         tech_ids = [t.id for t in techniciens]
         
         # Charger tous les membres d'équipe en une fois
         all_members = MembreEquipe.query.filter(MembreEquipe.equipe_id.in_(equipe_ids)).all() if equipe_ids else []
         equipe_to_techs = {}
+        tech_to_equipe_id = {}
         for m in all_members:
             if m.technicien_id:
                 if m.equipe_id not in equipe_to_techs:
                     equipe_to_techs[m.equipe_id] = []
                 equipe_to_techs[m.equipe_id].append(m.technicien_id)
+                tech_to_equipe_id[m.technicien_id] = m.equipe_id
+        
+        # Mapping equipe ID -> nom
+        equipe_id_to_nom = {e.id: e.nom_equipe for e in equipes}
         
         # Liste de tous les techniciens impliqués (ceux filtrés + membres des équipes filtrées)
         involved_tech_ids = list(set(tech_ids + [m.technicien_id for m in all_members if m.technicien_id]))
@@ -163,12 +174,13 @@ def get_unified_performance_data(zone=None, period='day', sort_by='score'):
         equipes_data = []
         for equipe in equipes:
             member_ids = equipe_to_techs.get(equipe.id, [])
-            if not member_ids: continue
             
-            # Récupérer les KPI pour cette équipe
+            # Récupérer les KPI pour cette équipe si possible
             kpi_scores = []
-            for mid in member_ids:
-                kpi_scores.extend(tech_kpi_map.get(mid, []))
+            if member_ids:
+                for mid in member_ids:
+                    kpi_scores.extend(tech_kpi_map.get(mid, []))
+
             
             if kpi_scores:
                 valid_scores = [s for s in kpi_scores if s.score_total is not None]
@@ -193,8 +205,29 @@ def get_unified_performance_data(zone=None, period='day', sort_by='score'):
             
             perf_level = 'green' if avg_kpi_total >= 80 else ('yellow' if avg_kpi_total >= 60 else 'red')
             
+            # Trouver le principal pour cette équipe
+            principal_name = "N/A"
+            nb_membres = 0
+            accompagnant_names = []
+            
+            # Recherche optimisée des membres
+            team_members = [m for m in all_members if m.equipe_id == equipe.id]
+            nb_membres = len(team_members)
+            for m in team_members:
+                if m.type_membre == 'technicien':
+                    principal_name = f"{m.prenom} {m.nom}"
+                elif m.type_membre == 'accompagnant':
+                    accompagnant_names.append(f"{m.prenom} {m.nom}")
+            
             equipes_data.append({
+                'id': equipe.id,
+                'name': equipe.nom_equipe,
                 'nom_equipe': equipe.nom_equipe,
+                'principal': principal_name,
+                'validated': eq_interv_counts.get(equipe.id, {}).get('valide', 0),
+                'nb_membres': nb_membres,
+                'accompagnants': len(accompagnant_names),
+                'accompagnant_names': ', '.join(accompagnant_names) if accompagnant_names else 'Aucun',
                 'zone': equipe.zone,
                 'prestataire': equipe.prestataire or '',
                 'technologies': equipe.technologies,
@@ -243,8 +276,10 @@ def get_unified_performance_data(zone=None, period='day', sort_by='score'):
             
             techniciens_data.append({
                 'id': tech.id,
+                'name': f"{tech.prenom} {tech.nom}",
                 'nom': tech.nom,
                 'prenom': tech.prenom,
+                'equipe_nom': equipe_id_to_nom.get(tech_to_equipe_id.get(tech.id)),
                 'zone': tech.zone,
                 'technologies': tech.technologies,
                 'taux_reussite': round(avg_kpi_total, 1),
