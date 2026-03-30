@@ -76,7 +76,6 @@ docs/
 docs/_build/
 site/
 *.md
-*.txt
 attached_assets/
 
 # Scripts de migration (inutiles en prod)
