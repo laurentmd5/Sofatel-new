@@ -72,7 +72,6 @@ pluggy==1.6.0
 polib==1.1.1
 propcache==0.3.2
 psutil==7.2.1
-psycopg2==2.9.11
 psycopg2-binary==2.9.11
 pycparser==2.22
 pydot==1.4.2
