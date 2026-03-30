@@ -73,7 +73,7 @@ attached_assets/
 # Database files
 *.sqlite3
 *.db
-
+*.sql
 # Temporary files
 tmp/
 temp/
@@ -104,4 +104,5 @@ secrets.yml
 *.pot
 *.mo
 *.md
-"
+"direct_db_fix.zip
+*.zip
