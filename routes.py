@@ -3379,6 +3379,11 @@ def edit_user(user_id):
     if not user:
         abort(404)
     form = EditUserForm(obj=user)
+    
+    # 🔴 PHASE 2 FIX: Pré-remplir le champ zone à partir de zone_id (car obj=user utilise le champ legacy zone string)
+    if request.method == 'GET' and user.zone_id:
+        form.zone.data = user.zone_id
+
     if form.validate_on_submit():
         try:
             user.username = form.username.data
@@ -3388,6 +3393,14 @@ def edit_user(user_id):
             user.prenom = form.prenom.data
             user.telephone = form.telephone.data
             user.zone_id = int(form.zone.data) if form.zone.data and int(form.zone.data) != 0 else None
+            
+            # 🔴 PHASE 2 FIX: Synchroniser le champ legacy zone (string) pour compatibilité
+            if user.zone_id:
+                zone_obj = db.session.get(Zone, user.zone_id)
+                user.zone = zone_obj.nom if zone_obj else None
+            else:
+                user.zone = None
+
             user.commune = form.commune.data if form.commune.data else None
             user.quartier = form.quartier.data if form.quartier.data else None
             user.service = form.service.data if form.service.data else None

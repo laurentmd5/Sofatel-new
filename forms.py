@@ -941,6 +941,14 @@ class EditUserForm(FlaskForm):
     def validate_confirm_new_password(self, field):
         if self.new_password.data and field.data != self.new_password.data:
             raise ValidationError('Les mots de passe ne correspondent pas.')
+
+    def validate_zone(self, field):
+        """Validation du champ zone selon le rôle"""
+        if self.role.data in ['chef_zone', 'magasinier', 'technicien']:
+            # Pour chef_zone, magasinier et technicien, la zone est obligatoire
+            if not field.data or field.data == 0 or str(field.data) == '0' or field.data is None:
+                role_display = {'chef_zone': 'Chef de zone', 'magasinier': 'Magasinier', 'technicien': 'Technicien'}.get(self.role.data, self.role.data)
+                raise ValidationError(f'La zone est obligatoire pour un {role_display}.')
         
 class ResetPasswordRequestForm(FlaskForm):
     email = StringField('Email', validators=[DataRequired(), Email()])
