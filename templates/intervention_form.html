@@ -410,6 +410,140 @@
         margin-top: 3px;
     }
 
+    /* ===== GPS Geolocation Widget ===== */
+    .gps-widget {
+        background: linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 100%);
+        border: 1.5px solid #a5d6a7;
+        border-radius: 10px;
+        padding: 16px 18px;
+        margin-bottom: 18px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+    }
+
+    .gps-widget .gps-icon {
+        font-size: 2rem;
+        flex-shrink: 0;
+    }
+
+    .gps-widget .gps-info {
+        flex: 1;
+        min-width: 180px;
+    }
+
+    .gps-widget .gps-title {
+        font-weight: 600;
+        color: #2e7d32;
+        font-size: 0.95rem;
+        margin-bottom: 3px;
+    }
+
+    .gps-widget .gps-status {
+        font-size: 0.82rem;
+        color: #555;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .gps-status-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        display: inline-block;
+        flex-shrink: 0;
+    }
+
+    .gps-status-dot.loading {
+        background: #fb8c00;
+        animation: pulse-dot 1s infinite;
+    }
+
+    .gps-status-dot.success {
+        background: #43a047;
+    }
+
+    .gps-status-dot.error {
+        background: #e53935;
+    }
+
+    .gps-status-dot.idle {
+        background: #90a4ae;
+    }
+
+    @keyframes pulse-dot {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.5; transform: scale(1.3); }
+    }
+
+    .btn-gps {
+        background: linear-gradient(135deg, #2e7d32, #43a047);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 9px 18px;
+        font-weight: 600;
+        font-size: 0.88rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+    }
+
+    .btn-gps:hover {
+        background: linear-gradient(135deg, #1b5e20, #2e7d32);
+        box-shadow: 0 4px 12px rgba(46, 125, 50, 0.35);
+        transform: translateY(-1px);
+    }
+
+    .btn-gps:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    .btn-gps .spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255,255,255,0.4);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        display: none;
+    }
+
+    .btn-gps.loading .spinner { display: inline-block; }
+    .btn-gps.loading .btn-gps-icon { display: none; }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .gps-coords-display {
+        background: #fff;
+        border: 1px solid #c8e6c9;
+        border-radius: 6px;
+        padding: 6px 12px;
+        font-family: monospace;
+        font-size: 0.82rem;
+        color: #1b5e20;
+        display: none;
+        margin-top: 6px;
+        letter-spacing: 0.5px;
+    }
+
+    .gps-coords-display.visible { display: block; }
+
+    .gps-accuracy {
+        font-size: 0.75rem;
+        color: #888;
+        margin-top: 2px;
+    }
+
     /* Responsive */
     @media (max-width: 768px) {
         .intervention-header {
@@ -557,18 +691,39 @@
                         <input type="text" class="form-control" value="{{ demande.libelle_quartier or 'Non précisé' }}" disabled>
                     </div>
                 </div>
+                <!-- GPS Auto-détection Widget -->
+                <div class="gps-widget" id="gpsWidget">
+                    <div class="gps-icon">📍</div>
+                    <div class="gps-info">
+                        <div class="gps-title">Localisation automatique du technicien</div>
+                        <div class="gps-status" id="gpsStatusText">
+                            <span class="gps-status-dot idle" id="gpsStatusDot"></span>
+                            <span id="gpsStatusMsg">En attente de détection...</span>
+                        </div>
+                        <div class="gps-coords-display" id="gpsCoordsDisplay"></div>
+                        <div class="gps-accuracy" id="gpsAccuracy"></div>
+                    </div>
+                    <button type="button" class="btn-gps" id="btnGetLocation" onclick="getGPSLocation()">
+                        <div class="spinner"></div>
+                        <span class="btn-gps-icon">🛰️</span>
+                        Obtenir ma position
+                    </button>
+                </div>
+
                 <div class="row">
                     <div class="col-md-6 form-field-group">
                         <label class="form-label">Latitude (GPS)*</label>
-                        <input type="number" class="form-control" name="gps_lat" step="0.0001" 
-                               placeholder="Exemple: 14.7167" required data-validation="gps">
-                        <small class="form-text">Format: -90 à 90</small>
+                        <input type="number" class="form-control" name="gps_lat" id="gps_lat"
+                               step="0.000001" placeholder="Détection automatique..." 
+                               required data-validation="gps">
+                        <small class="form-text">Format: -90 à 90 (auto-rempli par GPS)</small>
                     </div>
                     <div class="col-md-6 form-field-group">
                         <label class="form-label">Longitude (GPS)*</label>
-                        <input type="number" class="form-control" name="gps_long" step="0.0001" 
-                               placeholder="Exemple: -17.4674" required data-validation="gps">
-                        <small class="form-text">Format: -180 à 180</small>
+                        <input type="number" class="form-control" name="gps_long" id="gps_long"
+                               step="0.000001" placeholder="Détection automatique..."
+                               required data-validation="gps">
+                        <small class="form-text">Format: -180 à 180 (auto-rempli par GPS)</small>
                     </div>
                 </div>
             </div>
@@ -1115,6 +1270,124 @@ function updateFormSummary() {
     
     summary.innerHTML = html || '<p class="text-muted">Aucune donnée</p>';
 }
+
+// =============================================
+// GPS GEOLOCATION — Capture automatique
+// =============================================
+function setGPSStatus(state, message) {
+    const dot  = document.getElementById('gpsStatusDot');
+    const msg  = document.getElementById('gpsStatusMsg');
+    const btn  = document.getElementById('btnGetLocation');
+    const widget = document.getElementById('gpsWidget');
+
+    if (!dot || !msg) return;
+
+    dot.className = 'gps-status-dot ' + state;
+    msg.textContent = message;
+
+    if (state === 'loading') {
+        btn.disabled = true;
+        btn.classList.add('loading');
+        widget.style.borderColor = '#fb8c00';
+        widget.style.background  = 'linear-gradient(135deg, #fff8e1 0%, #fffde7 100%)';
+    } else if (state === 'success') {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        widget.style.borderColor = '#a5d6a7';
+        widget.style.background  = 'linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 100%)';
+    } else if (state === 'error') {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        widget.style.borderColor = '#ef9a9a';
+        widget.style.background  = 'linear-gradient(135deg, #ffebee 0%, #fce4ec 100%)';
+    } else {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        widget.style.borderColor = '#a5d6a7';
+        widget.style.background  = 'linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 100%)';
+    }
+}
+
+function getGPSLocation() {
+    if (!navigator.geolocation) {
+        setGPSStatus('error', '❌ La géolocalisation n\'est pas supportée par ce navigateur.');
+        return;
+    }
+
+    setGPSStatus('loading', '🛰️ Détection de la position en cours...');
+
+    const options = {
+        enableHighAccuracy: true,   // GPS précis (utile sur mobile)
+        timeout: 15000,             // Délai max 15s
+        maximumAge: 30000           // Cache de 30s acceptable
+    };
+
+    navigator.geolocation.getCurrentPosition(
+        function onSuccess(position) {
+            const lat  = position.coords.latitude;
+            const lng  = position.coords.longitude;
+            const acc  = position.coords.accuracy;  // en mètres
+
+            // Remplir les champs du formulaire
+            const latField = document.getElementById('gps_lat');
+            const lngField = document.getElementById('gps_long');
+
+            if (latField) {
+                latField.value = lat.toFixed(6);
+                latField.classList.add('is-valid');
+                latField.classList.remove('is-invalid');
+            }
+            if (lngField) {
+                lngField.value = lng.toFixed(6);
+                lngField.classList.add('is-valid');
+                lngField.classList.remove('is-invalid');
+            }
+
+            // Afficher les coordonnées dans le widget
+            const coordsDisplay = document.getElementById('gpsCoordsDisplay');
+            if (coordsDisplay) {
+                coordsDisplay.textContent = `📍 ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                coordsDisplay.classList.add('visible');
+            }
+
+            // Afficher la précision
+            const accuracyEl = document.getElementById('gpsAccuracy');
+            if (accuracyEl) {
+                const precisionLabel = acc <= 10 ? '🟢 Excellente' : acc <= 50 ? '🟡 Bonne' : '🟠 Approximative';
+                accuracyEl.textContent = `Précision : ${precisionLabel} (±${Math.round(acc)} m)`;
+            }
+
+            setGPSStatus('success', '✅ Position détectée avec succès !');
+        },
+        function onError(error) {
+            let message;
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    message = '🔒 Accès refusé — autorisez la localisation dans votre navigateur.';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    message = '📡 Position indisponible — vérifiez le GPS ou la connexion.';
+                    break;
+                case error.TIMEOUT:
+                    message = '⏱️ Délai dépassé — réessayez ou saisissez manuellement.';
+                    break;
+                default:
+                    message = '❌ Erreur inconnue lors de la détection GPS.';
+            }
+            setGPSStatus('error', message);
+            console.warn('[GPS] Erreur géolocalisation:', error.message);
+        },
+        options
+    );
+}
+
+// Déclencher automatiquement dès le chargement de la page
+document.addEventListener('DOMContentLoaded', function() {
+    // Petit délai pour laisser le navigateur bien charger
+    setTimeout(function() {
+        getGPSLocation();
+    }, 600);
+});
 </script>
 
 {% endblock %}

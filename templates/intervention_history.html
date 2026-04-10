@@ -173,51 +173,71 @@
                         <tbody>
                             {% for intervention in interventions.items %}
                             <tr data-statut="{{ intervention.statut }}"
-                                data-technologie="{{ intervention.demande.type_techno }}"
-                                data-service="{{ intervention.demande.service }}"
-                                data-zone="{{ intervention.technicien.zone }}"
-                                data-date="{{ intervention.date_debut.strftime('%Y-%m-%d') if intervention.date_debut else 'Non précisée' }}">
+                                data-technologie="{{ intervention.demande.type_techno if intervention.demande else '' }}"
+                                data-service="{{ intervention.demande.service if intervention.demande else '' }}"
+                                data-zone="{{ intervention.technicien.zone if intervention.technicien else '' }}"
+                                data-date="{{ intervention.date_debut.strftime('%Y-%m-%d') if intervention.date_debut else '' }}">
                                 <td>
                                     <small>{{ intervention.date_debut.strftime('%d/%m/%Y') if intervention.date_debut else 'Non précisée' }}</small>
                                     {% if intervention.date_fin %}
-                                    <br><small class="text-muted">→ {{ intervention.date_fin.strftime('%d/%m/%Y') if intervention.date_fin else 'Non précisée' }}</small>
+                                    <br><small class="text-muted">→ {{ intervention.date_fin.strftime('%d/%m/%Y') }}</small>
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <strong>{{ intervention.demande.nom_client }} {{ intervention.demande.prenom_client }}</strong>
+                                    {% if intervention.demande %}
+                                    <strong>{{ intervention.demande.nom_client }} {{ intervention.demande.prenom_client or '' }}</strong>
                                     <br>
-                                    <small class="text-muted">{{ intervention.demande.libelle_commonne }}</small>
+                                    <small class="text-muted">{{ intervention.demande.libelle_commune or '' }}</small>
+                                    {% else %}
+                                    <span class="text-muted">Demande supprimée</span>
+                                    {% endif %}
                                 </td>
                                 <td>
+                                    {% if intervention.demande %}
                                     <code>{{ intervention.demande.nd }}</code>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
                                 </td>
                                 <td>
+                                    {% if intervention.demande %}
                                     <span class="badge bg-{{ 'primary' if intervention.demande.type_techno == 'Fibre' else 'warning' if intervention.demande.type_techno == 'Cuivre' else 'info' }}">
-                                        {{ intervention.demande.type_techno }}
+                                        {{ intervention.demande.type_techno or '-' }}
                                     </span>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
                                 </td>
                                 <td>
+                                    {% if intervention.demande %}
                                     <span class="badge bg-{{ 'success' if intervention.demande.service == 'Production' else 'primary' }}">
-                                        {{ intervention.demande.service }}
+                                        {{ intervention.demande.service or '-' }}
                                     </span>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
                                 </td>
                                 <td>
-                                    {% if intervention.demande.prestataire %}
+                                    {% if intervention.demande and intervention.demande.prestataire %}
                                     <span class="badge bg-secondary">{{ intervention.demande.prestataire }}</span>
                                     {% else %}
                                     <span class="text-muted">-</span>
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {{ intervention.demande.age or '-' }}
+                                    {{ intervention.demande.age if intervention.demande else '-' }}
                                 </td>
                                 <td>
-                                    {{ intervention.demande.offre or '-' }}
+                                    {{ intervention.demande.offre if intervention.demande else '-' }}
                                 </td>
                                 <td>
+                                    {% if intervention.technicien %}
                                     <small>{{ intervention.technicien.prenom }} {{ intervention.technicien.nom }}</small>
                                     <br>
-                                    <small class="text-muted">{{ intervention.technicien.zone }}</small>
+                                    <small class="text-muted">{{ intervention.technicien.zone or '' }}</small>
+                                    {% else %}
+                                    <span class="text-muted">Non assigné</span>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     {% if intervention.accuse_reception %}
@@ -287,7 +307,7 @@
                                             <i data-feather="x" style="width: 14px; height: 14px;"></i>
                                         </button>
                                         {% endif %}
-                                        {% if current_user.role == 'technicien' and intervention.statut in ['en_cours', 'rejete'] %}
+                                        {% if current_user.role == 'technicien' and intervention.statut in ['en_cours', 'rejete'] and intervention.demande %}
                                         <a href="{{ url_for('legacy.intervention_form', demande_id=intervention.demande.id) }}"
                                             class="btn btn-outline-warning" title="Modifier">
                                             <i data-feather="edit" style="width: 14px; height: 14px;"></i>

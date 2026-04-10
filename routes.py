@@ -595,29 +595,34 @@ def affecter_demande():
 
         db.session.commit()
         
-        log_activity(
-            user_id=current_user.id,
-            action='assign',
-            module='demandes',
-            entity_id=demande.id,
-            entity_name=f"Demande {demande.nd}",
-            details={
-                'technicien': f"{technicien.prenom} {technicien.nom}",
-                'zone': demande.zone,
-                'service': demande.service,
-                'type_techno': demande.type_techno,
-                'reaffectation': demande.statut == 'a_reaffecter'
-            }
-        )
-        
-        # Envoyer notification SMS (simulé)
-        create_sms_notification(technicien_id, demande_id, 'affectation')
+        # Post-commit actions (logging and notifications) should not crash the main flow
+        try:
+            log_activity(
+                user_id=current_user.id,
+                action='assign',
+                module='demandes',
+                entity_id=demande.id,
+                entity_name=f"Demande {demande.nd}",
+                details={
+                    'technicien': f"{technicien.prenom} {technicien.nom}",
+                    'zone': demande.zone,
+                    'service': demande.service,
+                    'type_techno': demande.type_techno,
+                    'reaffectation': demande.statut == 'a_reaffecter'
+                }
+            )
+            
+            # Envoyer notification SMS (simulé)
+            create_sms_notification(technicien_id, demande_id, 'affectation')
 
-        # Envoyer email au technicien
-        subject = "Nouvelle intervention affectée"
-        recipients = [technicien.email] if technicien.email else []
-        body = f"Bonjour {technicien.prenom},\n\nVous avez une nouvelle intervention affectée :\nND : {demande.nd}\nClient : {demande.nom_client} {demande.prenom_client}\nZone : {demande.zone}\n\nMerci de consulter votre espace Sofatelcom."
-        send_email(subject, recipients, body=body)
+            # Envoyer email au technicien
+            subject = "Nouvelle intervention affectée"
+            recipients = [technicien.email] if technicien.email else []
+            body = f"Bonjour {technicien.prenom},\n\nVous avez une nouvelle intervention affectée :\nND : {demande.nd}\nClient : {demande.nom_client} {demande.prenom_client}\nZone : {demande.zone}\n\nMerci de consulter votre espace Sofatelcom."
+            send_email(subject, recipients, body=body)
+        except Exception as post_e:
+            current_app.logger.warning(f"Post-assignment background tasks failed for demand {demande_id}: {str(post_e)}")
+            # We don't flash an error here to not confuse the user JSON response
 
         return jsonify({
             'success': True,
@@ -1084,58 +1089,62 @@ def save_intervention(intervention_id):
 
             db.session.commit()
     
-            # Créer notification pour validation
-            create_sms_notification(intervention.technicien_id , intervention.demande_id, 'validation', notify_managers=True)
-    
-            # Envoi mail pour validation
-            destinataires = []
-            demande = intervention.demande
-    
-            if demande:
-                # Chef PUR
-                chef_pur = User.query.filter_by(role='chef_pur').first()
-                if chef_pur and chef_pur.email:
-                    destinataires.append(chef_pur.email)
-                # Chef Zone
-                if demande.zone:
-                    chef_zone = User.query.filter_by(
-                        role='chef_zone', zone=demande.zone).first()
-                    if chef_zone and chef_zone.email:
-                        destinataires.append(chef_zone.email)
-                # Chef Pilote
-                if demande.service:
-                    chef_pilote = User.query.filter_by(
-                        role='chef_pilote', service=demande.service).first()
-                    if chef_pilote and chef_pilote.email:
-                        destinataires.append(chef_pilote.email)
-                # Récupérer le nom du technicien
-                technicien_nom = f"{intervention.technicien.nom} {intervention.technicien.prenom}" if intervention.technicien else "N/A"
-                # Récupérer le nom de l'équipe liée
-                equipe_nom = ""
-                if intervention.equipe_id:
-                    equipe = db.session.get(Equipe, intervention.equipe_id)
-                    equipe_nom = equipe.nom_equipe if equipe else ""
-    
-                subject = "Intervention à valider"
-                body = f"""Bonjour,\n\nUne intervention vient d'être terminée et nécessite votre validation.\n
-                ND : {demande.nd}\nClient : {demande.nom_client} {demande.prenom_client}\nZone : {demande.zone}\nService : {demande.service}\n
-                Technicien : {technicien_nom}\nÉquipe : {equipe_nom}\n
-                Merci de vous connecter à Sofatelcom pour valider ou rejeter cette intervention."""
-                if destinataires:
-                    send_email(subject, destinataires, body=body)
-            log_activity(
-                user_id=current_user.id,
-                action='complete',
-                module='interventions',
-                entity_id=intervention.id,
-                entity_name=f"Intervention {intervention.demande.nd if intervention.demande else 'N/A'}",
-                details={
-                    'statut': 'termine',
-                    'technicien': f"{intervention.technicien.prenom} {intervention.technicien.nom}" if intervention.technicien else 'N/A',
-                    'demande_nd': intervention.demande.nd if intervention.demande else 'N/A',
-                    'service': intervention.demande.service if intervention.demande else 'N/A'
-                }
-            )
+            # Post-commit actions (logging and notifications) should not crash the main flow
+            try:
+                # Créer notification pour validation
+                create_sms_notification(intervention.technicien_id , intervention.demande_id, 'validation', notify_managers=True)
+        
+                # Envoi mail pour validation
+                destinataires = []
+                demande = intervention.demande
+        
+                if demande:
+                    # Chef PUR
+                    chef_pur = User.query.filter_by(role='chef_pur').first()
+                    if chef_pur and chef_pur.email:
+                        destinataires.append(chef_pur.email)
+                    # Chef Zone
+                    if demande.zone:
+                        chef_zone = User.query.filter_by(
+                            role='chef_zone', zone=demande.zone).first()
+                        if chef_zone and chef_zone.email:
+                            destinataires.append(chef_zone.email)
+                    # Chef Pilote
+                    if demande.service:
+                        chef_pilote = User.query.filter_by(
+                            role='chef_pilote', service=demande.service).first()
+                        if chef_pilote and chef_pilote.email:
+                            destinataires.append(chef_pilote.email)
+                    # Récupérer le nom du technicien
+                    technicien_nom = f"{intervention.technicien.nom} {intervention.technicien.prenom}" if intervention.technicien else "N/A"
+                    # Récupérer le nom de l'équipe liée
+                    equipe_nom = ""
+                    if intervention.equipe_id:
+                        equipe = db.session.get(Equipe, intervention.equipe_id)
+                        equipe_nom = equipe.nom_equipe if equipe else ""
+        
+                    subject = "Intervention à valider"
+                    body = f"""Bonjour,\n\nUne intervention vient d'être terminée et nécessite votre validation.\n
+                    ND : {demande.nd}\nClient : {demande.nom_client} {demande.prenom_client}\nZone : {demande.zone}\nService : {demande.service}\n
+                    Technicien : {technicien_nom}\nÉquipe : {equipe_nom}\n
+                    Merci de vous connecter à Sofatelcom pour valider ou rejeter cette intervention."""
+                    if destinataires:
+                        send_email(subject, destinataires, body=body)
+                log_activity(
+                    user_id=current_user.id,
+                    action='complete',
+                    module='interventions',
+                    entity_id=intervention.id,
+                    entity_name=f"Intervention {intervention.demande.nd if intervention.demande else 'N/A'}",
+                    details={
+                        'statut': 'termine',
+                        'technicien': f"{intervention.technicien.prenom} {intervention.technicien.nom}" if intervention.technicien else 'N/A',
+                        'demande_nd': intervention.demande.nd if intervention.demande else 'N/A',
+                        'service': intervention.demande.service if intervention.demande else 'N/A'
+                    }
+                )
+            except Exception as post_e:
+                current_app.logger.warning(f"Post-completion background tasks failed for intervention {intervention.id}: {str(post_e)}")
             return redirect(url_for('dashboard'))
 
         else:
@@ -1563,81 +1572,15 @@ def intervention_history():
     date_fin = request.args.get('date_fin')
     search_text = request.args.get('search_text')
 
-    # Filtrer selon le rôle - requêtes simplifiées pour éviter les erreurs de join
-    if current_user.role == 'chef_pur':
-        query = Intervention.query.order_by(Intervention.date_debut.desc())
-    elif current_user.role == 'chef_pilote':
-        # Déterminer le filtre de service selon le profil de l'utilisateur
-        if current_user.service == 'SAV,Production':
-            # Chef pilote principal - récupérer les IDs des deux services
-            demande_ids = [
-                d.id for d in DemandeIntervention.query.filter(
-                    DemandeIntervention.service.in_(['SAV', 'Production'])
-                ).all()
-            ]
-        else:
-            # Chef pilote normal - récupérer les IDs de son service seulement
-            demande_ids = [
-                d.id for d in DemandeIntervention.query.filter_by(
-                    service=current_user.service).all()
-            ]
-        query = Intervention.query.filter(
-            Intervention.demande_id.in_(demande_ids)).order_by(
-                Intervention.date_debut.desc())
-    elif current_user.role == 'chef_zone':
-        # Récupérer les IDs des techniciens de la zone
-        technicien_ids = [
-            u.id for u in User.query.filter_by(role='technicien',
-                                               zone=current_user.zone).all()
-        ]
-        query = Intervention.query.filter(
-            Intervention.technicien_id.in_(technicien_ids)).order_by(
-                Intervention.date_debut.desc())
-    elif current_user.role == 'technicien':
-        query = Intervention.query.filter_by(
-            technicien_id=current_user.id).order_by(
-                Intervention.date_debut.desc())
-    else:
-        query = Intervention.query.filter(
-            Intervention.id == -1)  # Aucun résultat
+    # Classe pagination vide pour le fallback erreur
+    class _EmptyPagination:
+        items = []
+        total = 0
+        pages = 0
+        page = 1
+        has_prev = False
+        has_next = False
 
-    # Appliquer les filtres supplémentaires (après le filtrage par rôle)
-    if statut:
-        query = query.filter(Intervention.statut == statut)
-    if technologie:
-        query = query.join(DemandeIntervention).filter(DemandeIntervention.type_techno == technologie)
-    if service_filter:
-        query = query.join(DemandeIntervention).filter(DemandeIntervention.service == service_filter)
-    if zone_filter:
-        query = query.join(User, Intervention.technicien_id == User.id).filter(User.zone == zone_filter)
-    if date_debut:
-        query = query.filter(Intervention.date_debut >= date_debut)
-    if date_fin:
-        query = query.filter(Intervention.date_debut <= date_fin)
-    if search_text:
-        # Rechercher dans ND, nom/prénom client, prénom/nom technicien
-        from sqlalchemy import or_
-        query = query.join(DemandeIntervention).join(User, Intervention.technicien_id == User.id).filter(
-            or_(
-                DemandeIntervention.nd.contains(search_text),
-                DemandeIntervention.nom_client.contains(search_text),
-                DemandeIntervention.prenom_client.contains(search_text),
-                User.prenom.contains(search_text),
-                User.nom.contains(search_text)
-            )
-        )
-
-    interventions = query.paginate(page=page, per_page=per_page, error_out=False)
-
-    # Ajoute photos_list à chaque intervention
-    for intervention in interventions.items:
-        try:
-            intervention.photos_list = json.loads(
-                intervention.photos) if intervention.photos else []
-        except Exception:
-            intervention.photos_list = []
-
-    # Passer les filtres actuels au template pour pré-remplir les champs
     current_filters = {
         'statut': statut,
         'technologie': technologie,
@@ -1649,9 +1592,124 @@ def intervention_history():
         'per_page': per_page
     }
 
-    return render_template('intervention_history.html',
-                           interventions=interventions,
-                           current_filters=current_filters)
+    try:
+        # Filtrer selon le rôle - requêtes simplifiées pour éviter les erreurs de join
+        if current_user.role == 'chef_pur':
+            query = Intervention.query.order_by(Intervention.date_debut.desc())
+        elif current_user.role == 'chef_pilote':
+            if current_user.service == 'SAV,Production':
+                demande_ids = [
+                    d.id for d in DemandeIntervention.query.filter(
+                        DemandeIntervention.service.in_(['SAV', 'Production'])
+                    ).all()
+                ]
+            else:
+                demande_ids = [
+                    d.id for d in DemandeIntervention.query.filter_by(
+                        service=current_user.service).all()
+                ]
+            query = Intervention.query.filter(
+                Intervention.demande_id.in_(demande_ids)).order_by(
+                    Intervention.date_debut.desc())
+        elif current_user.role == 'chef_zone':
+            technicien_ids = [
+                u.id for u in User.query.filter_by(role='technicien',
+                                                   zone=current_user.zone).all()
+            ]
+            query = Intervention.query.filter(
+                Intervention.technicien_id.in_(technicien_ids)).order_by(
+                    Intervention.date_debut.desc())
+        elif current_user.role == 'technicien':
+            query = Intervention.query.filter_by(
+                technicien_id=current_user.id).order_by(
+                    Intervention.date_debut.desc())
+        else:
+            query = Intervention.query.filter(Intervention.id == -1)  # Aucun résultat
+
+        # Appliquer les filtres supplémentaires
+        # On track les tables déjà jointes pour éviter les doublons de JOIN
+        demande_joined = False
+        user_joined = False
+
+        if statut:
+            query = query.filter(Intervention.statut == statut)
+
+        if technologie:
+            if not demande_joined:
+                query = query.join(DemandeIntervention, Intervention.demande_id == DemandeIntervention.id)
+                demande_joined = True
+            query = query.filter(DemandeIntervention.type_techno == technologie)
+
+        if service_filter:
+            if not demande_joined:
+                query = query.join(DemandeIntervention, Intervention.demande_id == DemandeIntervention.id)
+                demande_joined = True
+            query = query.filter(DemandeIntervention.service == service_filter)
+
+        if zone_filter:
+            if not user_joined:
+                query = query.join(User, Intervention.technicien_id == User.id)
+                user_joined = True
+            query = query.filter(User.zone == zone_filter)
+
+        if date_debut:
+            try:
+                query = query.filter(Intervention.date_debut >= datetime.strptime(date_debut, '%Y-%m-%d'))
+            except ValueError:
+                pass
+
+        if date_fin:
+            try:
+                query = query.filter(Intervention.date_debut <= datetime.strptime(date_fin, '%Y-%m-%d'))
+            except ValueError:
+                pass
+
+        if search_text:
+            from sqlalchemy import or_
+            if not demande_joined:
+                query = query.join(DemandeIntervention, Intervention.demande_id == DemandeIntervention.id)
+                demande_joined = True
+            if not user_joined:
+                query = query.join(User, Intervention.technicien_id == User.id)
+                user_joined = True
+            query = query.filter(
+                or_(
+                    DemandeIntervention.nd.contains(search_text),
+                    DemandeIntervention.nom_client.contains(search_text),
+                    DemandeIntervention.prenom_client.contains(search_text),
+                    User.prenom.contains(search_text),
+                    User.nom.contains(search_text)
+                )
+            )
+
+        interventions = query.paginate(page=page, per_page=per_page, error_out=False)
+
+        # Ajoute photos_list à chaque intervention de façon sécurisée
+        for intervention in interventions.items:
+            try:
+                intervention.photos_list = json.loads(
+                    intervention.photos) if intervention.photos else []
+            except Exception:
+                intervention.photos_list = []
+
+        return render_template('intervention_history.html',
+                               interventions=interventions,
+                               current_filters=current_filters)
+
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"[intervention_history] {type(e).__name__}: {e}")
+        app.logger.error(traceback.format_exc())
+        err_lower = str(e).lower()
+        if 'no such column' in err_lower or 'unknown column' in err_lower or 'operational' in err_lower:
+            flash('⚠️ Erreur de base de données : schéma incomplet ou migration manquante.', 'danger')
+        elif 'ambiguous' in err_lower:
+            flash('⚠️ Erreur de requête SQL (jointure ambiguë). Signalez ce problème.', 'danger')
+        else:
+            flash(f'⚠️ Erreur inattendue ({type(e).__name__}). Réessayez ou contactez l\'administrateur.', 'danger')
+        return render_template('intervention_history.html',
+                               interventions=_EmptyPagination(),
+                               current_filters=current_filters)
 
 
 
@@ -2172,8 +2230,11 @@ def save_survey(intervention_id):
                 equipe = db.session.get(Equipe, intervention.equipe_id)
                 equipe_nom = equipe.nom_equipe if equipe else ""
 
-            subject = "Survey à valider"
-            body = f"""Bonjour,
+            # Envoi mail notification validation
+            try:
+                if destinataires:
+                    subject = "Survey à valider"
+                    body = f"""Bonjour,
 
 Un survey vient d'être enregistré et nécessite votre validation.
 
@@ -2186,8 +2247,9 @@ Technicien : {technicien_nom}
 
 Merci de vous connecter à Sofatelcom pour valider ou rejeter ce survey.
 """
-            if destinataires:
-                send_email(subject, destinataires, body=body)
+                    send_email(subject, destinataires, body=body)
+            except Exception as post_e:
+                current_app.logger.warning(f"Failed to send survey validation email: {str(post_e)}")
 
         # Réponse AJAX
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -3027,13 +3089,17 @@ def reject_intervention():
         if intervention.equipe_id:
             equipe = db.session.get(Equipe, intervention.equipe_id)
             equipe_nom = equipe.nom_equipe if equipe else ""
-        subject = "Intervention rejetée"
-        body = f"""Bonjour,\n\nL'intervention #{intervention.id} a été rejetée par le technicien.\n
-        ND : {demande.nd}\nClient : {demande.nom_client} {demande.prenom_client}\nZone : {demande.zone}\nService : {demande.service}\n
-        Technicien : {technicien_nom}\nÉquipe : {equipe_nom}\nMotif du rejet : {motif}\n
-        Merci de vous connecter à Sofatelcom pour réaffecter la demande."""
-        if destinataires:
-            send_email(subject, destinataires, body=body)
+        # Envoi mail notification rejet
+        try:
+            if destinataires:
+                subject = "Intervention rejetée"
+                body = f"""Bonjour,\n\nL'intervention #{intervention.id} a été rejetée par le technicien.\n
+                ND : {demande.nd}\nClient : {demande.nom_client} {demande.prenom_client}\nZone : {demande.zone}\nService : {demande.service}\n
+                Technicien : {technicien_nom}\nÉquipe : {equipe_nom}\nMotif du rejet : {motif}\n
+                Merci de vous connecter à Sofatelcom pour réaffecter la demande."""
+                send_email(subject, destinataires, body=body)
+        except Exception as post_e:
+            current_app.logger.warning(f"Failed to send rejection email: {str(post_e)}")
     return jsonify({'success': True})
 
 
@@ -3271,22 +3337,27 @@ def create_user():
 
             db.session.add(new_user)
             db.session.commit()
-            # Log de création d'utilisateur
-            log_activity(
-                user_id=current_user.id,
-                action='create',
-                module='users',
-                entity_id=new_user.id,
-                entity_name=f"{new_user.prenom} {new_user.nom}",
-                details={
-                    'username': new_user.username,
-                    'role': new_user.role,
-                    'zone_id': new_user.zone_id
-                }
-            )
-            if new_user.email:
-                subject = "Bienvenue sur Sofatelcom"
-                body = f"""Bonjour {new_user.nom},
+            
+            # Post-commit actions (logging and email) should not crash the main flow
+            # since the user is already successfully created in the database.
+            try:
+                # Log de création d'utilisateur
+                log_activity(
+                    user_id=current_user.id,
+                    action='create',
+                    module='users',
+                    entity_id=new_user.id,
+                    entity_name=f"{new_user.prenom} {new_user.nom}",
+                    details={
+                        'username': new_user.username,
+                        'role': new_user.role,
+                        'zone_id': new_user.zone_id
+                    }
+                )
+                
+                if new_user.email:
+                    subject = "Bienvenue sur Sofatelcom"
+                    body = f"""Bonjour {new_user.nom},
 
             Votre compte Sofatelcom a été créé.
 
@@ -3298,9 +3369,13 @@ def create_user():
             Merci,
             L'équipe Sofatelcom
             """
-                send_email(subject, [new_user.email], body=body)
-            flash(f'Utilisateur {new_user.username} créé avec succès!',
-                  'success')
+                    send_email(subject, [new_user.email], body=body)
+            except Exception as post_e:
+                current_app.logger.error(f"Post-creation background task failed for user {new_user.username}: {str(post_e)}")
+                # We don't flash an error here to not confuse the user, 
+                # but we could add a subtle info flash if email failing is important.
+            
+            flash(f"Utilisateur {new_user.username} créé avec succès !", 'success')
             return redirect(url_for('manage_users'))
 
         except Exception as e:
@@ -3714,11 +3789,15 @@ def reset_password_request():
             token = generate_reset_token(user)
             reset_url = url_for('reset_password', token=token, _external=True)
             # Envoie l'email
-            send_email(
-                "Réinitialisation de mot de passe", [user.email],
-                body=
-                f"Pour réinitialiser votre mot de passe, cliquez ici : {reset_url}"
-            )
+            try:
+                send_email(
+                    "Réinitialisation de mot de passe", [user.email],
+                    body=f"Pour réinitialiser votre mot de passe, cliquez ici : {reset_url}"
+                )
+            except Exception as e:
+                current_app.logger.error(f"Failed to send reset password email to {user.email}: {str(e)}")
+                # On ne lève pas d'exception pour garder la sécurité par obscurité : 
+                # l'utilisateur voit le même message qu'il ait reçu l'email ou non.
         flash('Si cet email existe, un lien de réinitialisation a été envoyé.',
               'info')
         return redirect(url_for('login'))

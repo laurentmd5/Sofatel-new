@@ -353,29 +353,33 @@ def affecter_demande():
 
         db.session.commit()
         
-        log_activity(
-            user_id=current_user.id,
-            action='assign',
-            module='demandes',
-            entity_id=demande.id,
-            entity_name=f"Demande {demande.nd}",
-            details={
-                'technicien': f"{technicien.prenom} {technicien.nom}",
-                'zone': demande.zone,
-                'service': demande.service,
-                'type_techno': demande.type_techno,
-                'reaffectation': demande.statut == 'a_reaffecter'
-            }
-        )
-        
-        # Envoyer notification SMS (simulé)
-        create_sms_notification(technicien_id, demande_id, 'affectation')
+        # Post-commit actions (logging and notifications) should not crash the main flow
+        try:
+            log_activity(
+                user_id=current_user.id,
+                action='assign',
+                module='demandes',
+                entity_id=demande.id,
+                entity_name=f"Demande {demande.nd}",
+                details={
+                    'technicien': f"{technicien.prenom} {technicien.nom}",
+                    'zone': demande.zone,
+                    'service': demande.service,
+                    'type_techno': demande.type_techno,
+                    'reaffectation': demande.statut == 'a_reaffecter'
+                }
+            )
+            
+            # Envoyer notification SMS (simulé)
+            create_sms_notification(technicien_id, demande_id, 'affectation')
 
-        # Envoyer email au technicien
-        subject = "Nouvelle intervention affectée"
-        recipients = [technicien.email] if technicien.email else []
-        body = f"Bonjour {technicien.prenom},\n\nVous avez une nouvelle intervention affectée :\nND : {demande.nd}\nClient : {demande.nom_client} {demande.prenom_client}\nZone : {demande.zone}\n\nMerci de consulter votre espace Sofatelcom."
-        send_email(subject, recipients, body=body)
+            # Envoyer email au technicien
+            subject = "Nouvelle intervention affectée"
+            recipients = [technicien.email] if technicien.email else []
+            body = f"Bonjour {technicien.prenom},\n\nVous avez une nouvelle intervention affectée :\nND : {demande.nd}\nClient : {demande.nom_client} {demande.prenom_client}\nZone : {demande.zone}\n\nMerci de consulter votre espace Sofatelcom."
+            send_email(subject, recipients, body=body)
+        except Exception as post_e:
+            current_app.logger.warning(f"Post-assignment background tasks failed for demand {demande_id}: {str(post_e)}")
 
         return jsonify({
             'success': True,
