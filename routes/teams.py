@@ -24,32 +24,42 @@ def create_team():
     
     try:
         # Vérifier si l'utilisateur a le droit de créer une équipe
-        if current_user.role not in ['chef_pur', 'chef_pilote', 'chef_zone']:
+        if current_user.role not in ['admin', 'chef_pur', 'chef_pilote', 'chef_zone']:
             print(f"DEBUG: Utilisateur {current_user.username} avec rôle {current_user.role} n'a pas le droit de créer une équipe")
-            flash(' Accès refusé: Seuls les chefs PUR, pilotes et chefs de zone peuvent créer des équipes.', 'error')
+            flash(' Accès refusé: Seuls les administrateurs, chefs PUR, pilotes et chefs de zone peuvent créer des équipes.', 'error')
             return redirect(url_for('dashboard'))
         
         from forms import TeamForm
         form = TeamForm()
         print(f"DEBUG: Formulaire créé: {form}")
         
-        # Pré-remplir le formulaire avec la zone de l'utilisateur
-        if current_user.zone_relation:
-            zone_id = current_user.zone_relation.id
-            zone_text = f"{current_user.zone_relation.nom} ({current_user.zone_relation.code})"
-            print(f"DEBUG: Pré-remplissage zone - ID: {zone_id}, Texte: {zone_text}")
-            form.zone.data = zone_id
-        elif current_user.zone:
-            zone_text = current_user.zone
-            print(f"DEBUG: Pré-remplissage zone avec ancienne méthode - Texte: {zone_text}")
-            # Pour l'ancienne méthode, on ne peut pas pré-remplir avec zone_id
-            # On laisse le formulaire vide pour que l'utilisateur sélectionne
-        else:
-            print("DEBUG: Aucune zone définie pour l'utilisateur")
+        # Pré-remplir le formulaire avec la zone de l'utilisateur (Récupération auto)
+        user_zone_id = None
+        if hasattr(current_user, 'zone_id') and current_user.zone_id:
+            user_zone_id = current_user.zone_id
+        elif hasattr(current_user, 'zone_relation') and current_user.zone_relation:
+            user_zone_id = current_user.zone_relation.id
+        elif hasattr(current_user, 'zone') and current_user.zone:
+            from models import Zone
+            # Recherche de l'objet Zone par nom exact ou contenu
+            zone_obj = Zone.query.filter(
+                (Zone.nom.ilike(current_user.zone.strip())) | 
+                (Zone.nom.contains(current_user.zone.strip())) |
+                (Zone.code.ilike(current_user.zone.strip()))
+            ).first()
+            if zone_obj:
+                user_zone_id = zone_obj.id
+        
+        if user_zone_id:
+            print(f"DEBUG: Zone trouvée pour {current_user.username}: {user_zone_id}")
+            form.zone.data = user_zone_id
+            
+        # SÉCURITÉ & VALIDATION : Forcer la donnée si chef de zone (même en POST)
+        if current_user.role == 'chef_zone' and user_zone_id:
+            form.zone.data = user_zone_id
         
         if form.validate_on_submit():
             print(f"DEBUG: Formulaire soumis et validé")
-            print(f"DEBUG: Données du formulaire: {form.data}")
             
             try:
                 # Récupérer les données du formulaire
@@ -58,7 +68,12 @@ def create_team():
                 technologies = form.technologies.data
                 service = form.service.data
                 prestataire = form.prestataire.data
-                zone_id = form.zone.data  # Maintenant un entier
+                zone_id = form.zone.data
+                
+                # SÉCURITÉ BACKEND : Forcer la zone si chef de zone
+                if current_user.role == 'chef_zone' and current_user.zone_id:
+                    zone_id = current_user.zone_id
+                    print(f"DEBUG: Zone forcée pour chef de zone: {zone_id}")
                 
                 # Gérer la zone selon le cas
                 zone_text = None

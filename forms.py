@@ -275,7 +275,7 @@ class TeamForm(FlaskForm):
     ], validators=[Optional()], render_kw={"id": "technologies"})
     
     # Définir le champ zone avec coerce=int pour accepter des IDs
-    zone = SelectField('Zone', coerce=int, validators=[Optional()], render_kw={"id": "zone"})
+    zone = SelectField('Zone', coerce=int, validators=[DataRequired(message="La zone est obligatoire")], render_kw={"id": "zone"})
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
