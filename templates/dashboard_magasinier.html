@@ -329,7 +329,7 @@
                 <div class="stat-label">Demandes de Pièces en Attente</div>
                 {% if nb_reservations_attente > 0 %}
                 <div class="mt-auto text-center">
-                    <a href="{{ url_for('stock.liste_produits_zone') }}" class="btn btn-sm btn-outline-danger w-100">
+                    <a href="{{ url_for('reservations.magasinier_liste_reservations') }}" class="btn btn-sm btn-outline-danger w-100">
                         Valider les sorties →
                     </a>
                 </div>
@@ -400,6 +400,9 @@
             </a>
             <a href="{{ url_for('stock.page_sorties_mois') }}" class="btn btn-warning">
                 <i data-feather="arrow-up"></i> Sorties du Mois
+            </a>
+            <a href="{{ url_for('reservations.magasinier_liste_reservations') }}" class="btn btn-dark">
+                <i data-feather="package"></i> Gérer les Réservations
             </a>
             {% if current_user.is_admin or current_user.role == 'chef_pur' %}
             <a href="{{ url_for('stock.inventaire_physique') }}" class="btn btn-secondary">

@@ -142,6 +142,43 @@
 </div>
 {% endif %}
 
+<!-- ✅ NOUVEAU: Matériel & Pièces -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-primary">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i data-feather="package" class="me-2"></i>
+                    Matériel & Pièces
+                </h5>
+                <div>
+                    <a href="{{ url_for('reservations.suivi_reservations_technicien') }}" class="btn btn-sm btn-outline-light me-2">
+                        <i data-feather="list" class="me-1" style="width: 14px; height: 14px;"></i> Mes Réservations
+                    </a>
+                    <a href="{{ url_for('reservations.nouvelle_reservation_technicien') }}" class="btn btn-sm btn-light">
+                        <i data-feather="plus" class="me-1" style="width: 14px; height: 14px;"></i> Réserver des pièces
+                    </a>
+                </div>
+            </div>
+            <div class="card-body py-3">
+                <div class="row align-items-center">
+                    <div class="col-md-9">
+                        <p class="mb-0 text-muted">
+                            Besoin de pièces pour votre stock de secours ou une maintenance ? 
+                            Effectuez une réservation sans intervention ici.
+                        </p>
+                    </div>
+                    <div class="col-md-3 text-end">
+                         <a href="{{ url_for('reservations.nouvelle_reservation_technicien') }}" class="btn btn-primary">
+                            Commencer →
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Interventions en cours -->
 {% if interventions_cours %}
 <div class="row mb-4">
@@ -231,6 +268,22 @@
                     </div>
                 </div>
 
+                <!-- ✅ NOUVEAU: Réservations de pièces -->
+                <div class="row">
+                    <div class="col-6 mb-2">
+                        <a href="{{ url_for('reservations.nouvelle_reservation_technicien') }}" class="btn btn-outline-primary w-100">
+                            <i data-feather="shopping-cart" class="me-2"></i>
+                            Réserver
+                        </a>
+                    </div>
+                    <div class="col-6 mb-2">
+                        <a href="{{ url_for('reservations.suivi_reservations_technicien') }}" class="btn btn-outline-secondary w-100">
+                            <i data-feather="list" class="me-2"></i>
+                            Suivi Stock
+                        </a>
+                    </div>
+                </div>
+
                 <!-- ✅ NOUVEAU: Demande de congé -->
                 <div class="row">
                     <div class="col-12 mb-2">
@@ -314,7 +367,8 @@
 {% endif %}
 
 <!-- ✅ NOUVEAU: Modal de demande de congé -->
-<div class="modal fade" id="leaveRequestModal" tabindex="-1" aria-labelledby="leaveRequestModalLabel" aria-hidden="true">
+<div class="modal fade" id="leaveRequestModal" tabindex="-1" aria-labelledby="leaveRequestModalLabel"
+    aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
@@ -327,7 +381,8 @@
             <div class="modal-body">
                 <form id="leave-request-form" onsubmit="submitLeaveRequest(event)">
                     <div class="mb-3">
-                        <label for="leave-type" class="form-label">Type de congé <span class="text-danger">*</span></label>
+                        <label for="leave-type" class="form-label">Type de congé <span
+                                class="text-danger">*</span></label>
                         <select id="leave-type" class="form-select" required>
                             <option value="">-- Sélectionner --</option>
                             <option value="conge_paye">Congés payés</option>
@@ -336,10 +391,11 @@
                             <option value="conge_sans_solde">Congé sans solde</option>
                         </select>
                     </div>
-                    
+
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label for="date-start" class="form-label">Date début <span class="text-danger">*</span></label>
+                            <label for="date-start" class="form-label">Date début <span
+                                    class="text-danger">*</span></label>
                             <input type="date" id="date-start" class="form-control" required>
                         </div>
                         <div class="col-md-6 mb-3">
@@ -347,14 +403,15 @@
                             <input type="date" id="date-end" class="form-control" required>
                         </div>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label for="leave-reason" class="form-label">Motif (optionnel)</label>
-                        <textarea id="leave-reason" class="form-control" rows="3" placeholder="Motif de l'absence..."></textarea>
+                        <textarea id="leave-reason" class="form-control" rows="3"
+                            placeholder="Motif de l'absence..."></textarea>
                     </div>
-                    
+
                     <div id="leave-message" class="alert d-none" role="alert"></div>
-                    
+
                     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
                         <button type="submit" class="btn btn-primary">
@@ -456,23 +513,23 @@
 
     function submitLeaveRequest(event) {
         event.preventDefault();
-        
+
         const leaveType = document.getElementById('leave-type').value;
         const dateStart = document.getElementById('date-start').value;
         const dateEnd = document.getElementById('date-end').value;
         const reason = document.getElementById('leave-reason').value;
-        
+
         // Validation côté client
         if (!leaveType || !dateStart || !dateEnd) {
             showLeaveMessage('alert-danger', 'Tous les champs obligatoires doivent être remplis');
             return;
         }
-        
+
         if (dateStart > dateEnd) {
             showLeaveMessage('alert-danger', 'La date de fin doit être après ou égale à la date de début');
             return;
         }
-        
+
         // Appel API
         fetch('/api/rh/conges', {
             method: 'POST',
@@ -487,23 +544,23 @@
                 reason: reason
             })
         })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showLeaveMessage('alert-success', 
-                    `✅ Demande soumise avec succès!\n${data.business_days} jour(s) ouvrable(s)`);
-                // Fermer le modal après 2 secondes
-                setTimeout(() => {
-                    bootstrap.Modal.getInstance(document.getElementById('leaveRequestModal')).hide();
-                }, 2000);
-            } else {
-                showLeaveMessage('alert-danger', data.error || 'Une erreur est survenue');
-            }
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
-            showLeaveMessage('alert-danger', 'Une erreur réseau est survenue');
-        });
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showLeaveMessage('alert-success',
+                        `✅ Demande soumise avec succès!\n${data.business_days} jour(s) ouvrable(s)`);
+                    // Fermer le modal après 2 secondes
+                    setTimeout(() => {
+                        bootstrap.Modal.getInstance(document.getElementById('leaveRequestModal')).hide();
+                    }, 2000);
+                } else {
+                    showLeaveMessage('alert-danger', data.error || 'Une erreur est survenue');
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                showLeaveMessage('alert-danger', 'Une erreur réseau est survenue');
+            });
     }
 
     function showLeaveMessage(type, message) {

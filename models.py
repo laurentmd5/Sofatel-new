@@ -1470,6 +1470,7 @@ class ReservationPiece(db.Model):
     STATUT_VALIDEE = 'validee'
     STATUT_ANNULEE = 'annulee'
     STATUT_UTILISEE = 'utilisee'
+    STATUT_REJETEE = 'rejetee'
         
     # Statuts pour le technicien
     STATUT_TECH_EN_ATTENTE = 'en_attente'
@@ -1479,8 +1480,8 @@ class ReservationPiece(db.Model):
         
     id = db.Column(db.Integer, primary_key=True)
         
-    # Référence à l'intervention
-    intervention_id = db.Column(db.Integer, db.ForeignKey('intervention.id'), nullable=False)
+    # Référence à l'intervention (Optionnelle pour les réservations hors intervention)
+    intervention_id = db.Column(db.Integer, db.ForeignKey('intervention.id'), nullable=True)
     intervention = db.relationship('Intervention', backref=db.backref('reservations_pieces', lazy=True))
         
     # Référence au produit
@@ -1489,13 +1490,18 @@ class ReservationPiece(db.Model):
         
     # Détails de la réservation
     quantite = db.Column(db.Float, nullable=False, default=1.0)
+    quantite_utilisee = db.Column(db.Integer, default=0)
     statut = db.Column(db.String(20), nullable=False, default=STATUT_EN_ATTENTE)
     statut_technicien = db.Column(db.String(20), nullable=False, default=STATUT_TECH_EN_ATTENTE)
     commentaire = db.Column(db.Text)
+    photo_justification = db.Column(db.String(255)) # Chemin vers la photo justificative
         
     # Utilisateur ayant effectué la réservation
     utilisateur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    utilisateur = db.relationship('User', backref=db.backref('reservations_pieces', lazy=True))
+    utilisateur = db.relationship('User', backref=db.backref('reservations_pieces', lazy=True), foreign_keys=[utilisateur_id])
+    
+    valide_par_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    valide_par = db.relationship('User', foreign_keys=[valide_par_id])
         
     # Dates
     date_creation = db.Column(db.DateTime, default=utcnow, nullable=False)
@@ -1505,6 +1511,7 @@ class ReservationPiece(db.Model):
         
     def __repr__(self):
         return f'<ReservationPiece {self.id} - {self.produit.nom} x{self.quantite} ({self.statut})>'
+
         
     @property
     def statut_libelle(self):
@@ -1560,7 +1567,7 @@ class ReservationPiece(db.Model):
         self.statut = self.STATUT_VALIDEE
         self.statut_technicien = self.STATUT_TECH_VALIDE
         self.date_validation = datetime.now(timezone.utc)
-        self.utilisateur_id = utilisateur_id
+        self.valide_par_id = utilisateur_id
         
         # Mettre à jour le commentaire pour inclure la date de validation
         self.commentaire = f"{self.commentaire or ''}\n\nValidé le {datetime.now(timezone.utc).strftime('%d/%m/%Y %H:%M')} par l'utilisateur ID: {utilisateur_id}"
@@ -1654,6 +1661,20 @@ class ReservationPiece(db.Model):
         except Exception as e:
             db.session.rollback()
             return False, f"Erreur lors du marquage de la réservation comme utilisée: {str(e)}"
+
+class ReservationJustificatif(db.Model):
+    __tablename__ = 'reservation_justificatif'
+    id = db.Column(db.Integer, primary_key=True)
+    reservation_id = db.Column(db.Integer, db.ForeignKey('reservation_piece.id'), nullable=False)
+    quantite_declaree = db.Column(db.Integer, nullable=False) # Quantité totale au moment de cet upload
+    photo_path = db.Column(db.String(255), nullable=False)
+    date_creation = db.Column(db.DateTime, default=utcnow, nullable=False)
+    
+    reservation = db.relationship('ReservationPiece', backref=db.backref('justificatifs', lazy=True, cascade="all, delete-orphan"))
+    
+    def __repr__(self):
+        return f'<ReservationJustificatif {self.id} - Reservation {self.reservation_id} (Qté {self.quantite_declaree})>'
+
 
 
 # ============================================================================

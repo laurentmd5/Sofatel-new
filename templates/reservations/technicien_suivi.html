@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Suivi de mes réservations - Sofatelcom{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0">
+            <i data-feather="list" class="me-2"></i>
+            Suivi de mes réservations
+        </h1>
+        <a href="{{ url_for('reservations.nouvelle_reservation_technicien') }}" class="btn btn-primary">
+            <i data-feather="plus" class="me-2"></i> Nouvelle réservation
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Pièce</th>
+                                <th>Qté Demandée</th>
+                                <th>Qté Utilisée</th>
+                                <th>Statut</th>
+                                <th>Commentaire</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for res in reservations %}
+                            <tr>
+                                <td>{{ res.date_creation.strftime('%d/%m/%Y %H:%M') }}</td>
+                                <td>
+                                    <strong>{{ res.produit.nom }}</strong><br>
+                                    <small class="text-muted">{{ res.produit.reference }}</small>
+                                </td>
+                                <td>{{ res.quantite|int }}</td>
+                                <td>
+                                    <form action="{{ url_for('reservations.maj_quantite_utilisee', reservation_id=res.id) }}" method="POST" enctype="multipart/form-data" class="d-flex flex-column gap-1">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <div class="d-flex align-items-center">
+                                            <input type="number" name="quantite_utilisee" value="{{ res.quantite_utilisee }}" class="form-control form-control-sm me-2" style="width: 70px;" min="{{ res.quantite_utilisee }}" step="1" max="{{ res.quantite|int }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-primary" title="Mettre à jour">
+                                                <i data-feather="save" style="width: 14px; height: 14px;"></i>
+                                            </button>
+                                        </div>
+                                        <div class="mt-1">
+                                            <input type="file" name="photo_justification" class="form-control form-control-sm" style="font-size: 0.7rem;" accept="image/*" capture="environment" required>
+                                            {% if res.justificatifs %}
+                                            <div class="mt-2 border-top pt-1 bg-light p-1 rounded">
+                                                <small class="text-muted d-block mb-1" style="font-size: 0.6rem;">Historique justificatifs :</small>
+                                                {% for j in res.justificatifs %}
+                                                <div class="mb-1">
+                                                    <a href="{{ url_for('reservations.uploaded_reservation_file', filename=j.photo_path.split('/')[-1]) }}" target="_blank" class="text-info text-decoration-none d-block" style="font-size: 0.65rem;">
+                                                        <i data-feather="image" style="width: 10px; height: 10px;"></i> Qté {{ j.quantite_declaree }} ({{ j.date_creation.strftime('%d/%m %H:%M') }})
+                                                    </a>
+                                                </div>
+                                                {% endfor %}
+                                            </div>
+                                            {% elif res.photo_justification %}
+                                            <div class="mt-1">
+                                                <a href="{{ url_for('reservations.uploaded_reservation_file', filename=res.photo_justification.split('/')[-1]) }}" target="_blank" class="text-success" style="font-size: 0.7rem;">
+                                                    <i data-feather="image" style="width: 12px; height: 12px;"></i> Justificatif envoyé
+                                                </a>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </form>
+                                </td>
+                                <td>
+                                    {% if res.statut == 'en_attente' %}
+                                    <span class="badge bg-warning">En attente</span>
+                                    {% elif res.statut == 'validee' %}
+                                    <span class="badge bg-success">Validée</span>
+                                    {% elif res.statut == 'rejetee' %}
+                                    <span class="badge bg-danger">Rejetée</span>
+                                    {% elif res.statut == 'annulee' %}
+                                    <span class="badge bg-secondary">Annulée</span>
+                                    {% elif res.statut == 'utilisee' %}
+                                    <span class="badge bg-info">Utilisée</span>
+                                    {% else %}
+                                    <span class="badge bg-dark">{{ res.statut }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small class="text-muted">{{ res.commentaire or '-' }}</small>
+                                </td>
+                                <td>
+                                    {% if res.statut == 'validee' and not res.intervention_id %}
+                                    <form action="{{ url_for('reservations.utiliser_reservation', reservation_id=res.id) }}" method="POST" onsubmit="return confirm('Confirmer l\'utilisation et la sortie de stock ?')">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-success">
+                                            <i data-feather="check-square" class="me-1" style="width: 14px; height: 14px;"></i> Consommer
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center py-4">
+                                    <div class="text-muted">
+                                        <i data-feather="info" class="mb-2" style="width: 48px; height: 48px;"></i>
+                                        <p>Aucune réservation trouvée.</p>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

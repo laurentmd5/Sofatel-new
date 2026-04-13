@@ -260,11 +260,9 @@ def dashboard():
             entrees = len([m for m in mouvements_zone if m.type_mouvement == 'entree'])
             sorties = len([m for m in mouvements_zone if m.type_mouvement == 'sortie'])
             
-            # ✅ NOUVEAU: Réservations techniciens en attente
+            # ✅ NOUVEAU: Réservations techniciens en attente (inclut hors intervention)
             reservations_en_attente = db.session.query(ReservationPiece).join(
-                Intervention, ReservationPiece.intervention_id == Intervention.id
-            ).join(
-                User, Intervention.technicien_id == User.id
+                User, ReservationPiece.utilisateur_id == User.id
             ).filter(
                 User.zone_id == current_user.zone_id,
                 ReservationPiece.statut == ReservationPiece.STATUT_EN_ATTENTE

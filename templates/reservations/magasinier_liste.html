@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Demandes de réservation - Sofatelcom{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="h3 mb-4">
+            <i data-feather="package" class="me-2"></i>
+            Demandes de réservation (Zone: {{ current_user.zone_relation.nom if current_user.zone_relation else current_user.zone }})
+        </h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Liste des demandes</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Technicien</th>
+                                <th>Produit</th>
+                                <th>Qté Demandée</th>
+                                <th>Qté Utilisée</th>
+                                <th>Statut</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for res in reservations %}
+                            <tr>
+                                <td>{{ res.date_creation.strftime('%d/%m/%Y %H:%M') }}</td>
+                                <td>
+                                    <strong>{{ res.utilisateur.prenom }} {{ res.utilisateur.nom }}</strong><br>
+                                    <small class="text-muted">{{ res.intervention.demande.nd if res.intervention else 'Hors Intervention' }}</small>
+                                </td>
+                                <td>
+                                    {{ res.produit.nom }}<br>
+                                    <small class="text-muted">Réf: {{ res.produit.reference }}</small>
+                                </td>
+                                <td><strong>{{ res.quantite|int }}</strong></td>
+                                <td>
+                                    <strong>{{ res.quantite_utilisee }}</strong>
+                                    {% if res.justificatifs %}
+                                    <div class="mt-2">
+                                        {% for j in res.justificatifs %}
+                                        <div class="mb-1">
+                                            <a href="{{ url_for('reservations.uploaded_reservation_file', filename=j.photo_path.split('/')[-1]) }}" target="_blank" class="badge bg-light text-info border text-decoration-none fw-normal" style="font-size: 0.65rem; display: block; text-align: left;">
+                                                <i data-feather="image" style="width: 10px; height: 10px;"></i> Qté {{ j.quantite_declaree }} ({{ j.date_creation.strftime('%d/%m %H:%M') }})
+                                            </a>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% elif res.photo_justification %}
+                                    <div class="mt-1">
+                                        <a href="{{ url_for('reservations.uploaded_reservation_file', filename=res.photo_justification.split('/')[-1]) }}" target="_blank" class="badge bg-light text-primary border text-decoration-none" title="Voir le justificatif">
+                                            <i data-feather="image" style="width: 12px; height: 12px;"></i> Justificatif
+                                        </a>
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if res.statut == 'en_attente' %}
+                                    <span class="badge bg-warning text-dark">En attente</span>
+                                    {% elif res.statut == 'validee' %}
+                                    <span class="badge bg-success">Validée</span>
+                                    {% elif res.statut == 'rejetee' %}
+                                    <span class="badge bg-danger">Rejetée</span>
+                                    {% elif res.statut == 'annulee' %}
+                                    <span class="badge bg-secondary">Annulée</span>
+                                    {% elif res.statut == 'utilisee' %}
+                                    <span class="badge bg-info">Utilisée</span>
+                                    {% else %}
+                                    <span class="badge bg-dark">{{ res.statut }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if res.statut == 'en_attente' %}
+                                    <div class="btn-group btn-group-sm">
+                                        <form action="{{ url_for('reservations.valider_reservation', reservation_id=res.id) }}" method="POST" class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-success" title="Valider">
+                                                <i data-feather="check"></i> Valider
+                                            </button>
+                                        </form>
+                                        <a href="{{ url_for('reservations.rejeter_reservation', reservation_id=res.id) }}" class="btn btn-danger" title="Rejeter">
+                                            <i data-feather="x"></i> Rejeter
+                                        </a>
+                                    </div>
+                                    {% else %}
+                                    <span class="text-muted small">Traitée le {{ res.date_maj.strftime('%d/%m/%Y') if res.date_maj else 'N/A' }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center py-4">Aucune demande de réservation trouvée.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

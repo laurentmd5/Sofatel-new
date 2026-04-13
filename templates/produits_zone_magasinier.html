@@ -63,14 +63,17 @@
                                 <tr>
                                     <td><code>{{ mvt.reference }}</code></td>
                                     <td>
-                                        <strong>{{ mvt.produit_relation.nom if mvt.produit_relation else 'Produit inconnu' }}</strong><br>
-                                        <small class="text-muted">{{ mvt.produit_relation.reference if mvt.produit_relation else '-' }}</small>
+                                        <strong>{{ mvt.produit_relation.nom if mvt.produit_relation else 'Produit
+                                            inconnu' }}</strong><br>
+                                        <small class="text-muted">{{ mvt.produit_relation.reference if
+                                            mvt.produit_relation else '-' }}</small>
                                     </td>
                                     <td class="text-end"><strong>{{ mvt.quantite }}</strong></td>
-                                    <td>{{ mvt.date_mouvement.strftime('%d/%m/%Y %H:%M') if mvt.date_mouvement else '-' }}</td>
+                                    <td>{{ mvt.date_mouvement.strftime('%d/%m/%Y %H:%M') if mvt.date_mouvement else '-'
+                                        }}</td>
                                     <td class="text-center">
-                                        <button class="btn btn-sm btn-success" 
-                                                onclick="confirmReception({{ mvt.id }}, '{{ mvt.produit_relation.nom if mvt.produit_relation else 'Produit' }}', {{ mvt.quantite }})">
+                                        <button class="btn btn-sm btn-success"
+                                            onclick="confirmReception({{ mvt.id }}, '{{ mvt.produit_relation.nom if mvt.produit_relation else 'Produit' }}', {{ mvt.quantite }})">
                                             <i class="fas fa-check-circle"></i> Confirmer
                                         </button>
                                     </td>
@@ -112,7 +115,8 @@
                                 {% for res in reservations_en_attente %}
                                 <tr>
                                     <td>
-                                        <strong>{{ res.intervention.technicien.prenom }} {{ res.intervention.technicien.nom }}</strong>
+                                        <strong>{{ res.intervention.technicien.prenom }} {{
+                                            res.intervention.technicien.nom }}</strong>
                                     </td>
                                     <td>
                                         <strong>{{ res.produit.nom }}</strong><br>
@@ -120,15 +124,16 @@
                                     </td>
                                     <td class="text-end"><strong>{{ res.quantite }}</strong></td>
                                     <td>
-                                        <small>{{ res.intervention.demande.reference if res.intervention.demande else 'Intervention #' ~ res.intervention_id }}</small>
+                                        <small>{{ res.intervention.demande.reference if res.intervention.demande else
+                                            'Intervention #' ~ res.intervention_id }}</small>
                                     </td>
                                     <td class="text-center">
-                                        <button class="btn btn-sm btn-success me-1" 
-                                                onclick="validerReservation({{ res.id }}, '{{ res.produit.nom }}', {{ res.quantite }}, '{{ res.intervention.technicien.prenom }} {{ res.intervention.technicien.nom }}')">
+                                        <button class="btn btn-sm btn-success me-1"
+                                            onclick="validerReservation({{ res.id }}, '{{ res.produit.nom }}', {{ res.quantite }}, '{{ res.intervention.technicien.prenom }} {{ res.intervention.technicien.nom }}')">
                                             <i class="fas fa-check"></i> Valider Sortie
                                         </button>
-                                        <button class="btn btn-sm btn-danger" 
-                                                onclick="rejeterReservation({{ res.id }})">
+                                        <button class="btn btn-sm btn-danger"
+                                            onclick="rejeterReservation({{ res.id }})">
                                             <i class="fas fa-times"></i> Rejeter
                                         </button>
                                     </td>
@@ -159,28 +164,34 @@
                             <thead class="table-light">
                                 <tr>
                                     <th>
-                                        <a href="{{ url_for('stock.liste_produits_zone', sort='reference', direction=direction) }}" class="text-decoration-none">
+                                        <a href="{{ url_for('stock.liste_produits_zone', sort='reference', direction=direction) }}"
+                                            class="text-decoration-none">
                                             Référence
                                             {% if sort == 'reference' %}
-                                            <i class="fas fa-{{ 'arrow-up' if direction == 'asc' else 'arrow-down' }}"></i>
+                                            <i
+                                                class="fas fa-{{ 'arrow-up' if direction == 'asc' else 'arrow-down' }}"></i>
                                             {% endif %}
                                         </a>
                                     </th>
                                     <th>
-                                        <a href="{{ url_for('stock.liste_produits_zone', sort='nom', direction=direction) }}" class="text-decoration-none">
+                                        <a href="{{ url_for('stock.liste_produits_zone', sort='nom', direction=direction) }}"
+                                            class="text-decoration-none">
                                             Nom
                                             {% if sort == 'nom' %}
-                                            <i class="fas fa-{{ 'arrow-up' if direction == 'asc' else 'arrow-down' }}"></i>
+                                            <i
+                                                class="fas fa-{{ 'arrow-up' if direction == 'asc' else 'arrow-down' }}"></i>
                                             {% endif %}
                                         </a>
                                     </th>
                                     <th>Catégorie</th>
                                     <th>Emplacement</th>
                                     <th class="text-end">
-                                        <a href="{{ url_for('stock.liste_produits_zone', sort='quantite', direction=direction) }}" class="text-decoration-none">
+                                        <a href="{{ url_for('stock.liste_produits_zone', sort='quantite', direction=direction) }}"
+                                            class="text-decoration-none">
                                             Quantité
                                             {% if sort == 'quantite' %}
-                                            <i class="fas fa-{{ 'arrow-up' if direction == 'asc' else 'arrow-down' }}"></i>
+                                            <i
+                                                class="fas fa-{{ 'arrow-up' if direction == 'asc' else 'arrow-down' }}"></i>
                                             {% endif %}
                                         </a>
                                     </th>
@@ -215,9 +226,9 @@
                                         <strong>{{ produit.quantite }}</strong>
                                         {% if produit.quantite == 0 %}
                                         <span class="badge bg-danger ms-2">Rupture</span>
-                                        {% elif produit.quantite < 5 %}
-                                        <span class="badge bg-warning ms-2">Stock Faible</span>
-                                        {% endif %}
+                                        {% elif produit.quantite < 5 %} <span class="badge bg-warning ms-2">Stock
+                                            Faible</span>
+                                            {% endif %}
                                     </td>
                                     <td class="text-end">
                                         {% if produit.prix_vente %}
@@ -270,7 +281,8 @@
                         <div class="col-md-4 mb-3">
                             <div class="p-3 bg-light rounded">
                                 <strong>{{ emp.nom }}</strong>
-                                <div class="h4 text-primary mb-0">{{ emp.nombre }} article{{ 's' if emp.nombre != 1 else '' }}</div>
+                                <div class="h4 text-primary mb-0">{{ emp.nombre }} article{{ 's' if emp.nombre != 1 else
+                                    '' }}</div>
                             </div>
                         </div>
                         {% endfor %}
@@ -321,7 +333,7 @@
         display: flex;
         align-items: center;
         gap: 1rem;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
 
     .stat-box-icon {
@@ -429,78 +441,78 @@
     }
 </style>
 <script>
-function confirmReception(mouvementId, produitNom, quantite) {
-    if (confirm(`Confirmer la réception de ${quantite} unités de ${produitNom} ?`)) {
-        fetch(`/gestion-stock/stock/transfert/recevoir/${mouvementId}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('Réception confirmée avec succès !');
-                location.reload();
-            } else {
-                alert('Erreur : ' + (data.error || 'Une erreur est survenue'));
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Une erreur est survenue lors de la communication avec le serveur.');
-        });
-    }
-}
-
-function validerReservation(reservationId, produitNom, quantite, technicienNom) {
-    if (confirm(`Confirmer la sortie de ${quantite} unités de ${produitNom} pour le technicien ${technicienNom} ?\nCette action décrémentera le stock immédiatement.`)) {
-        fetch(`/gestion-stock/reservation/valider/${reservationId}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('Réservation validée et sortie de stock effectuée !');
-                location.reload();
-            } else {
-                alert('Erreur : ' + (data.message || 'Une erreur est survenue'));
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Une erreur est survenue lors de la communication avec le serveur.');
-        });
-    }
-}
-
-function rejeterReservation(reservationId) {
-    const motif = prompt("Veuillez saisir le motif du rejet :", "Stock insuffisant ou erreur de saisie");
-    if (motif === null) return; // Annuler l'action
-
-    fetch(`/gestion-stock/reservation/rejeter/${reservationId}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ motif: motif })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('Réservation rejetée avec succès.');
-            location.reload();
-        } else {
-            alert('Erreur : ' + (data.message || 'Une erreur est survenue'));
+    function confirmReception(mouvementId, produitNom, quantite) {
+        if (confirm(`Confirmer la réception de ${quantite} unités de ${produitNom} ?`)) {
+            fetch(`/gestion-stock/stock/transfert/recevoir/${mouvementId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Réception confirmée avec succès !');
+                        location.reload();
+                    } else {
+                        alert('Erreur : ' + (data.error || 'Une erreur est survenue'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Une erreur est survenue lors de la communication avec le serveur.');
+                });
         }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Une erreur est survenue lors de la communication avec le serveur.');
-    });
-}
+    }
+
+    function validerReservation(reservationId, produitNom, quantite, technicienNom) {
+        if (confirm(`Confirmer la sortie de ${quantite} unités de ${produitNom} pour le technicien ${technicienNom} ?\nCette action décrémentera le stock immédiatement.`)) {
+            fetch(`/gestion-stock/reservation/valider/${reservationId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Réservation validée et sortie de stock effectuée !');
+                        location.reload();
+                    } else {
+                        alert('Erreur : ' + (data.message || 'Une erreur est survenue'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Une erreur est survenue lors de la communication avec le serveur.');
+                });
+        }
+    }
+
+    function rejeterReservation(reservationId) {
+        const motif = prompt("Veuillez saisir le motif du rejet :", "Stock insuffisant ou erreur de saisie");
+        if (motif === null) return; // Annuler l'action
+
+        fetch(`/gestion-stock/reservation/rejeter/${reservationId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ motif: motif })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Réservation rejetée avec succès.');
+                    location.reload();
+                } else {
+                    alert('Erreur : ' + (data.message || 'Une erreur est survenue'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Une erreur est survenue lors de la communication avec le serveur.');
+            });
+    }
 </script>
 {% endblock %}

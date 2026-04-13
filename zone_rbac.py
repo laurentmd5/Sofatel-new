@@ -465,11 +465,10 @@ def filter_produit_by_emplacement_zone(query):
     # Sous-requête des produits ayant des mouvements dans la zone
     subq_mouv = select(MouvementStock.produit_id)\
         .join(EmplacementStock)\
-        .filter(EmplacementStock.zone_id == current_user.zone_id)\
-        .scalar_subquery()
+        .filter(EmplacementStock.zone_id == current_user.zone_id)
         
     # Sous-requête des entrepôts de la zone
-    subq_emp = select(EmplacementStock.id).filter(EmplacementStock.zone_id == current_user.zone_id).scalar_subquery()
+    subq_emp = select(EmplacementStock.id).filter(EmplacementStock.zone_id == current_user.zone_id)
     
     # Filtrer par emplacement principal OU par présence de mouvements
     query = query.filter(
