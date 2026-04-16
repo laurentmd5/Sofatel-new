@@ -275,29 +275,26 @@ def publish_selected_teams():
                 Equipe.publie == False
             ).all()
         else:
-            # Pour les chefs de zone, trouver les équipes de la zone (pas seulement créateur)
-            user_zone = current_user.zone
+            # Pour les chefs de zone, être plus flexible sur la zone (Nom, Code, ou Nom (Code))
+            possible_zones = [current_user.zone] if current_user.zone else []
+            if current_user.zone_relation:
+                possible_zones.append(current_user.zone_relation.nom)
+                possible_zones.append(current_user.zone_relation.code)
+                possible_zones.append(f"{current_user.zone_relation.nom} ({current_user.zone_relation.code})")
+            
+            # Nettoyer et filtrer les doublons
+            possible_zones = list(set([z for z in possible_zones if z]))
+            
+            print(f"DEBUG: publish_selected_teams - Zones possibles pour {current_user.username}: {possible_zones}")
+            
             teams_to_publish = Equipe.query.filter(
                 Equipe.id.in_(team_ids),
-                Equipe.zone == user_zone,
+                Equipe.zone.in_(possible_zones),
                 Equipe.actif == True,
                 Equipe.publie == False
             ).all()
             
-            # Si rien trouvé et qu'on peut formater la zone, essayer aussi
-            if not teams_to_publish and user_zone:
-                from models import Zone
-                zone_obj = Zone.query.filter_by(nom=user_zone).first()
-                if zone_obj:
-                    user_zone_formatted = f"{zone_obj.nom} ({zone_obj.code})"
-                    if user_zone_formatted != user_zone:
-                        teams_formatted = Equipe.query.filter(
-                            Equipe.id.in_(team_ids),
-                            Equipe.zone == user_zone_formatted,
-                            Equipe.actif == True,
-                            Equipe.publie == False
-                        ).all()
-                        teams_to_publish = teams_formatted
+            print(f"DEBUG: publish_selected_teams - {len(teams_to_publish)} équipes trouvées sur {len(team_ids)} demandées")
 
         published_count = 0
         for team in teams_to_publish:
@@ -353,11 +350,25 @@ def unpublish_selected_teams():
         if current_user.role == 'chef_pur':
             teams = Equipe.query.filter(Equipe.id.in_(team_ids), Equipe.publie == True).all()
         else:
+            # Pour les chefs de zone, être plus flexible sur la zone (Nom, Code, ou Nom (Code))
+            possible_zones = [current_user.zone] if current_user.zone else []
+            if current_user.zone_relation:
+                possible_zones.append(current_user.zone_relation.nom)
+                possible_zones.append(current_user.zone_relation.code)
+                possible_zones.append(f"{current_user.zone_relation.nom} ({current_user.zone_relation.code})")
+            
+            # Nettoyer et filtrer
+            possible_zones = list(set([z for z in possible_zones if z]))
+            
+            print(f"DEBUG: unpublish_selected_teams - Zones possibles pour {current_user.username}: {possible_zones}")
+            
             teams = Equipe.query.filter(
                 Equipe.id.in_(team_ids),
-                Equipe.zone == current_user.zone,
+                Equipe.zone.in_(possible_zones),
                 Equipe.publie == True
             ).all()
+            
+            print(f"DEBUG: unpublish_selected_teams - {len(teams)} équipes trouvées sur {len(team_ids)} demandées")
 
         unpublished_count = 0
         for team in teams:
@@ -385,28 +396,39 @@ def get_all_teams():
         return jsonify({'error': 'Access denied'}), 403
 
     try:
+        # Paramètres de recherche et tri
+        search_query = request.args.get('search', '').strip()
+        sort_order = request.args.get('sort', 'asc').lower()
+
         if current_user.role == 'chef_pur':
-            teams = Equipe.query.filter_by(actif=True).all()
+            query = Equipe.query.filter_by(actif=True)
         else:
-            # Pour les chefs de zone, essayer plusieurs formats de zone
-            user_zone = current_user.zone
-            teams = Equipe.query.filter_by(
-                zone=user_zone,
-                actif=True
-            ).all()
+            # Pour les chefs de zone, être plus flexible sur la zone (Nom, Code, ou Nom (Code))
+            possible_zones = [current_user.zone] if current_user.zone else []
+            if current_user.zone_relation:
+                possible_zones.append(current_user.zone_relation.nom)
+                possible_zones.append(current_user.zone_relation.code)
+                possible_zones.append(f"{current_user.zone_relation.nom} ({current_user.zone_relation.code})")
             
-            # Si rien trouvé et qu'on peut formater la zone, essayer aussi
-            if not teams and user_zone:
-                from models import Zone
-                zone_obj = Zone.query.filter_by(nom=user_zone).first()
-                if zone_obj:
-                    user_zone_formatted = f"{zone_obj.nom} ({zone_obj.code})"
-                    if user_zone_formatted != user_zone:
-                        teams_formatted = Equipe.query.filter_by(
-                            zone=user_zone_formatted,
-                            actif=True
-                        ).all()
-                        teams = teams_formatted
+            # Nettoyer et filtrer les doublons
+            possible_zones = list(set([z for z in possible_zones if z]))
+            
+            query = Equipe.query.filter(
+                Equipe.zone.in_(possible_zones),
+                Equipe.actif == True
+            )
+
+        # Appliquer la recherche si présente
+        if search_query:
+            query = query.filter(Equipe.nom_equipe.ilike(f"%{search_query}%"))
+
+        # Appliquer le tri
+        if sort_order == 'desc':
+            query = query.order_by(Equipe.nom_equipe.desc())
+        else:
+            query = query.order_by(Equipe.nom_equipe.asc())
+
+        teams = query.all()
 
         teams_data = []
         for team in teams:
@@ -458,65 +480,49 @@ def get_equipes_jour():
         
         print(f"DEBUG: get_equipes_jour - User: {current_user.username}, Zone finale: {user_zone}")
         
+        # Paramètres de recherche et tri
+        search_query = request.args.get('search', '').strip()
+        sort_order = request.args.get('sort', 'asc').lower()
+
         if current_user.role == 'chef_pur':
             # Le chef PUR voit toutes les équipes publiées aujourd'hui
-            equipes = Equipe.query.filter_by(
+            query = Equipe.query.filter_by(
                 publie=True, 
                 date_publication=today,
                 actif=True
-            ).all()
+            )
         else:
-            # Le chef de zone voit uniquement les équipes de sa zone publiées aujourd'hui
-            if not user_zone:
-                print(f"DEBUG: get_equipes_jour - Pas de zone, retour vide")
+            # Pour les chefs de zone, être plus flexible sur la zone (Nom, Code, ou Nom (Code))
+            possible_zones = [current_user.zone] if current_user.zone else []
+            if current_user.zone_relation:
+                possible_zones.append(current_user.zone_relation.nom)
+                possible_zones.append(current_user.zone_relation.code)
+                possible_zones.append(f"{current_user.zone_relation.nom} ({current_user.zone_relation.code})")
+            
+            # Nettoyer et filtrer les doublons
+            possible_zones = list(set([z for z in possible_zones if z]))
+            
+            if not possible_zones:
                 return jsonify({'success': True, 'equipes': []})
             
-            print(f"DEBUG: get_equipes_jour - Filtre: zone='{user_zone}', publie=True, date_publication={today}, actif=True")
-            
-            # Essayer d'abord avec la zone principale
-            equipes = Equipe.query.filter_by(
-                zone=user_zone,
-                publie=True,
-                date_publication=today,
-                actif=True
-            ).all()
-            
-            print(f"DEBUG: get_equipes_jour - Recherche 1 avec zone '{user_zone}': {len(equipes)} équipes trouvées")
-            if equipes:
-                for e in equipes:
-                    print(f"  - {e.nom_equipe} (zone={repr(e.zone)}, publie={e.publie}, date={e.date_publication})")
-            
-            # Si rien trouvé et qu'on a une zone formatée différente, essayer aussi
-            if not equipes and user_zone_formatted and user_zone_formatted != user_zone:
-                print(f"DEBUG: get_equipes_jour - Filtre 2: zone='{user_zone_formatted}', publie=True, date_publication={today}, actif=True")
-                equipes_formatted = Equipe.query.filter_by(
-                    zone=user_zone_formatted,
-                    publie=True,
-                    date_publication=today,
-                    actif=True
-                ).all()
-                print(f"DEBUG: get_equipes_jour - Recherche 2 avec zone formatée '{user_zone_formatted}': {len(equipes_formatted)} équipes trouvées")
-                equipes = equipes_formatted
-            
-            # Si toujours rien et qu'on a une zone_relation, essayer avec le nom simple
-            if not equipes and current_user.zone_relation:
-                zone_simple = current_user.zone_relation.nom
-                if zone_simple != user_zone:
-                    print(f"DEBUG: get_equipes_jour - Filtre 3: zone='{zone_simple}', publie=True, date_publication={today}, actif=True")
-                    equipes_simple = Equipe.query.filter_by(
-                        zone=zone_simple,
-                        publie=True,
-                        date_publication=today,
-                        actif=True
-                    ).all()
-                    print(f"DEBUG: get_equipes_jour - Recherche 3 avec zone simple '{zone_simple}': {len(equipes_simple)} équipes trouvées")
-                    equipes = equipes_simple
-            
-            # Debug: voir TOUTES les équipes de cette zone (peu importe publie/date)
-            all_equipes_for_zone = Equipe.query.filter_by(zone=user_zone).all()
-            print(f"DEBUG: get_equipes_jour - TOUTES équipes de la zone '{user_zone}': {len(all_equipes_for_zone)}")
-            for e in all_equipes_for_zone:
-                print(f"  - {e.nom_equipe} (zone={repr(e.zone)}, publie={e.publie}, date={e.date_publication}, actif={e.actif})")
+            query = Equipe.query.filter(
+                Equipe.zone.in_(possible_zones),
+                Equipe.publie == True,
+                Equipe.date_publication == today,
+                Equipe.actif == True
+            )
+
+        # Appliquer la recherche si présente
+        if search_query:
+            query = query.filter(Equipe.nom_equipe.ilike(f"%{search_query}%"))
+
+        # Appliquer le tri
+        if sort_order == 'desc':
+            query = query.order_by(Equipe.nom_equipe.desc())
+        else:
+            query = query.order_by(Equipe.nom_equipe.asc())
+
+        equipes = query.all()
         
         print(f"DEBUG: get_equipes_jour - {len(equipes)} équipes trouvées")
         
@@ -570,72 +576,47 @@ def get_equipes_inactives():
         
         print(f"DEBUG: get_equipes_inactives - User: {current_user.username}, Zone finale: {user_zone}")
         
+        # Paramètres de recherche et tri
+        search_query = request.args.get('search', '').strip()
+        sort_order = request.args.get('sort', 'asc').lower()
+
         if current_user.role == 'chef_pur':
             # Le chef PUR voit toutes les équipes non publiées
-            equipes = Equipe.query.filter_by(
+            query = Equipe.query.filter_by(
                 publie=False,
                 actif=True
-            ).all()
+            )
         else:
-            # Le chef de zone voit uniquement les équipes de sa zone non publiées
-            if not user_zone:
-                print(f"DEBUG: get_equipes_inactives - Pas de zone, retour vide")
+            # Pour les chefs de zone, être plus flexible sur la zone (Nom, Code, ou Nom (Code))
+            possible_zones = [current_user.zone] if current_user.zone else []
+            if current_user.zone_relation:
+                possible_zones.append(current_user.zone_relation.nom)
+                possible_zones.append(current_user.zone_relation.code)
+                possible_zones.append(f"{current_user.zone_relation.nom} ({current_user.zone_relation.code})")
+            
+            # Nettoyer et filtrer les doublons
+            possible_zones = list(set([z for z in possible_zones if z]))
+            
+            if not possible_zones:
                 return jsonify({'success': True, 'equipes': []})
             
-            # D'abord essayer avec la zone formatée
-            equipes = Equipe.query.filter_by(
-                zone=user_zone,
-                publie=False,
-                actif=True
-            ).all()
-            
-            print(f"DEBUG: get_equipes_inactives - Recherche avec zone formatée '{user_zone}': {len(equipes)} équipes")
-            
-            # Si rien trouvé, essayer avec juste le nom de la zone
-            if not equipes and current_user.zone_relation:
-                zone_simple = current_user.zone_relation.nom
-                equipes_simple = Equipe.query.filter_by(
-                    zone=zone_simple,
-                    publie=False,
-                    actif=True
-                ).all()
-                print(f"DEBUG: get_equipes_inactives - Recherche avec zone simple '{zone_simple}': {len(equipes_simple)} équipes")
-                equipes = equipes_simple
-            
-            # Si toujours rien, essayer avec le code
-            if not equipes and current_user.zone_relation:
-                zone_code = current_user.zone_relation.code
-                equipes_code = Equipe.query.filter_by(
-                    zone=zone_code,
-                    publie=False,
-                    actif=True
-                ).all()
-                print(f"DEBUG: get_equipes_inactives - Recherche avec zone code '{zone_code}': {len(equipes_code)} équipes")
-                equipes = equipes_code
-            
-            # Si toujours rien, vérifier toutes les équipes de l'utilisateur pour debug
-            if not equipes:
-                all_equipes_user = Equipe.query.filter_by(
-                    chef_zone_id=current_user.id,
-                    actif=True
-                ).all()
-                print(f"DEBUG: get_equipes_inactives - Toutes les équipes de l'utilisateur {current_user.id}: {len(all_equipes_user)}")
-                for eq in all_equipes_user:
-                    print(f"  - {eq.nom_equipe} (zone: {repr(eq.zone)}, publie: {eq.publie})")
-                
-                # Filtrer manuellement pour debug
-                manual_equipes = []
-                for eq in all_equipes_user:
-                    if eq.publie == False:  # Équipes non publiées
-                        if (eq.zone == user_zone or 
-                            (current_user.zone_relation and eq.zone == current_user.zone_relation.nom) or
-                            (current_user.zone_relation and eq.zone == current_user.zone_relation.code)):
-                            manual_equipes.append(eq)
-                            print(f"DEBUG: get_equipes_inactives - Équipe trouvée manuellement: {eq.nom_equipe}")
-                
-                if manual_equipes:
-                    equipes = manual_equipes
-                    print(f"DEBUG: get_equipes_inactives - {len(manual_equipes)} équipes trouvées manuellement")
+            query = Equipe.query.filter(
+                Equipe.zone.in_(possible_zones),
+                Equipe.publie == False,
+                Equipe.actif == True
+            )
+
+        # Appliquer la recherche si présente
+        if search_query:
+            query = query.filter(Equipe.nom_equipe.ilike(f"%{search_query}%"))
+
+        # Appliquer le tri
+        if sort_order == 'desc':
+            query = query.order_by(Equipe.nom_equipe.desc())
+        else:
+            query = query.order_by(Equipe.nom_equipe.asc())
+
+        equipes = query.all()
         
         print(f"DEBUG: get_equipes_inactives - {len(equipes)} équipes trouvées")
         
