@@ -301,12 +301,12 @@ def get_unified_performance_data(zone=None, period='day', sort_by='kpi'):
         # ===== ZONES =====
         zones_data = []
         for chef_zone in User.query.filter_by(role='chef_zone', actif=True).all():
-            # Équipes gérées par ce chef_zone
+            # Équipes gérées dans cette zone
             equipes_creees = Equipe.query.filter_by(
-                chef_zone_id=chef_zone.id, actif=True).count()
+                zone=chef_zone.zone, actif=True).count()
             
             equipes_publiees = Equipe.query.filter_by(
-                chef_zone_id=chef_zone.id, 
+                zone=chef_zone.zone, 
                 publie=True, 
                 actif=True).count()
             

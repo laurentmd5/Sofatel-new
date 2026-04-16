@@ -162,9 +162,23 @@ def manage_team(equipe_id):
     if not equipe:
         abort(404)
     
-    if current_user.role == 'chef_zone' and equipe.chef_zone_id != current_user.id:
-        flash('Accès non autorisé.', 'error')
-        return redirect(url_for('dashboard'))
+    if current_user.role == 'chef_zone':
+        # Vérifier si l'équipe appartient à la zone du chef de zone
+        # On accepte si c'est le créateur OU si c'est dans sa zone
+        user_zone = current_user.zone
+        user_zone_formatted = None
+        if current_user.zone_relation:
+            user_zone_formatted = f"{current_user.zone_relation.nom} ({current_user.zone_relation.code})"
+        
+        is_in_zone = (equipe.zone == user_zone or 
+                     (user_zone_formatted and equipe.zone == user_zone_formatted) or
+                     (current_user.zone_relation and equipe.zone == current_user.zone_relation.nom) or
+                     (current_user.zone_relation and equipe.zone == current_user.zone_relation.code) or
+                     equipe.chef_zone_id == current_user.id)
+        
+        if not is_in_zone:
+            flash('Accès non autorisé : cette équipe n\'appartient pas à votre zone.', 'error')
+            return redirect(url_for('dashboard'))
 
     # Récupérer la liste des techniciens pour le SelectField
     techniciens = User.query.filter_by(role='technicien', actif=True).all()
@@ -180,9 +194,22 @@ def edit_team(equipe_id):
     if not equipe:
         abort(404)
     
-    if current_user.role == 'chef_zone' and equipe.chef_zone_id != current_user.id:
-        flash('Accès non autorisé.', 'error')
-        return redirect(url_for('dashboard'))
+    if current_user.role == 'chef_zone':
+        # Vérifier si l'équipe appartient à la zone du chef de zone
+        user_zone = current_user.zone
+        user_zone_formatted = None
+        if current_user.zone_relation:
+            user_zone_formatted = f"{current_user.zone_relation.nom} ({current_user.zone_relation.code})"
+        
+        is_in_zone = (equipe.zone == user_zone or 
+                     (user_zone_formatted and equipe.zone == user_zone_formatted) or
+                     (current_user.zone_relation and equipe.zone == current_user.zone_relation.nom) or
+                     (current_user.zone_relation and equipe.zone == current_user.zone_relation.code) or
+                     equipe.chef_zone_id == current_user.id)
+        
+        if not is_in_zone:
+            flash('Accès non autorisé : cette équipe n\'appartient pas à votre zone.', 'error')
+            return redirect(url_for('dashboard'))
 
     from forms import TeamForm
     form = TeamForm()
@@ -248,11 +275,10 @@ def publish_selected_teams():
                 Equipe.publie == False
             ).all()
         else:
-            # Pour les chefs de zone, trouver les équipes en essayant plusieurs formats de zone
+            # Pour les chefs de zone, trouver les équipes de la zone (pas seulement créateur)
             user_zone = current_user.zone
             teams_to_publish = Equipe.query.filter(
                 Equipe.id.in_(team_ids),
-                Equipe.chef_zone_id == current_user.id,
                 Equipe.zone == user_zone,
                 Equipe.actif == True,
                 Equipe.publie == False
@@ -267,7 +293,6 @@ def publish_selected_teams():
                     if user_zone_formatted != user_zone:
                         teams_formatted = Equipe.query.filter(
                             Equipe.id.in_(team_ids),
-                            Equipe.chef_zone_id == current_user.id,
                             Equipe.zone == user_zone_formatted,
                             Equipe.actif == True,
                             Equipe.publie == False
@@ -330,7 +355,6 @@ def unpublish_selected_teams():
         else:
             teams = Equipe.query.filter(
                 Equipe.id.in_(team_ids),
-                Equipe.chef_zone_id == current_user.id,
                 Equipe.zone == current_user.zone,
                 Equipe.publie == True
             ).all()
@@ -367,7 +391,6 @@ def get_all_teams():
             # Pour les chefs de zone, essayer plusieurs formats de zone
             user_zone = current_user.zone
             teams = Equipe.query.filter_by(
-                chef_zone_id=current_user.id,
                 zone=user_zone,
                 actif=True
             ).all()
@@ -380,7 +403,6 @@ def get_all_teams():
                     user_zone_formatted = f"{zone_obj.nom} ({zone_obj.code})"
                     if user_zone_formatted != user_zone:
                         teams_formatted = Equipe.query.filter_by(
-                            chef_zone_id=current_user.id,
                             zone=user_zone_formatted,
                             actif=True
                         ).all()
@@ -449,11 +471,10 @@ def get_equipes_jour():
                 print(f"DEBUG: get_equipes_jour - Pas de zone, retour vide")
                 return jsonify({'success': True, 'equipes': []})
             
-            print(f"DEBUG: get_equipes_jour - Filtre: chef_zone_id={current_user.id}, zone='{user_zone}', publie=True, date_publication={today}, actif=True")
+            print(f"DEBUG: get_equipes_jour - Filtre: zone='{user_zone}', publie=True, date_publication={today}, actif=True")
             
             # Essayer d'abord avec la zone principale
             equipes = Equipe.query.filter_by(
-                chef_zone_id=current_user.id,
                 zone=user_zone,
                 publie=True,
                 date_publication=today,
@@ -467,9 +488,8 @@ def get_equipes_jour():
             
             # Si rien trouvé et qu'on a une zone formatée différente, essayer aussi
             if not equipes and user_zone_formatted and user_zone_formatted != user_zone:
-                print(f"DEBUG: get_equipes_jour - Filtre 2: chef_zone_id={current_user.id}, zone='{user_zone_formatted}', publie=True, date_publication={today}, actif=True")
+                print(f"DEBUG: get_equipes_jour - Filtre 2: zone='{user_zone_formatted}', publie=True, date_publication={today}, actif=True")
                 equipes_formatted = Equipe.query.filter_by(
-                    chef_zone_id=current_user.id,
                     zone=user_zone_formatted,
                     publie=True,
                     date_publication=today,
@@ -482,9 +502,8 @@ def get_equipes_jour():
             if not equipes and current_user.zone_relation:
                 zone_simple = current_user.zone_relation.nom
                 if zone_simple != user_zone:
-                    print(f"DEBUG: get_equipes_jour - Filtre 3: chef_zone_id={current_user.id}, zone='{zone_simple}', publie=True, date_publication={today}, actif=True")
+                    print(f"DEBUG: get_equipes_jour - Filtre 3: zone='{zone_simple}', publie=True, date_publication={today}, actif=True")
                     equipes_simple = Equipe.query.filter_by(
-                        chef_zone_id=current_user.id,
                         zone=zone_simple,
                         publie=True,
                         date_publication=today,
@@ -493,9 +512,9 @@ def get_equipes_jour():
                     print(f"DEBUG: get_equipes_jour - Recherche 3 avec zone simple '{zone_simple}': {len(equipes_simple)} équipes trouvées")
                     equipes = equipes_simple
             
-            # Debug: voir TOUTES les équipes du chef_zone (peu importe publie/date)
-            all_equipes_for_zone = Equipe.query.filter_by(chef_zone_id=current_user.id).all()
-            print(f"DEBUG: get_equipes_jour - TOUTES équipes du chef_zone {current_user.id}: {len(all_equipes_for_zone)}")
+            # Debug: voir TOUTES les équipes de cette zone (peu importe publie/date)
+            all_equipes_for_zone = Equipe.query.filter_by(zone=user_zone).all()
+            print(f"DEBUG: get_equipes_jour - TOUTES équipes de la zone '{user_zone}': {len(all_equipes_for_zone)}")
             for e in all_equipes_for_zone:
                 print(f"  - {e.nom_equipe} (zone={repr(e.zone)}, publie={e.publie}, date={e.date_publication}, actif={e.actif})")
         
@@ -565,7 +584,6 @@ def get_equipes_inactives():
             
             # D'abord essayer avec la zone formatée
             equipes = Equipe.query.filter_by(
-                chef_zone_id=current_user.id,
                 zone=user_zone,
                 publie=False,
                 actif=True
@@ -577,7 +595,6 @@ def get_equipes_inactives():
             if not equipes and current_user.zone_relation:
                 zone_simple = current_user.zone_relation.nom
                 equipes_simple = Equipe.query.filter_by(
-                    chef_zone_id=current_user.id,
                     zone=zone_simple,
                     publie=False,
                     actif=True
@@ -589,7 +606,6 @@ def get_equipes_inactives():
             if not equipes and current_user.zone_relation:
                 zone_code = current_user.zone_relation.code
                 equipes_code = Equipe.query.filter_by(
-                    chef_zone_id=current_user.id,
                     zone=zone_code,
                     publie=False,
                     actif=True

@@ -737,13 +737,23 @@ def add_membre_equipe(equipe_id):
                 'error': 'Équipe non trouvée'
             }), 404
             
-        # Chef zone : ne peut ajouter que sur ses propres équipes
-        # Chef PUR : peut ajouter sur toutes les équipes
-        if current_user.role == 'chef_zone' and equipe.chef_zone_id != current_user.id:
-            return jsonify({
-                'success': False,
-                'error': 'Vous ne pouvez pas ajouter de membre à cette équipe'
-            }), 403
+        # Chef zone : peut ajouter sur toutes les équipes de sa zone
+        if current_user.role == 'chef_zone':
+            user_zone = current_user.zone
+            user_zone_formatted = None
+            if current_user.zone_relation:
+                user_zone_formatted = f"{current_user.zone_relation.nom} ({current_user.zone_relation.code})"
+            
+            is_in_zone = (equipe.zone == user_zone or 
+                         (user_zone_formatted and equipe.zone == user_zone_formatted) or
+                         (current_user.zone_relation and (equipe.zone == current_user.zone_relation.nom or equipe.zone == current_user.zone_relation.code)) or
+                         equipe.chef_zone_id == current_user.id)
+            
+            if not is_in_zone:
+                return jsonify({
+                    'success': False,
+                    'error': 'Vous ne pouvez pas ajouter de membre à cette équipe car elle n\'est pas dans votre zone'
+                }), 403
 
         # Essayer de récupérer les données JSON
         try:
@@ -882,8 +892,19 @@ def remove_membre_equipe(membre_id):
         return jsonify({'success': False, 'error': 'Équipe non trouvée'}), 404
         
     # Vérifier que l'utilisateur a le droit de modifier cette équipe
-    if current_user.role == 'chef_zone' and equipe.chef_zone_id != current_user.id:
-        return jsonify({'success': False, 'error': 'Non autorisé à modifier cette équipe'}), 403
+    if current_user.role == 'chef_zone':
+        user_zone = current_user.zone
+        user_zone_formatted = None
+        if current_user.zone_relation:
+            user_zone_formatted = f"{current_user.zone_relation.nom} ({current_user.zone_relation.code})"
+        
+        is_in_zone = (equipe.zone == user_zone or 
+                     (user_zone_formatted and equipe.zone == user_zone_formatted) or
+                     (current_user.zone_relation and (equipe.zone == current_user.zone_relation.nom or equipe.zone == current_user.zone_relation.code)) or
+                     equipe.chef_zone_id == current_user.id)
+        
+        if not is_in_zone:
+            return jsonify({'success': False, 'error': 'Non autorisé à modifier cette équipe car elle n\'est pas dans votre zone'}), 403
     
     try:
         # Journalisation de l'action
@@ -2459,9 +2480,24 @@ def toggle_equipe_status(equipe_id):
     equipe = db.session.get(Equipe, equipe_id)
     if not equipe:
         abort(404)
-    # Optionnel : vérifier que seul le chef_zone de l’équipe peut changer le statut
-    if current_user.role != 'chef_zone' or equipe.chef_zone_id != current_user.id:
+    # Vérification des permissions
+    if current_user.role not in ['chef_zone', 'chef_pur', 'admin']:
         return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
+    
+    if current_user.role == 'chef_zone':
+        # Vérifier si l'équipe appartient à la zone du chef de zone
+        user_zone = current_user.zone
+        user_zone_formatted = None
+        if current_user.zone_relation:
+            user_zone_formatted = f"{current_user.zone_relation.nom} ({current_user.zone_relation.code})"
+        
+        is_in_zone = (equipe.zone == user_zone or 
+                     (user_zone_formatted and equipe.zone == user_zone_formatted) or
+                     (current_user.zone_relation and (equipe.zone == current_user.zone_relation.nom or equipe.zone == current_user.zone_relation.code)) or
+                     equipe.chef_zone_id == current_user.id)
+        
+        if not is_in_zone:
+            return jsonify({'success': False, 'error': 'Accès non autorisé : cette équipe n\'appartient pas à votre zone'}), 403
     try:
         data = request.get_json() or {}
         actif = data.get('actif')
@@ -2825,12 +2861,11 @@ def get_publication_stats():
 
     today = datetime.now().date()
 
-    # Get teams created today by this chef zone
-    teams_created = Equipe.query.filter_by(chef_zone_id=current_user.id,
+    # Get teams created today in this zone
+    teams_created = Equipe.query.filter_by(zone=current_user.zone,
                                            date_creation=today).count()
 
-    teams_published = Equipe.query.filter_by(chef_zone_id=current_user.id,
-                                             zone=current_user.zone,
+    teams_published = Equipe.query.filter_by(zone=current_user.zone,
                                              actif=True,
                                              date_publication=today,
                                              publie=True).count()
@@ -2838,8 +2873,7 @@ def get_publication_stats():
     teams_draft = teams_created - teams_published
 
     # Get last publication time
-    last_published = Equipe.query.filter_by(chef_zone_id=current_user.id,
-                                            zone=current_user.zone,
+    last_published = Equipe.query.filter_by(zone=current_user.zone,
                                             date_publication=today,
                                             publie=True).order_by(
                                                 Equipe.id.desc()).first()
@@ -2848,13 +2882,11 @@ def get_publication_stats():
     if last_published:
         last_publication = last_published.date_publication.strftime(
             '%H:%M') if last_published.date_publication else None
-    # Get all unpublished teams by this chef zone
-    unpublished_teams = Equipe.query.filter_by(chef_zone_id=current_user.id,
-                                               zone=current_user.zone,
+    # Get all unpublished teams in this zone
+    unpublished_teams = Equipe.query.filter_by(zone=current_user.zone,
                                                actif=True,
                                                publie=False).count()
     total_teams = Equipe.query.filter_by(
-        chef_zone_id=current_user.id,
         zone=current_user.zone,
     ).count()
     return jsonify({
@@ -2881,9 +2913,8 @@ def publish_daily_teams():
     today = now.date()
 
     try:
-        # Get all unpublished teams by this chef zone
+        # Get all unpublished teams in this zone
         unpublished_teams = Equipe.query.filter_by(
-            chef_zone_id=current_user.id,
             zone=current_user.zone,
             actif=True,
             publie=False).all()
@@ -2920,8 +2951,7 @@ def preview_teams():
     today = datetime.now().date()
 
     try:
-        teams = Equipe.query.filter_by(chef_zone_id=current_user.id,
-                                       zone=current_user.zone,
+        teams = Equipe.query.filter_by(zone=current_user.zone,
                                        actif=True,
                                        date_creation=today).all()
 
@@ -2982,10 +3012,9 @@ def publish_selected_teams():
                 Equipe.publie == False
             ).all()
         else:
-            # Chef Zone ne publie que ses propres équipes
+            # Chef Zone publie toutes les équipes de sa zone
             teams_to_publish = Equipe.query.filter(
                 Equipe.id.in_(team_ids),
-                Equipe.chef_zone_id == current_user.id,
                 Equipe.zone == current_user.zone,
                 Equipe.actif == True,
                 Equipe.publie == False
