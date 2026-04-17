@@ -284,6 +284,9 @@
             if (userToDelete) {
                 // Désactiver le bouton pendant la requête
                 confirmBtn.disabled = true;
+                const originalBtnText = confirmBtn.innerHTML;
+                confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Suppression...';
+                
                 // Cacher la zone de détail d'erreur
                 const errDiv = document.getElementById('deleteErrorDetail');
                 errDiv.classList.add('d-none');
@@ -292,54 +295,38 @@
                 fetch(`/delete-user/${userToDelete}`, {
                     method: 'POST'
                 })
-                    .then(response => {
-                        // keep status for later
-                        return response.json().then(data => ({ status: response.status, ok: response.ok, data }));
-                    })
+                    .then(response => response.json().then(data => ({ status: response.status, ok: response.ok, data })))
                     .then(({ status, ok, data }) => {
                         if (ok) {
-                            // Succès : supprimer la ligne et fermer
-                            document.querySelector(`[data-user-id="${userToDelete}"]`).closest('tr').remove();
+                            // Succès : supprimer la ligne
+                            const row = document.querySelector(`button.delete-user[data-user-id="${userToDelete}"]`).closest('tr');
+                            // Animation simple avant suppression
+                            row.style.transition = 'opacity 0.5s';
+                            row.style.opacity = '0';
+                            setTimeout(() => row.remove(), 500);
+                            
                             showAlert(data.message, 'success');
                             bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
                             userToDelete = null;
                         } else {
-                            // Erreur : afficher message explicatif dans la modal (ne pas fermer)
+                            // Erreur : afficher message explicatif
                             let message = data && data.error ? data.error : 'Erreur lors de la suppression.';
-
-                            if (status === 400) {
-                                // Dépendances bloquantes (interventions, imports, équipes, historique...) - guider l'utilisateur
-                                message += '<br><br><strong>Que faire :</strong><ul>' +
-                                    '<li>Réaffecter ou supprimer les interventions et demandes liées à cet utilisateur.</li>' +
-                                    '<li>Réassigner les équipes dont il est chef ou retirer sa participation aux équipes.</li>' +
-                                    '<li>Si l\'utilisateur possède un rôle élevé, vous pouvez d\'abord changer son rôle puis retenter la suppression.</li>' +
-                                    "<li>Si vous devez conserver l'historique, envisagez d'archiver plutôt que de supprimer l'utilisateur.</li>" +
-                                    '</ul>' +
-                                    `<div class="mt-2"><a href="/edit-user/${userToDelete}" class="btn btn-sm btn-outline-primary">Modifier l'utilisateur</a></div>`;
-                            } else if (status === 409) {
-                                // Contrainte d'intégrité (ex : activity_log non nullable)
-                                message += '<br><br><strong>Que faire :</strong><ul>' +
-                                    '<li>Réaffecter, archiver ou supprimer les enregistrements d\'activité liés à cet utilisateur (ces données empêchent la suppression).</li>' +
-                                    '<li>Contacter l\'administrateur si vous n\'avez pas les droits nécessaires pour modifier ces enregistrements.</li>' +
-                                    '</ul>' +
-                                    `<div class="mt-2"><a href="/edit-user/${userToDelete}" class="btn btn-sm btn-outline-primary">Modifier l'utilisateur</a></div>`;
-                            } else {
-                                message += '<br><br>Si le problème persiste, contactez l\'administrateur.';
-                            }
-
-                            errDiv.innerHTML = message;
+                            
+                            errDiv.innerHTML = `<i data-feather="alert-triangle" class="me-2"></i> ${message}`;
                             errDiv.classList.remove('d-none');
-                            // Also show a toast alert for visibility
+                            if (typeof feather !== 'undefined') feather.replace();
+                            
                             showAlert(data.error || 'Erreur lors de la suppression', 'danger');
                         }
                     })
                     .catch(error => {
-                        showAlert('Erreur de connexion', 'danger');
+                        showAlert('Erreur de connexion : ' + error.message, 'danger');
                         bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
                         userToDelete = null;
                     })
                     .finally(() => {
                         confirmBtn.disabled = false;
+                        confirmBtn.innerHTML = originalBtnText;
                     });
             }
         });

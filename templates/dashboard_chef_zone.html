@@ -486,15 +486,31 @@
                                 </button>
                             </div>
                         </div>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div class="text-muted small">Sélectionnez les équipes à ${action === 'publish' ? 'publier' : 'dépublier'} ci-dessous.</div>
+                            <div>
+                                ${renderSelectionActionButton(teams, action)}
+                            </div>
+                        </div>
                         <div id="selection-teams-container">
                             ${renderSelectionTable(teams, action)}
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <div>
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllTeams(true)">
+                                    <i data-feather="check-square" style="width: 14px;"></i> Tout sélectionner
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary ms-1" onclick="selectAllTeams(false)">
+                                    <i data-feather="square" style="width: 14px;"></i> Désélectionner
+                                </button>
+                            </div>
+                            <div>
+                                ${renderSelectionActionButton(teams, action)}
+                            </div>
                         </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                        <div id="selection-action-btn-container">
-                            ${renderSelectionActionButton(teams, action)}
-                        </div>
                     </div>
                 </div>
             </div>
@@ -643,10 +659,12 @@
             return;
         }
 
-        const publishBtn = document.querySelector('#teamsSelectionModal .btn-success');
-        const originalText = publishBtn.innerHTML;
-        publishBtn.disabled = true;
-        publishBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Publication en cours...';
+        const publishBtns = document.querySelectorAll('#teamsSelectionModal .btn-success');
+        const originalText = publishBtns.length > 0 ? publishBtns[0].innerHTML : '';
+        publishBtns.forEach(btn => {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Publication en cours...';
+        });
 
         fetch('/api/publish-selected-teams', {
             method: 'POST',
@@ -675,8 +693,10 @@
                 alert('Erreur de communication: ' + error.message);
             })
             .finally(() => {
-                publishBtn.disabled = false;
-                publishBtn.innerHTML = originalText;
+                publishBtns.forEach(btn => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                });
                 if (typeof feather !== 'undefined') {
                     feather.replace();
                 }
@@ -1065,9 +1085,14 @@
                             <p class="mb-1 small text-muted"><i data-feather="map-pin" style="width: 12px;" class="me-1"></i> ${equipe.zone}</p>
                             <p class="mb-1 small text-muted"><i data-feather="cpu" style="width: 12px;" class="me-1"></i> ${equipe.technologies}</p>
                             <p class="mb-3 small text-muted"><i data-feather="users" style="width: 12px;" class="me-1"></i> ${equipe.nb_membres} membres</p>
-                            <a href="/manage_team/${equipe.id}" class="btn btn-sm btn-outline-secondary w-100">
-                                <i data-feather="edit-2" class="me-1" style="width: 14px;"></i> Gérer
-                            </a>
+                            <div class="d-flex gap-2">
+                                <a href="/manage_team/${equipe.id}" class="btn btn-sm btn-outline-secondary flex-grow-1">
+                                    <i data-feather="edit-2" class="me-1" style="width: 14px;"></i> Gérer
+                                </a>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteTeam(${equipe.id}, '${equipe.nom_equipe.replace(/'/g, "\\'")}')" title="Supprimer">
+                                    <i data-feather="trash-2" style="width: 14px;"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>`;
@@ -1094,6 +1119,40 @@
         renderEquipesInactivesDashboard();
     }
 
+    function deleteTeam(teamId, teamName) {
+        if (confirm(`Êtes-vous sûr de vouloir supprimer définitivement l'équipe "${teamName}" ? Cette action est irréversible.`)) {
+            fetch(`/api/delete-team/${teamId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    // Rafraîchir la liste des équipes inactives
+                    fetch('/api/equipes-inactives')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                currentEquipesInactivesFetched = data.equipes;
+                                renderEquipesInactivesDashboard();
+                                // Recharger les stats si possible
+                                if (typeof loadPublicationData === 'function') loadPublicationData();
+                            }
+                        });
+                } else {
+                    alert('Erreur: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Erreur lors de la suppression: ' + error.message);
+            });
+        }
+    }
+
     function unpublishSelectedTeams() {
         const selectedCheckboxes = document.querySelectorAll('.team-checkbox:checked');
 
@@ -1112,10 +1171,12 @@
             return;
         }
 
-        const publishBtn = document.querySelector('#teamsSelectionModal .btn-danger');
-        const originalText = publishBtn.innerHTML;
-        publishBtn.disabled = true;
-        publishBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Dépublication en cours...';
+        const unpublishBtns = document.querySelectorAll('#teamsSelectionModal .btn-danger');
+        const originalText = unpublishBtns.length > 0 ? unpublishBtns[0].innerHTML : '';
+        unpublishBtns.forEach(btn => {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Dépublication en cours...';
+        });
 
         fetch('/api/unpublish-selected-teams', {
             method: 'POST',
@@ -1144,8 +1205,10 @@
                 alert('Erreur de communication: ' + error.message);
             })
             .finally(() => {
-                publishBtn.disabled = false;
-                publishBtn.innerHTML = originalText;
+                unpublishBtns.forEach(btn => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                });
                 if (typeof feather !== 'undefined') {
                     feather.replace();
                 }
@@ -1435,7 +1498,7 @@
                                                     <div class="progress" style="height: 20px;">
                                                         <div class="progress-bar {% if equipe.taux_reussite >= 80 %}bg-success{% elif equipe.taux_reussite >= 60 %}bg-warning{% else %}bg-danger{% endif %}"
                                                             role="progressbar"
-                                                            style="width: {{ equipe.taux_reussite }}%">
+                                                            style="width: {{ equipe.taux_reussite }}%;">
                                                             {{ equipe.taux_reussite }}%
                                                         </div>
                                                     </div>
@@ -1458,7 +1521,7 @@
                                                     <div class="progress" style="height: 20px;">
                                                         <div class="progress-bar {% if technicien.taux_reussite >= 80 %}bg-success{% elif technicien.taux_reussite >= 60 %}bg-warning{% else %}bg-danger{% endif %}"
                                                             role="progressbar"
-                                                            style="width: {{ technicien.taux_reussite }}%">
+                                                            style="width: {{ technicien.taux_reussite }}%;">
                                                             {{ technicien.taux_reussite }}%
                                                         </div>
                                                     </div>

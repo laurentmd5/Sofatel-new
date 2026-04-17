@@ -642,3 +642,57 @@ def get_equipes_inactives():
     except Exception as e:
         print(f"DEBUG: get_equipes_inactives - Erreur: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@teams_bp.route('/api/delete-team/<int:equipe_id>', methods=['POST'])
+@login_required
+@csrf.exempt
+def delete_team(equipe_id):
+    """API — Supprimer une équipe (uniquement si non publiée)."""
+    if current_user.role not in ['chef_zone', 'chef_pur']:
+        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
+
+    equipe = db.session.get(Equipe, equipe_id)
+    if not equipe:
+        return jsonify({'success': False, 'error': 'Équipe non trouvée'}), 404
+
+    # Vérifier si l'équipe est publiée
+    if equipe.publie:
+        return jsonify({'success': False, 'error': 'Impossible de supprimer une équipe déjà publiée'}), 400
+
+    # Vérification des droits pour le chef de zone
+    if current_user.role == 'chef_zone':
+        possible_zones = [current_user.zone] if current_user.zone else []
+        if current_user.zone_relation:
+            possible_zones.append(current_user.zone_relation.nom)
+            possible_zones.append(current_user.zone_relation.code)
+            possible_zones.append(f"{current_user.zone_relation.nom} ({current_user.zone_relation.code})")
+        
+        possible_zones = list(set([z for z in possible_zones if z]))
+        # Note: equipe.zone peut être au format "Zone (Code)"
+        if equipe.zone not in possible_zones and equipe.chef_zone_id != current_user.id:
+            return jsonify({'success': False, 'error': 'Cette équipe n\'appartient pas à votre zone'}), 403
+
+    try:
+        team_name = equipe.nom_equipe
+        
+        # Gérer les relations avec Intervention pour éviter l'IntegrityError
+        # On met equipe_id à None pour toutes les interventions liées à cette équipe
+        from models import Intervention
+        Intervention.query.filter_by(equipe_id=equipe_id).update({Intervention.equipe_id: None})
+        
+        db.session.delete(equipe)
+        db.session.commit()
+
+        log_activity(
+            user_id=current_user.id,
+            action='delete',
+            module='teams',
+            entity_id=equipe_id,
+            entity_name=f"Équipe {team_name}",
+            details={'deleted_from_db': True}
+        )
+
+        return jsonify({'success': True, 'message': f'Équipe "{team_name}" supprimée définitivement avec succès'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500

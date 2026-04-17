@@ -568,7 +568,7 @@
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Équipe (optionnel)</label>
-                        <select class="form-select" id="groupEquipe">
+                        <select class="form-select" id="groupEquipe" onchange="onGroupEquipeChange()">
                             <option value="">Aucune équipe</option>
                             {% for equipe in equipes %}
                             <option value="{{ equipe.id }}"
@@ -1139,8 +1139,8 @@
         </div>
         <div class="mb-3">
             <label class="form-label">Technicien</label>
-            <select class="form-select" id="modalTechnicien" required onchange="updateCompatibilityHint()">
-                <option value="">Sélectionner un technicien</option>
+            <select class="form-select" id="modalTechnicien" onchange="updateCompatibilityHint()">
+                <option value="">Sélectionner un technicien (optionnel si équipe choisie)</option>
                 ${technicienOptions}
             </select>
             <small class="form-text text-muted d-block mt-2">
@@ -1153,7 +1153,7 @@
         </div>
         <div class="mb-3">
             <label class="form-label">Équipe (optionnel)</label>
-            <select class="form-select" id="modalEquipe">
+            <select class="form-select" id="modalEquipe" onchange="onModalEquipeChange()">
                 <option value="">Aucune équipe</option>
                 ${equipeOptions}
             </select>
@@ -1231,8 +1231,8 @@
         const equipeId = document.getElementById('modalEquipe').value;
         const commentaire = document.getElementById('modalCommentaire').value;
 
-        if (!technicienId) {
-            showAlert('warning', 'Veuillez sélectionner un technicien.');
+        if (!technicienId && !equipeId) {
+            showAlert('warning', 'Veuillez sélectionner au moins un technicien ou une équipe.');
             return;
         }
 
@@ -1349,14 +1349,54 @@
             });
     }
 
+    function onModalEquipeChange() {
+        const equipeId = document.getElementById('modalEquipe').value;
+        if (!equipeId) return;
+
+        const equipes = JSON.parse('{{ equipes_json|tojson|safe }}');
+        const equipe = equipes.find(e => e.id == equipeId);
+        
+        if (equipe && equipe.membres) {
+            // Trouver le technicien dans les membres
+            const membreTech = equipe.membres.find(m => m.type_membre === 'technicien') || (equipe.membres.length === 1 ? equipe.membres[0] : null);
+            
+            if (membreTech && membreTech.technicien_id) {
+                const techSelect = document.getElementById('modalTechnicien');
+                if (!techSelect.value) { // N'écrase que si rien n'est sélectionné
+                    techSelect.value = membreTech.technicien_id;
+                    updateCompatibilityHint();
+                }
+            }
+        }
+    }
+
+    function onGroupEquipeChange() {
+        const equipeId = document.getElementById('groupEquipe').value;
+        if (!equipeId) return;
+
+        const equipes = JSON.parse('{{ equipes_json|tojson|safe }}');
+        const equipe = equipes.find(e => e.id == equipeId);
+        
+        if (equipe && equipe.membres) {
+            // Trouver le technicien dans les membres
+            const membreTech = equipe.membres.find(m => m.type_membre === 'technicien') || (equipe.membres.length === 1 ? equipe.membres[0] : null);
+            
+            if (membreTech && membreTech.technicien_id) {
+                const techSelect = document.getElementById('groupTechnicien');
+                if (!techSelect.value) {
+                    techSelect.value = membreTech.technicien_id;
+                    updateTechnicienCompatibility();
+                }
+            }
+        }
+    }
+
     function affecterSelection() {
-        const technicienSelect = document.getElementById('groupTechnicien');
-        const selectedOption = technicienSelect.options[technicienSelect.selectedIndex];
-        const technicienId = selectedOption.value;
+        const technicienId = document.getElementById('groupTechnicien').value;
         const equipeId = document.getElementById('groupEquipe').value;
 
-        if (!technicienId) {
-            showAlert('warning', 'Veuillez sélectionner un technicien.');
+        if (!technicienId && !equipeId) {
+            showAlert('warning', 'Veuillez sélectionner un technicien ou une équipe.');
             return;
         }
 
@@ -1365,20 +1405,23 @@
             return;
         }
 
-        // Vérifier la compatibilité de toutes les demandes sélectionnées
-        const incompatibleDemandes = selectedDemandes.filter(demandeId => {
-            const row = document.querySelector(`tr[data-demande-id="${demandeId}"]`);
-            return row && !checkTechnicienCompatibility(
-                selectedOption.dataset.technologies,
-                selectedOption.dataset.zone,
-                row.dataset.technologie,
-                row.dataset.zone
-            );
-        });
+        // Vérifier la compatibilité (si technicien choisi)
+        if (technicienId) {
+            const technicienOption = document.querySelector(`#groupTechnicien option[value="${technicienId}"]`);
+            const incompatibleDemandes = selectedDemandes.filter(demandeId => {
+                const row = document.querySelector(`tr[data-demande-id="${demandeId}"]`);
+                return row && !checkTechnicienCompatibility(
+                    technicienOption.dataset.technologies,
+                    technicienOption.dataset.zone,
+                    row.dataset.technologie,
+                    row.dataset.zone
+                );
+            });
 
-        if (incompatibleDemandes.length > 0) {
-            if (!confirm(`${incompatibleDemandes.length} demande(s) ne sont pas compatibles avec ce technicien. Voulez-vous continuer ?`)) {
-                return;
+            if (incompatibleDemandes.length > 0) {
+                if (!confirm(`${incompatibleDemandes.length} demande(s) ne sont pas compatibles avec ce technicien. Voulez-vous continuer ?`)) {
+                    return;
+                }
             }
         }
 
@@ -1392,12 +1435,13 @@
                 setTimeout(() => {
                     affecterDemande(demandeId, technicienId, equipeId, 'Affectation groupée', 'manuel_groupe')
                         .then(result => {
-                            if (result.success) {
+                            if (result && result.success) {
                                 completed++;
                                 updateGroupAffectationProgress(completed, total);
                             }
                             resolve(result);
-                        });
+                        })
+                        .catch(() => resolve(null));
                 }, index * 200);
             });
         });

@@ -159,7 +159,8 @@
     <section id="dashboard" class="dashboard-section active-section">
         <div class="d-flex justify-content-between align-items-center mb-4">
             {% if current_user.role == 'magasinier' %}
-            <h1 class="mt-4"><i class="fas fa-warehouse me-2"></i>Tableau de Bord Magasinier — Zone {{ current_user.zone.nom if current_user.zone else 'Zone' }}</h1>
+            <h1 class="mt-4"><i class="fas fa-warehouse me-2"></i>Tableau de Bord Magasinier — Zone {{
+                current_user.zone.nom if current_user.zone else 'Zone' }}</h1>
             {% else %}
             <h1 class="mt-4"><i class="fas fa-chart-line me-2"></i>Tableau de Bord - Gestion des Stocks</h1>
             {% endif %}
@@ -169,7 +170,7 @@
         <div class="row g-3 mb-4">
             <div class="col-md-3 col-sm-6">
                 <a href="{{ url_for('stock.gestion_stock') }}#produits"
-                   class="btn btn-outline-primary w-100 py-3 d-flex flex-column align-items-center justify-content-center shadow-sm">
+                    class="btn btn-outline-primary w-100 py-3 d-flex flex-column align-items-center justify-content-center shadow-sm">
                     <i class="fas fa-boxes mb-2 fa-lg"></i>
                     <span class="fw-semibold">Gestion des produits</span>
                     <small class="text-muted">Liste complète, création, édition</small>
@@ -177,7 +178,7 @@
             </div>
             <div class="col-md-3 col-sm-6">
                 <a href="{{ url_for('stock.gestion_stock') }}#mouvements"
-                   class="btn btn-outline-secondary w-100 py-3 d-flex flex-column align-items-center justify-content-center shadow-sm">
+                    class="btn btn-outline-secondary w-100 py-3 d-flex flex-column align-items-center justify-content-center shadow-sm">
                     <i class="fas fa-exchange-alt mb-2 fa-lg"></i>
                     <span class="fw-semibold">Journal des mouvements</span>
                     <small class="text-muted">Suivi des entrées / sorties</small>
@@ -185,7 +186,7 @@
             </div>
             <div class="col-md-3 col-sm-6">
                 <a href="{{ url_for('stock.gestion_stock') }}#categories"
-                   class="btn btn-outline-warning w-100 py-3 d-flex flex-column align-items-center justify-content-center shadow-sm">
+                    class="btn btn-outline-warning w-100 py-3 d-flex flex-column align-items-center justify-content-center shadow-sm">
                     <i class="fas fa-layer-group mb-2 fa-lg"></i>
                     <span class="fw-semibold">Catégories</span>
                     <small class="text-muted">Vue par familles de produits</small>
@@ -193,26 +194,39 @@
             </div>
             <div class="col-md-3 col-sm-6">
                 <a href="{{ url_for('stock.liste_fournisseurs') }}"
-                   class="btn btn-outline-success w-100 py-3 d-flex flex-column align-items-center justify-content-center shadow-sm">
+                    class="btn btn-outline-success w-100 py-3 d-flex flex-column align-items-center justify-content-center shadow-sm">
                     <i class="fas fa-truck mb-2 fa-lg"></i>
                     <span class="fw-semibold">Fournisseurs</span>
                     <small class="text-muted">Référentiel des partenaires</small>
                 </a>
             </div>
+
             {% if current_user.role in ['admin', 'chef_pur', 'gestionnaire_stock'] %}
             <div class="col-md-3 col-sm-6">
-                <button type="button" class="btn btn-primary w-100 py-3 d-flex flex-column align-items-center justify-content-center shadow-sm" data-bs-toggle="modal" data-bs-target="#importSonatelModal">
+                <button type="button"
+                    class="btn btn-primary w-100 py-3 d-flex flex-column align-items-center justify-content-center shadow-sm"
+                    data-bs-toggle="modal" data-bs-target="#importSonatelModal">
                     <i class="fas fa-file-excel mb-2 fa-lg"></i>
                     <span class="fw-semibold">Import Stock Sonatel</span>
                     <small class="text-white-50">Charger fichier .xlsx</small>
                 </button>
             </div>
             <div class="col-md-3 col-sm-6">
-                <button type="button" class="btn btn-info w-100 py-3 d-flex flex-column align-items-center justify-content-center shadow-sm" data-bs-toggle="modal" data-bs-target="#dispatchModal">
+                <button type="button"
+                    class="btn btn-info w-100 py-3 d-flex flex-column align-items-center justify-content-center shadow-sm"
+                    data-bs-toggle="modal" data-bs-target="#dispatchModal">
                     <i class="fas fa-shuttle-van mb-2 fa-lg"></i>
                     <span class="fw-semibold">Dispatching Régional</span>
                     <small class="text-white-50">Dakar vers Mbour/Kaolack</small>
                 </button>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <a href="#zones-suivi"
+                    class="btn btn-outline-dark w-100 py-3 d-flex flex-column align-items-center justify-content-center shadow-sm">
+                    <i class="fas fa-map-marked-alt mb-2 fa-lg"></i>
+                    <span class="fw-semibold">Suivi des Régions</span>
+                    <small class="text-muted">Retours & Justifications</small>
+                </a>
             </div>
             {% endif %}
         </div>
@@ -231,7 +245,8 @@
                         </div>
                     </div>
                     <div class="card-footer d-flex align-items-center justify-content-between">
-                        <a class="small text-white stretched-link" href="{{ url_for('stock.page_produits_en_stock') }}">Voir détails</a>
+                        <a class="small text-white stretched-link"
+                            href="{{ url_for('stock.page_produits_en_stock') }}">Voir détails</a>
                         <div class="small text-white"><i class="fas fa-angle-right"></i></div>
                     </div>
                 </div>
@@ -248,7 +263,8 @@
                         </div>
                     </div>
                     <div class="card-footer d-flex align-items-center justify-content-between">
-                        <a class="small text-white stretched-link" href="{{ url_for('stock.page_entrees_mois') }}">Voir détails</a>
+                        <a class="small text-white stretched-link" href="{{ url_for('stock.page_entrees_mois') }}">Voir
+                            détails</a>
                         <div class="small text-white"><i class="fas fa-angle-right"></i></div>
                     </div>
                 </div>
@@ -265,7 +281,8 @@
                         </div>
                     </div>
                     <div class="card-footer d-flex align-items-center justify-content-between">
-                        <a class="small text-white stretched-link" href="{{ url_for('stock.page_sorties_mois') }}">Voir détails</a>
+                        <a class="small text-white stretched-link" href="{{ url_for('stock.page_sorties_mois') }}">Voir
+                            détails</a>
                         <div class="small text-white"><i class="fas fa-angle-right"></i></div>
                     </div>
                 </div>
@@ -282,7 +299,8 @@
                         </div>
                     </div>
                     <div class="card-footer d-flex align-items-center justify-content-between">
-                        <a class="small text-white stretched-link" href="{{ url_for('stock.page_produits_faibles_stocks') }}">Voir détails</a>
+                        <a class="small text-white stretched-link"
+                            href="{{ url_for('stock.page_produits_faibles_stocks') }}">Voir détails</a>
                         <div class="small text-white"><i class="fas fa-angle-right"></i></div>
                     </div>
                 </div>
@@ -316,317 +334,328 @@
         </div>
     </section>
 
-<!-- Section Gestion des Produits -->
-<section id="produits" class="dashboard-section py-4" style="display: none;">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="fas fa-boxes me-2"></i>Gestion des Produits</h2>
-        <a href="{{ url_for('stock.ajouter_produit') }}" class="btn btn-primary">
-            <i class="fas fa-plus me-1"></i> Nouveau Produit
-        </a>
-    </div>
-
-    <!-- Résumé des emplacements -->
-    <div class="card mb-4 shadow-sm">
-        <div class="card-header bg-white border-bottom-0">
-            <h5 class="mb-0">
-                <i class="fas fa-map-marker-alt text-primary me-2"></i>
-                Résumé des Emplacements
-            </h5>
+    <!-- Section Gestion des Produits -->
+    <section id="produits" class="dashboard-section py-4" style="display: none;">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-boxes me-2"></i>Gestion des Produits</h2>
+            <a href="{{ url_for('stock.ajouter_produit') }}" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i> Nouveau Produit
+            </a>
         </div>
-        <div class="card-body p-4">
-            <div class="row g-4">
-                {% if emplacements %}
-                {% set colors = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#6f42c1', '#fd7e14', '#20c9a6']
-                %}
-                {% for emplacement in emplacements %}
-                {% set color_index = loop.index0 % colors|length %}
-                <div class="col-xl-3 col-md-4 col-sm-6">
-                    <div class="card h-100 border-0 shadow-sm"
-                        style="border-left: 4px solid {{ colors[color_index] }} !important; transition: transform 0.2s, box-shadow 0.2s;">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-center">
+
+        <!-- Résumé des emplacements -->
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header bg-white border-bottom-0">
+                <h5 class="mb-0">
+                    <i class="fas fa-map-marker-alt text-primary me-2"></i>
+                    Résumé des Emplacements
+                </h5>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-4">
+                    {% if emplacements %}
+                    {% set colors = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#6f42c1', '#fd7e14',
+                    '#20c9a6']
+                    %}
+                    {% for emplacement in emplacements %}
+                    {% set color_index = loop.index0 % colors|length %}
+                    <div class="col-xl-3 col-md-4 col-sm-6">
+                        <div class="card h-100 border-0 shadow-sm"
+                            style="border-left: 4px solid {{ colors[color_index] }} !important; transition: transform 0.2s, box-shadow 0.2s;">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <span class="text-uppercase small fw-bold"
+                                            style="color: {{ colors[color_index] }}">{{ emplacement.nom }}</span>
+                                        <h3 class="mt-2 mb-0">{{ emplacement.nombre }} <small
+                                                class="text-muted">produit{%
+                                                if emplacement.nombre > 1 %}s{% endif %}</small></h3>
+                                    </div>
+                                    <div class="p-3 rounded-circle"
+                                        style="background-color: {{ colors[color_index] }}20;">
+                                        <i class="fas fa-warehouse"
+                                            style="color: {{ colors[color_index] }}; font-size: 1.5rem;"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    <div class="col-12 mt-3">
+                        <div class="alert alert-light border" role="alert">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-info-circle text-primary me-2"></i>
                                 <div>
-                                    <span class="text-uppercase small fw-bold"
-                                        style="color: {{ colors[color_index] }}">{{ emplacement.nom }}</span>
-                                    <h3 class="mt-2 mb-0">{{ emplacement.nombre }} <small class="text-muted">produit{%
-                                            if emplacement.nombre > 1 %}s{% endif %}</small></h3>
-                                </div>
-                                <div class="p-3 rounded-circle" style="background-color: {{ colors[color_index] }}20;">
-                                    <i class="fas fa-warehouse"
-                                        style="color: {{ colors[color_index] }}; font-size: 1.5rem;"></i>
+                                    <strong>Total :</strong> {{ total_produits }} produit{% if total_produits > 1 %}s{%
+                                    endif %} réparti{% if total_produits <= 1 %}{% else %}s{% endif %} dans <strong>{{
+                                        emplacements|length }} emplacement{% if emplacements|length > 1 %}s{% endif
+                                        %}</strong>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-                {% endfor %}
-                <div class="col-12 mt-3">
-                    <div class="alert alert-light border" role="alert">
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-info-circle text-primary me-2"></i>
-                            <div>
-                                <strong>Total :</strong> {{ total_produits }} produit{% if total_produits > 1 %}s{%
-                                endif %} réparti{% if total_produits <= 1 %}{% else %}s{% endif %} dans <strong>{{
-                                    emplacements|length }} emplacement{% if emplacements|length > 1 %}s{% endif
-                                    %}</strong>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% else %}
-                <div class="col-12">
-                    <div class="alert alert-info border-0 shadow-sm">
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-info-circle me-3" style="font-size: 1.5rem;"></i>
-                            <div>
-                                <h6 class="alert-heading mb-1">Aucun emplacement trouvé</h6>
-                                <p class="mb-0">Les produits seront marqués comme "Non spécifié" jusqu'à ce que vous
-                                    leur assigniez un emplacement.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-
-    <!-- Liste des produits -->
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="mb-0">
-                <i class="fas fa-boxes me-2"></i>
-                Liste des Produits
-            </h5>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-bordered table-hover" id="dataTable" width="100%" cellspacing="0">
-                    <thead>
-                        <tr>
-                            <th>Référence</th>
-                            <th>Code-barres</th>
-                            <th>Désignation</th>
-                            <th>Catégorie</th>
-                            <th>Emplacement</th>
-                            <th>Stock</th>
-                            <th>Seuil d'alerte</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for produit in produits %}
-                        <tr class="{% if produit.quantite <= produit.seuil_alerte %}table-warning{% endif %}">
-                            <td>{{ produit.reference }}</td>
-                            <td class="text-center">
-                                {% if produit.code_barres %}
-                                <img src="{{ url_for('static', filename='barcodes/' + produit.code_barres) }}"
-                                    alt="Code-barres {{ produit.reference }}" style="max-height: 40px; width: auto;">
-                                {% else %}
-                                <span class="text-muted">Aucun</span>
-                                {% endif %}
-                            </td>
-                            <td>{{ produit.nom }}</td>
-                            <td>{{ produit.categorie.nom if produit.categorie else 'Non catégorisé' }}</td>
-                            <td>{{ produit.emplacement.designation if produit.emplacement else 'Non spécifié' }}</td>
-                            <td class="text-center">
-                                <span
-                                    class="badge {% if produit.quantite <= produit.seuil_alerte %}bg-danger{% else %}bg-success{% endif %}">
-                                    {{ produit.quantite|int }} {{ produit.unite_mesure or '' }}
-                                </span>
-                            </td>
-                            <td class="text-center">{{ produit.seuil_alerte }}{% if produit.unite_mesure %} {{
-                                produit.unite_mesure }}{% endif %}</td>
-                            <td class="text-center">
-                                <div class="btn-group" role="group" aria-label="Actions du produit">
-                                    <!-- Bouton Voir les détails -->
-                                    <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal"
-                                        data-bs-target="#detailsProduitModal" data-id="{{ produit.id }}"
-                                        title="Voir les détails" aria-label="Voir les détails du produit"
-                                        style="white-space: nowrap;">
-                                        <i class="fas fa-info-circle" aria-hidden="true"></i>
-                                        <span class="sr-only">Voir les détails du produit</span>
-                                    </button>
-
-                                    <!-- Bouton Entrée en stock -->
-                                    <a href="{{ url_for('stock.entree_stock', produit_id=produit.id) }}"
-                                        class="btn btn-sm btn-success" title="Entrée en stock">
-                                        <i class="fas fa-plus-circle"></i>
-                                    </a>
-
-                                    <!-- Bouton Sortie de stock -->
-                                    <a href="{{ url_for('stock.sortie_stock', produit_id=produit.id) }}"
-                                        class="btn btn-sm btn-warning" title="Sortie de stock" {% if produit.quantite
-                                        <=0 %} disabled aria-disabled="true" tabindex="-1" {% endif %}>
-                                        <i class="fas fa-minus-circle"></i>
-                                    </a>
-
-                                    <!-- Bouton Modifier -->
-                                    <a href="{{ url_for('stock.modifier_produit', id=produit.id) }}"
-                                        class="btn btn-sm btn-primary" title="Modifier le produit">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-
-                                    <!-- Bouton Supprimer -->
-                                    <button type="button" class="btn btn-sm btn-danger"
-                                        onclick="confirmDelete('{{ produit.id }}')" title="Supprimer le produit">
-                                        <i class="fas fa-trash-alt"></i>
-                                    </button>
+                    {% else %}
+                    <div class="col-12">
+                        <div class="alert alert-info border-0 shadow-sm">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-info-circle me-3" style="font-size: 1.5rem;"></i>
+                                <div>
+                                    <h6 class="alert-heading mb-1">Aucun emplacement trouvé</h6>
+                                    <p class="mb-0">Les produits seront marqués comme "Non spécifié" jusqu'à ce que vous
+                                        leur assigniez un emplacement.</p>
                                 </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div> <!-- Fin du tableau des produits -->
-        </div> <!-- Fin du card-body -->
-    </div> <!-- Fin de la card des produits -->
-</section>
-
-<!-- Section Journal des Mouvements -->
-<section id="mouvements" class="dashboard-section py-4" style="display: none;">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="fas fa-exchange-alt me-2"></i>Journal des Mouvements de Stock</h2>
-        <button class="btn btn-secondary" id="exporterMouvements">
-            <i class="fas fa-file-export me-1"></i> Exporter en Excel
-        </button>
-    </div>
-
-    <div class="card mb-4">
-        <div class="card-header">
-            <i class="fas fa-exchange-alt me-1"></i>
-            Journal des Mouvements de Stock
-        </div>
-        <div class="card-body">
-            <div class="row mb-3">
-                <div class="col-md-3">
-                    <label for="dateDebut" class="form-label">Date de début</label>
-                    <input type="date" class="form-control" id="dateDebut">
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
-                <div class="col-md-3">
-                    <label for="dateFin" class="form-label">Date de fin</label>
-                    <input type="date" class="form-control" id="dateFin">
-                </div>
-                <div class="col-md-3">
-                    <label for="typeMouvement" class="form-label">Type de mouvement</label>
-                    <select class="form-select" id="typeMouvement">
-                        <option value="">Tous</option>
-                        <option value="entree">Entrées</option>
-                        <option value="sortie">Sorties</option>
-                    </select>
-                </div>
-                <div class="col-md-4 d-flex align-items-end">
-                    <button class="btn btn-primary me-2" id="filtrerMouvements">
-                        <i class="fas fa-filter me-1"></i>Filtrer
-                    </button>
-                    <button type="button" class="btn btn-outline-secondary me-2" id="reinitialiserFiltres">
-                        <i class="fas fa-undo me-1"></i>Réinitialiser
-                    </button>
-                    <button class="btn btn-success" id="exporterMouvements">
-                        <i class="fas fa-file-export me-1"></i>Exporter
-                    </button>
-                </div>
-            </div>
-
-            <div class="table-responsive">
-                <table class="table table-bordered" id="mouvementsTable" width="100%" cellspacing="0">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Référence</th>
-                            <th>Désignation</th>
-                            <th>Type</th>
-                            <th>Quantité</th>
-                            <th>Prix unitaire</th>
-                            <th>Total</th>
-                            <th>Utilisateur</th>
-                            <th>Commentaire</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Les données seront chargées via AJAX -->
-                    </tbody>
             </div>
         </div>
-    </div>
-</section>
 
-<!-- Section Produits en Faible Stock -->
-<section id="produits-faibles-stocks" class="dashboard-section py-4" style="display: none;">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="fas fa-exclamation-triangle me-2"></i>Produits en Faible Stock</h2>
-        <button class="btn btn-danger" id="exporterFaiblesStocks">
-            <i class="fas fa-file-export me-1"></i> Exporter en Excel
-        </button>
-    </div>
+        <!-- Liste des produits -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-boxes me-2"></i>
+                    Liste des Produits
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover" id="dataTable" width="100%" cellspacing="0">
+                        <thead>
+                            <tr>
+                                <th>Référence</th>
+                                <th>Code-barres</th>
+                                <th>Désignation</th>
+                                <th>Catégorie</th>
+                                <th>Emplacement</th>
+                                <th>Stock</th>
+                                <th>Seuil d'alerte</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for produit in produits %}
+                            <tr class="{% if produit.quantite <= produit.seuil_alerte %}table-warning{% endif %}">
+                                <td>{{ produit.reference }}</td>
+                                <td class="text-center">
+                                    {% if produit.code_barres %}
+                                    <img src="{{ url_for('static', filename='barcodes/' + produit.code_barres) }}"
+                                        alt="Code-barres {{ produit.reference }}"
+                                        style="max-height: 40px; width: auto;">
+                                    {% else %}
+                                    <span class="text-muted">Aucun</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ produit.nom }}</td>
+                                <td>{{ produit.categorie.nom if produit.categorie else 'Non catégorisé' }}</td>
+                                <td>{{ produit.emplacement.designation if produit.emplacement else 'Non spécifié' }}
+                                </td>
+                                <td class="text-center">
+                                    <span
+                                        class="badge {% if produit.quantite <= produit.seuil_alerte %}bg-danger{% else %}bg-success{% endif %}">
+                                        {{ produit.quantite|int }} {{ produit.unite_mesure or '' }}
+                                    </span>
+                                </td>
+                                <td class="text-center">{{ produit.seuil_alerte }}{% if produit.unite_mesure %} {{
+                                    produit.unite_mesure }}{% endif %}</td>
+                                <td class="text-center">
+                                    <div class="btn-group" role="group" aria-label="Actions du produit">
+                                        <!-- Bouton Voir les détails -->
+                                        <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal"
+                                            data-bs-target="#detailsProduitModal" data-id="{{ produit.id }}"
+                                            title="Voir les détails" aria-label="Voir les détails du produit"
+                                            style="white-space: nowrap;">
+                                            <i class="fas fa-info-circle" aria-hidden="true"></i>
+                                            <span class="sr-only">Voir les détails du produit</span>
+                                        </button>
 
-    <div class="card mb-4">
-        <div class="card-header bg-danger">
-            <h5 class="mb-0 text-white">
-                <i class="fas fa-exclamation-triangle me-2"></i>
-                Produits dont la quantité est inférieure au seuil d'alerte
-            </h5>
+                                        <!-- Bouton Entrée en stock -->
+                                        <a href="{{ url_for('stock.entree_stock', produit_id=produit.id) }}"
+                                            class="btn btn-sm btn-success" title="Entrée en stock">
+                                            <i class="fas fa-plus-circle"></i>
+                                        </a>
+
+                                        <!-- Bouton Sortie de stock -->
+                                        <a href="{{ url_for('stock.sortie_stock', produit_id=produit.id) }}"
+                                            class="btn btn-sm btn-warning" title="Sortie de stock" {% if
+                                            produit.quantite <=0 %} disabled aria-disabled="true" tabindex="-1" {% endif
+                                            %}>
+                                            <i class="fas fa-minus-circle"></i>
+                                        </a>
+
+                                        <!-- Bouton Modifier -->
+                                        <a href="{{ url_for('stock.modifier_produit', id=produit.id) }}"
+                                            class="btn btn-sm btn-primary" title="Modifier le produit">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+
+                                        <!-- Bouton Supprimer -->
+                                        <button type="button" class="btn btn-sm btn-danger"
+                                            onclick="confirmDelete('{{ produit.id }}')" title="Supprimer le produit">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div> <!-- Fin du tableau des produits -->
+            </div> <!-- Fin du card-body -->
+        </div> <!-- Fin de la card des produits -->
+    </section>
+
+    <!-- Section Journal des Mouvements -->
+    <section id="mouvements" class="dashboard-section py-4" style="display: none;">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-exchange-alt me-2"></i>Journal des Mouvements de Stock</h2>
+            <button class="btn btn-secondary" id="exporterMouvements">
+                <i class="fas fa-file-export me-1"></i> Exporter en Excel
+            </button>
         </div>
-        <div class="card-body">
-            <div class="alert alert-info" role="alert">
-                <i class="fas fa-info-circle me-2"></i>
-                Retrouvez ici tous les produits dont la quantité en stock est inférieure ou égale à leur seuil d'alerte.
-                Ces produits nécessitent une réapprovision urgente.
-            </div>
 
-            <div class="table-responsive">
-                <table class="table table-bordered table-hover table-striped" id="faiblesStocksTable" width="100%" cellspacing="0">
-                    <thead class="table-danger">
-                        <tr>
-                            <th>Référence</th>
-                            <th>Code-barres</th>
-                            <th>Désignation</th>
-                            <th>Catégorie</th>
-                            <th>Emplacement</th>
-                            <th>Stock Actuel</th>
-                            <th>Seuil d'alerte</th>
-                            <th>Écart</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="faiblesStocksBody">
-                        <!-- Les données seront chargées via AJAX -->
-                    </tbody>
-                </table>
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-exchange-alt me-1"></i>
+                Journal des Mouvements de Stock
             </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-3">
+                        <label for="dateDebut" class="form-label">Date de début</label>
+                        <input type="date" class="form-control" id="dateDebut">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="dateFin" class="form-label">Date de fin</label>
+                        <input type="date" class="form-control" id="dateFin">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="typeMouvement" class="form-label">Type de mouvement</label>
+                        <select class="form-select" id="typeMouvement">
+                            <option value="">Tous</option>
+                            <option value="entree">Entrées</option>
+                            <option value="sortie">Sorties</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <button class="btn btn-primary me-2" id="filtrerMouvements">
+                            <i class="fas fa-filter me-1"></i>Filtrer
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary me-2" id="reinitialiserFiltres">
+                            <i class="fas fa-undo me-1"></i>Réinitialiser
+                        </button>
+                        <button class="btn btn-success" id="exporterMouvements">
+                            <i class="fas fa-file-export me-1"></i>Exporter
+                        </button>
+                    </div>
+                </div>
 
-            <!-- Statistiques des produits faibles -->
-            <div class="row mt-4">
-                <div class="col-md-4">
-                    <div class="card bg-light">
-                        <div class="card-body">
-                            <h6 class="card-title">Total de produits en faible stock</h6>
-                            <h3 id="totalFaiblesStocks" class="text-danger">0</h3>
+                <div class="table-responsive">
+                    <table class="table table-bordered" id="mouvementsTable" width="100%" cellspacing="0">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Référence</th>
+                                <th>Désignation</th>
+                                <th>Type</th>
+                                <th>Quantité</th>
+                                <th>Prix unitaire</th>
+                                <th>Total</th>
+                                <th>Utilisateur</th>
+                                <th>Commentaire</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Les données seront chargées via AJAX -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Section Produits en Faible Stock -->
+    <section id="produits-faibles-stocks" class="dashboard-section py-4" style="display: none;">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-exclamation-triangle me-2"></i>Produits en Faible Stock</h2>
+            <button class="btn btn-danger" id="exporterFaiblesStocks">
+                <i class="fas fa-file-export me-1"></i> Exporter en Excel
+            </button>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header bg-danger">
+                <h5 class="mb-0 text-white">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Produits dont la quantité est inférieure au seuil d'alerte
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info" role="alert">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Retrouvez ici tous les produits dont la quantité en stock est inférieure ou égale à leur seuil
+                    d'alerte.
+                    Ces produits nécessitent une réapprovision urgente.
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover table-striped" id="faiblesStocksTable" width="100%"
+                        cellspacing="0">
+                        <thead class="table-danger">
+                            <tr>
+                                <th>Référence</th>
+                                <th>Code-barres</th>
+                                <th>Désignation</th>
+                                <th>Catégorie</th>
+                                <th>Emplacement</th>
+                                <th>Stock Actuel</th>
+                                <th>Seuil d'alerte</th>
+                                <th>Écart</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="faiblesStocksBody">
+                            <!-- Les données seront chargées via AJAX -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Statistiques des produits faibles -->
+                <div class="row mt-4">
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title">Total de produits en faible stock</h6>
+                                <h3 id="totalFaiblesStocks" class="text-danger">0</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title">Quantité totale à commander</h6>
+                                <h3 id="totalCommandeNecessaire" class="text-warning">0</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title">Valeur de réapprovisionnement</h6>
+                                <h3 id="valeurReapprovisionnement" class="text-info">0 CFA</h3>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-4">
-                    <div class="card bg-light">
-                        <div class="card-body">
-                            <h6 class="card-title">Quantité totale à commander</h6>
-                            <h3 id="totalCommandeNecessaire" class="text-warning">0</h3>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card bg-light">
-                        <div class="card-body">
-                            <h6 class="card-title">Valeur de réapprovisionnement</h6>
-                            <h3 id="valeurReapprovisionnement" class="text-info">0 CFA</h3>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
-    </div>
-</section>
+    </section>
 
-</div> <!-- FIN du container-fluid px-4 -->
+
+<!-- Les modals et scripts suivent en dehors du conteneur de sections si nécessaire, ou dedans. 
+     Ici on ferme le conteneur APRES les sections qui sont plus bas. -->
 
 {% if current_user.role in ['admin', 'chef_pur', 'gestionnaire_stock'] %}
 <!-- Modal Import Sonatel -->
@@ -641,7 +670,8 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="sonatelFile" class="form-label">Sélectionnez le fichier Excel Sonatel</label>
-                        <input class="form-control" type="file" id="sonatelFile" name="file" accept=".xlsx, .xls" required>
+                        <input class="form-control" type="file" id="sonatelFile" name="file" accept=".xlsx, .xls"
+                            required>
                     </div>
                     <div id="importResults" class="mt-3 d-none">
                         <h6>Résultats de l'import:</h6>
@@ -701,283 +731,283 @@
 {% endif %}
 
 <!-- Modal Détails du Produit -->
-    <div class="modal fade" id="detailsProduitModal" tabindex="-1" aria-labelledby="detailsProduitModalLabel"
-        aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="detailsProduitModalLabel">Détails du Produit</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <h6>Informations de base</h6>
-                            <table class="table table-sm">
-                                <tr>
-                                    <th>Référence:</th>
-                                    <td id="modal-reference"></td>
-                                </tr>
-                                <tr>
-                                    <th>Désignation:</th>
-                                    <td id="modal-designation"></td>
-                                </tr>
-                                <tr>
-                                    <th>Catégorie:</th>
-                                    <td id="modal-categorie"></td>
-                                </tr>
-                                <tr>
-                                    <th>Emplacement:</th>
-                                    <td id="modal-emplacement"></td>
-                                </tr>
-                                <tr>
-                                    <th>Stock actuel:</th>
-                                    <td id="modal-stock"></td>
-                                </tr>
-                                <tr>
-                                    <th>Seuil d'alerte:</th>
-                                    <td id="modal-seuil"></td>
-                                </tr>
-                                <tr>
-                                    <th>Prix d'achat moyen:</th>
-                                    <td id="modal-prix-achat"></td>
-                                </tr>
-                                <tr>
-                                    <th>Prix de vente:</th>
-                                    <td id="modal-prix-vente"></td>
-                                </tr>
-                            </table>
-                        </div>
-                        <div class="col-md-6">
-                            <h6>Derniers mouvements</h6>
-                            <div class="table-responsive">
-                                <div id="historiqueMouvements">
-                                    <div class="text-center py-3">
-                                        <div class="spinner-border text-primary" role="status">
-                                            <span class="visually-hidden">Chargement...</span>
-                                        </div>
+<div class="modal fade" id="detailsProduitModal" tabindex="-1" aria-labelledby="detailsProduitModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="detailsProduitModalLabel">Détails du Produit</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Informations de base</h6>
+                        <table class="table table-sm">
+                            <tr>
+                                <th>Référence:</th>
+                                <td id="modal-reference"></td>
+                            </tr>
+                            <tr>
+                                <th>Désignation:</th>
+                                <td id="modal-designation"></td>
+                            </tr>
+                            <tr>
+                                <th>Catégorie:</th>
+                                <td id="modal-categorie"></td>
+                            </tr>
+                            <tr>
+                                <th>Emplacement:</th>
+                                <td id="modal-emplacement"></td>
+                            </tr>
+                            <tr>
+                                <th>Stock actuel:</th>
+                                <td id="modal-stock"></td>
+                            </tr>
+                            <tr>
+                                <th>Seuil d'alerte:</th>
+                                <td id="modal-seuil"></td>
+                            </tr>
+                            <tr>
+                                <th>Prix d'achat moyen:</th>
+                                <td id="modal-prix-achat"></td>
+                            </tr>
+                            <tr>
+                                <th>Prix de vente:</th>
+                                <td id="modal-prix-vente"></td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Derniers mouvements</h6>
+                        <div class="table-responsive">
+                            <div id="historiqueMouvements">
+                                <div class="text-center py-3">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Chargement...</span>
                                     </div>
                                 </div>
-                                <table class="table table-sm table-striped d-none" id="mouvementsProduitTable">
-                                    <thead>
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>Type</th>
-                                            <th>Quantité</th>
-                                            <th>Prix</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <!-- Les données seront chargées via JavaScript -->
-                                    </tbody>
-                                </table>
                             </div>
-                            <div class="mt-3">
-                                <h6>Évolution du stock (30 derniers jours)</h6>
-                                <canvas id="produitStockChart" height="200"></canvas>
-                            </div>
+                            <table class="table table-sm table-striped d-none" id="mouvementsProduitTable">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Type</th>
+                                        <th>Quantité</th>
+                                        <th>Prix</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Les données seront chargées via JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="mt-3">
+                            <h6>Évolution du stock (30 derniers jours)</h6>
+                            <canvas id="produitStockChart" height="200"></canvas>
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
-                    <a href="#" id="btn-editer-produit" class="btn btn-primary">
-                        <i class="fas fa-edit me-1"></i> Modifier
-                    </a>
-                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                <a href="#" id="btn-editer-produit" class="btn btn-primary">
+                    <i class="fas fa-edit me-1"></i> Modifier
+                </a>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- Modal de confirmation de suppression -->
-    <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="deleteModalLabel">Confirmer la suppression</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
-                </div>
-                <div class="modal-body">
-                    Êtes-vous sûr de vouloir supprimer ce produit ? Cette action est irréversible.
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <a href="#" id="confirmDeleteBtn" class="btn btn-danger">Supprimer</a>
-                </div>
+<!-- Modal de confirmation de suppression -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel">Confirmer la suppression</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                Êtes-vous sûr de vouloir supprimer ce produit ? Cette action est irréversible.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <a href="#" id="confirmDeleteBtn" class="btn btn-danger">Supprimer</a>
             </div>
         </div>
     </div>
-    {% endblock %}
+</div>
+{% endblock %}
 
-    {% block scripts %}
-    <!-- Inclure les bibliothèques nécessaires -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
-    <script src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap5.min.js"></script>
+{% block scripts %}
+<!-- Inclure les bibliothèques nécessaires -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap5.min.js"></script>
 
-    <script>
-        // JS pour l'Import Sonatel
-        $('#importSonatelForm').on('submit', function(e) {
-            e.preventDefault();
-            const formData = new FormData(this);
-            const btn = $('#btnSubmitImport');
-            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Traitement...');
-            
-            $.ajax({
-                url: "{{ url_for('stock.api_import_sonatel') }}",
-                type: 'POST',
-                data: formData,
-                processData: false,
-                contentType: false,
-                success: function(response) {
-                    if (response.success) {
-                        const s = response.summary;
-                        alert(`Succès! ${s.inserted_rows} articles importés.`);
-                        location.reload();
-                    } else {
-                        alert("Erreur: " + response.error);
-                    }
-                },
-                error: function() {
-                    alert("Erreur lors de l'envoi du fichier.");
-                },
-                complete: function() {
-                    btn.prop('disabled', false).text("Lancer l'import");
+<script>
+    // JS pour l'Import Sonatel
+    $('#importSonatelForm').on('submit', function (e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const btn = $('#btnSubmitImport');
+        btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Traitement...');
+
+        $.ajax({
+            url: "{{ url_for('stock.api_import_sonatel') }}",
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function (response) {
+                if (response.success) {
+                    const s = response.summary;
+                    alert(`Succès! ${s.inserted_rows} articles importés.`);
+                    location.reload();
+                } else {
+                    alert("Erreur: " + response.error);
                 }
-            });
+            },
+            error: function () {
+                alert("Erreur lors de l'envoi du fichier.");
+            },
+            complete: function () {
+                btn.prop('disabled', false).text("Lancer l'import");
+            }
+        });
+    });
+
+    // JS pour le Dispatching
+    $('#dispatchForm').on('submit', function (e) {
+        e.preventDefault();
+        const data = {
+            produit_id: $('#dispatchProduit').val(),
+            quantite: $('#dispatchQty').val(),
+            target_zone_id: $('#dispatchZone').val()
+        };
+
+        $.ajax({
+            url: "{{ url_for('stock.initier_transfert') }}",
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(data),
+            success: function (response) {
+                if (response.success) {
+                    alert("Transfert initié avec succès. En attente de réception par le magasinier.");
+                    location.reload();
+                } else {
+                    alert("Erreur: " + response.error);
+                }
+            },
+            error: function () {
+                alert("Erreur réseau.");
+            }
+        });
+    });
+
+    // Initialisation de DataTable pour la table des produits
+    $(document).ready(function () {
+        const produitsTable = $('#dataTable').DataTable({
+            paging: false, // Désactive la pagination
+            pageLength: 100, // Affiche jusqu'à 100 produits par page
+            lengthChange: false, // Désactive le sélecteur de nombre d'éléments par page
+            info: true,   // Affiche le nombre total de produits
+            language: {
+                url: 'https://cdn.datatables.net/plug-ins/1.11.5/i18n/fr-FR.json',
+                info: 'Affichage de tous les produits (_TOTAL_ au total)', // Message personnalisé pour l'information
+                infoEmpty: 'Aucun produit à afficher',
+                infoFiltered: ''
+            },
+            order: [[1, 'asc']], // Trier par désignation par défaut
+            responsive: true
         });
 
-        // JS pour le Dispatching
-        $('#dispatchForm').on('submit', function(e) {
-            e.preventDefault();
-            const data = {
-                produit_id: $('#dispatchProduit').val(),
-                quantite: $('#dispatchQty').val(),
-                target_zone_id: $('#dispatchZone').val()
-            };
-            
-            $.ajax({
-                url: "{{ url_for('stock.initier_transfert') }}",
+        // Initialisation de DataTable pour la table des mouvements
+        // Fonction utilitaire pour le débogage
+        function logDataTableInfo(message, data) {
+            console.log(`[DataTable] ${message}`, data);
+        }
+
+        const mouvementsTable = $('#mouvementsTable').DataTable({
+            // Activer le débogage
+            debug: true,
+            language: {
+                url: 'https://cdn.datatables.net/plug-ins/1.11.5/i18n/fr-FR.json',
+                processing: "<div class='spinner-border text-primary' role='status'><span class='visually-hidden'>Chargement...</span></div> Traitement en cours...",
+                zeroRecords: "Aucun mouvement trouvé",
+                info: "Affichage de _START_ à _END_ sur _TOTAL_ mouvements",
+                infoEmpty: "Aucun mouvement à afficher",
+                infoFiltered: "(filtré à partir de _MAX_ mouvements au total)",
+                search: "Rechercher:",
+                paginate: {
+                    first: "Premier",
+                    last: "Dernier",
+                    next: "Suivant",
+                    previous: "Précédent"
+                },
+                loadingRecords: "Chargement..."
+            },
+            order: [[0, 'desc']], // Trier par date décroissante par défaut
+            responsive: true,
+            processing: true,
+            serverSide: true,
+            // Désactiver le tri côté client pour les colonnes avec rendu personnalisé
+            columnDefs: [
+                { targets: [0, 4, 5, 6], orderable: false },
+                { className: 'dt-center', targets: [3, 4, 5, 6] },
+                { className: 'dt-nowrap', targets: [0, 1, 2, 7] }
+            ],
+            ajax: {
+                url: "{{ url_for('stock.api_mouvements_stock') }}",
                 type: 'POST',
                 contentType: 'application/json',
-                data: JSON.stringify(data),
-                success: function(response) {
-                    if (response.success) {
-                        alert("Transfert initié avec succès. En attente de réception par le magasinier.");
-                        location.reload();
-                    } else {
-                        alert("Erreur: " + response.error);
+                headers: {
+                    'X-CSRFToken': $('meta[name="csrf-token"]').attr('content'),
+                    'Accept': 'application/json'
+                },
+                data: function (d) {
+                    return JSON.stringify({
+                        draw: d.draw,
+                        start: d.start,
+                        length: d.length,
+                        order: d.order,
+                        search: d.search,
+                        dateDebut: $('#dateDebut').val(),
+                        dateFin: $('#dateFin').val(),
+                        typeMouvement: $('#typeMouvement').val(),
+                        csrf_token: $('meta[name="csrf-token"]').attr('content')
+                    });
+                },
+                dataSrc: function (json) {
+                    console.log('Réponse du serveur:', json);
+                    if (json.error) {
+                        console.error('Erreur du serveur:', json.error);
+                        showAlert('danger', 'Erreur', 'Une erreur est survenue lors du chargement des mouvements: ' + json.error);
+                        return [];
                     }
+                    return json.data || [];
                 },
-                error: function() {
-                    alert("Erreur réseau.");
-                }
-            });
-        });
+                error: function (xhr, error, thrown) {
+                    console.error('Erreur DataTables:', {
+                        error: error,
+                        thrown: thrown,
+                        response: xhr.responseText,
+                        status: xhr.status,
+                        statusText: xhr.statusText
+                    });
 
-        // Initialisation de DataTable pour la table des produits
-        $(document).ready(function () {
-            const produitsTable = $('#dataTable').DataTable({
-                paging: false, // Désactive la pagination
-                pageLength: 100, // Affiche jusqu'à 100 produits par page
-                lengthChange: false, // Désactive le sélecteur de nombre d'éléments par page
-                info: true,   // Affiche le nombre total de produits
-                language: {
-                    url: 'https://cdn.datatables.net/plug-ins/1.11.5/i18n/fr-FR.json',
-                    info: 'Affichage de tous les produits (_TOTAL_ au total)', // Message personnalisé pour l'information
-                    infoEmpty: 'Aucun produit à afficher',
-                    infoFiltered: ''
-                },
-                order: [[1, 'asc']], // Trier par désignation par défaut
-                responsive: true
-            });
+                    // Afficher un message d'erreur à l'utilisateur
+                    let errorMessage = 'Une erreur est survenue lors du chargement des données. ';
 
-            // Initialisation de DataTable pour la table des mouvements
-            // Fonction utilitaire pour le débogage
-            function logDataTableInfo(message, data) {
-                console.log(`[DataTable] ${message}`, data);
-            }
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMessage += 'Détails: ' + xhr.responseJSON.error;
+                    } else if (xhr.status === 0) {
+                        errorMessage += 'Impossible de se connecter au serveur. Vérifiez votre connexion internet.';
+                    } else if (xhr.status === 500) {
+                        errorMessage += 'Erreur interne du serveur. Veuillez contacter l\'administrateur.';
+                    }
 
-            const mouvementsTable = $('#mouvementsTable').DataTable({
-                // Activer le débogage
-                debug: true,
-                language: {
-                    url: 'https://cdn.datatables.net/plug-ins/1.11.5/i18n/fr-FR.json',
-                    processing: "<div class='spinner-border text-primary' role='status'><span class='visually-hidden'>Chargement...</span></div> Traitement en cours...",
-                    zeroRecords: "Aucun mouvement trouvé",
-                    info: "Affichage de _START_ à _END_ sur _TOTAL_ mouvements",
-                    infoEmpty: "Aucun mouvement à afficher",
-                    infoFiltered: "(filtré à partir de _MAX_ mouvements au total)",
-                    search: "Rechercher:",
-                    paginate: {
-                        first: "Premier",
-                        last: "Dernier",
-                        next: "Suivant",
-                        previous: "Précédent"
-                    },
-                    loadingRecords: "Chargement..."
-                },
-                order: [[0, 'desc']], // Trier par date décroissante par défaut
-                responsive: true,
-                processing: true,
-                serverSide: true,
-                // Désactiver le tri côté client pour les colonnes avec rendu personnalisé
-                columnDefs: [
-                    { targets: [0, 4, 5, 6], orderable: false },
-                    { className: 'dt-center', targets: [3, 4, 5, 6] },
-                    { className: 'dt-nowrap', targets: [0, 1, 2, 7] }
-                ],
-                ajax: {
-                    url: "{{ url_for('stock.api_mouvements_stock') }}",
-                    type: 'POST',
-                    contentType: 'application/json',
-                    headers: {
-                        'X-CSRFToken': $('meta[name="csrf-token"]').attr('content'),
-                        'Accept': 'application/json'
-                    },
-                    data: function (d) {
-                        return JSON.stringify({
-                            draw: d.draw,
-                            start: d.start,
-                            length: d.length,
-                            order: d.order,
-                            search: d.search,
-                            dateDebut: $('#dateDebut').val(),
-                            dateFin: $('#dateFin').val(),
-                            typeMouvement: $('#typeMouvement').val(),
-                            csrf_token: $('meta[name="csrf-token"]').attr('content')
-                        });
-                    },
-                    dataSrc: function (json) {
-                        console.log('Réponse du serveur:', json);
-                        if (json.error) {
-                            console.error('Erreur du serveur:', json.error);
-                            showAlert('danger', 'Erreur', 'Une erreur est survenue lors du chargement des mouvements: ' + json.error);
-                            return [];
-                        }
-                        return json.data || [];
-                    },
-                    error: function (xhr, error, thrown) {
-                        console.error('Erreur DataTables:', {
-                            error: error,
-                            thrown: thrown,
-                            response: xhr.responseText,
-                            status: xhr.status,
-                            statusText: xhr.statusText
-                        });
-
-                        // Afficher un message d'erreur à l'utilisateur
-                        let errorMessage = 'Une erreur est survenue lors du chargement des données. ';
-
-                        if (xhr.responseJSON && xhr.responseJSON.error) {
-                            errorMessage += 'Détails: ' + xhr.responseJSON.error;
-                        } else if (xhr.status === 0) {
-                            errorMessage += 'Impossible de se connecter au serveur. Vérifiez votre connexion internet.';
-                        } else if (xhr.status === 500) {
-                            errorMessage += 'Erreur interne du serveur. Veuillez contacter l\'administrateur.';
-                        }
-
-                        const $errorDiv = $(`
+                    const $errorDiv = $(`
                     <div class="alert alert-danger alert-dismissible fade show" role="alert">
                         <i class="bi bi-exclamation-triangle-fill me-2"></i>
                         ${errorMessage}
@@ -985,470 +1015,470 @@
                     </div>
                 `).insertBefore($('#mouvementsTable_wrapper'));
 
-                        // Masquer le message après 10 secondes
-                        setTimeout(function () {
-                            $errorDiv.fadeOut(400, function () { $(this).remove(); });
-                        }, 10000);
+                    // Masquer le message après 10 secondes
+                    setTimeout(function () {
+                        $errorDiv.fadeOut(400, function () { $(this).remove(); });
+                    }, 10000);
 
-                        // Retourner un tableau vide pour éviter les erreurs
-                        return [];
+                    // Retourner un tableau vide pour éviter les erreurs
+                    return [];
+                }
+            },
+            columns: [
+                {
+                    data: 'date',
+                    render: function (data) {
+                        if (!data) return '';
+                        try {
+                            const date = new Date(data);
+                            return date.toLocaleDateString('fr-FR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            });
+                        } catch (e) {
+                            console.error('Erreur de formatage de date:', e);
+                            return data;
+                        }
                     }
                 },
-                columns: [
-                    {
-                        data: 'date',
-                        render: function (data) {
-                            if (!data) return '';
-                            try {
-                                const date = new Date(data);
-                                return date.toLocaleDateString('fr-FR', {
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                });
-                            } catch (e) {
-                                console.error('Erreur de formatage de date:', e);
-                                return data;
-                            }
-                        }
-                    },
-                    {
-                        data: 'reference',
-                        defaultContent: 'N/A',
-                        render: function (data) {
-                            return data || 'N/A';
-                        }
-                    },
-                    {
-                        data: 'designation',
-                        defaultContent: 'Produit inconnu',
-                        render: function (data) {
-                            return data || 'Produit inconnu';
-                        }
-                    },
-                    {
-                        data: 'type_mouvement',
-                        render: function (data, type, row) {
-                            if (!data) return '';
-                            const typeClass = data === 'entree' ? 'success' :
-                                (data === 'sortie' ? 'danger' : 'warning');
-                            const typeText = data === 'entree' ? 'Entrée' :
-                                (data === 'sortie' ? 'Sortie' : data.charAt(0).toUpperCase() + data.slice(1));
-                            return `<span class="badge bg-${typeClass}">${typeText}</span>`;
-                        },
-                        defaultContent: ''
-                    },
-                    {
-                        data: 'quantite',
-                        render: function (data, type, row) {
-                            if (data === undefined || data === null) return '0';
-                            const quantite = parseFloat(data);
-                            const typeClass = row.type_mouvement === 'entree' ? 'text-success' : 'text-danger';
-                            const prefix = row.type_mouvement === 'entree' ? '+' : (row.type_mouvement === 'sortie' ? '-' : '');
-                            return `<span class="${typeClass} fw-bold">${prefix}${quantite.toFixed(2)}</span>`;
-                        },
-                        className: 'text-end',
-                        defaultContent: '0'
-                    },
-                    {
-                        data: 'prix_unitaire',
-                        render: function (data) {
-                            if (data === undefined || data === null || data === 0) return '-';
-                            return parseFloat(data).toLocaleString('fr-FR', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2
-                            }) + ' CFA';
-                        },
-                        className: 'text-end',
-                        defaultContent: '-'
-                    },
-                    {
-                        data: 'montant_total',
-                        render: function (data, type, row) {
-                            if (data === undefined || data === null || data === 0) {
-                                // Essayer de calculer le montant total si non fourni
-                                if (row.quantite && row.prix_unitaire) {
-                                    const montant = parseFloat(row.quantite) * parseFloat(row.prix_unitaire);
-                                    return montant.toLocaleString('fr-FR', {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: 2
-                                    }) + ' CFA';
-                                }
-                                return '-';
-                            }
-                            return parseFloat(data).toLocaleString('fr-FR', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2
-                            }) + ' CFA';
-                        },
-                        className: 'text-end fw-bold',
-                        defaultContent: '-'
-                    },
-                    {
-                        data: 'utilisateur',
-                        defaultContent: 'Système',
-                        render: function (data) {
-                            return data || 'Système';
-                        }
-                    },
-                    {
-                        data: 'commentaire',
-                        defaultContent: '',
-                        render: function (data) {
-                            return data || '';
-                        }
+                {
+                    data: 'reference',
+                    defaultContent: 'N/A',
+                    render: function (data) {
+                        return data || 'N/A';
                     }
-                ]
-            });
-
-            // Gestion du filtrage des mouvements
-            $('#filtrerMouvements').click(function () {
-                mouvementsTable.ajax.reload();
-            });
-
-            // Initialisation des graphiques
-            initCharts();
-
-            $('#ajouterProduitBtn').click(function () {
-                window.location.href = "{{ url_for('stock.ajouter_produit') }}";
-            });
-
-            // Chargement des statistiques
-            loadStats();
+                },
+                {
+                    data: 'designation',
+                    defaultContent: 'Produit inconnu',
+                    render: function (data) {
+                        return data || 'Produit inconnu';
+                    }
+                },
+                {
+                    data: 'type_mouvement',
+                    render: function (data, type, row) {
+                        if (!data) return '';
+                        const typeClass = data === 'entree' ? 'success' :
+                            (data === 'sortie' ? 'danger' : 'warning');
+                        const typeText = data === 'entree' ? 'Entrée' :
+                            (data === 'sortie' ? 'Sortie' : data.charAt(0).toUpperCase() + data.slice(1));
+                        return `<span class="badge bg-${typeClass}">${typeText}</span>`;
+                    },
+                    defaultContent: ''
+                },
+                {
+                    data: 'quantite',
+                    render: function (data, type, row) {
+                        if (data === undefined || data === null) return '0';
+                        const quantite = parseFloat(data);
+                        const typeClass = row.type_mouvement === 'entree' ? 'text-success' : 'text-danger';
+                        const prefix = row.type_mouvement === 'entree' ? '+' : (row.type_mouvement === 'sortie' ? '-' : '');
+                        return `<span class="${typeClass} fw-bold">${prefix}${quantite.toFixed(2)}</span>`;
+                    },
+                    className: 'text-end',
+                    defaultContent: '0'
+                },
+                {
+                    data: 'prix_unitaire',
+                    render: function (data) {
+                        if (data === undefined || data === null || data === 0) return '-';
+                        return parseFloat(data).toLocaleString('fr-FR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        }) + ' CFA';
+                    },
+                    className: 'text-end',
+                    defaultContent: '-'
+                },
+                {
+                    data: 'montant_total',
+                    render: function (data, type, row) {
+                        if (data === undefined || data === null || data === 0) {
+                            // Essayer de calculer le montant total si non fourni
+                            if (row.quantite && row.prix_unitaire) {
+                                const montant = parseFloat(row.quantite) * parseFloat(row.prix_unitaire);
+                                return montant.toLocaleString('fr-FR', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2
+                                }) + ' CFA';
+                            }
+                            return '-';
+                        }
+                        return parseFloat(data).toLocaleString('fr-FR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        }) + ' CFA';
+                    },
+                    className: 'text-end fw-bold',
+                    defaultContent: '-'
+                },
+                {
+                    data: 'utilisateur',
+                    defaultContent: 'Système',
+                    render: function (data) {
+                        return data || 'Système';
+                    }
+                },
+                {
+                    data: 'commentaire',
+                    defaultContent: '',
+                    render: function (data) {
+                        return data || '';
+                    }
+                }
+            ]
         });
 
-        // Fonction pour confirmer la suppression d'un produit
-        function confirmDelete(produitId) {
-            console.log('[DEBUG] confirmDelete appelée avec ID:', produitId);
+        // Gestion du filtrage des mouvements
+        $('#filtrerMouvements').click(function () {
+            mouvementsTable.ajax.reload();
+        });
 
-            // Récupérer le bouton qui a déclenché l'événement
-            const deleteBtn = event.target.closest('button') || event.target;
-            const originalHtml = deleteBtn.innerHTML;
+        // Initialisation des graphiques
+        initCharts();
 
-            // Vérifier que l'ID est valide
-            if (!produitId) {
-                console.error('[ERREUR] Aucun ID de produit fourni');
-                showAlert('danger', 'Erreur: Aucun produit sélectionné');
-                return false;
-            }
+        $('#ajouterProduitBtn').click(function () {
+            window.location.href = "{{ url_for('stock.ajouter_produit') }}";
+        });
 
-            // Afficher une boîte de dialogue de confirmation
-            if (!confirm('Êtes-vous sûr de vouloir supprimer ce produit ? Cette action est irréversible.')) {
-                console.log('[INFO] Suppression annulée par l\'utilisateur');
-                return false;
-            }
+        // Chargement des statistiques
+        loadStats();
+    });
 
-            console.log('[DEBUG] Confirmation reçue, préparation de la suppression du produit ID:', produitId);
+    // Fonction pour confirmer la suppression d'un produit
+    function confirmDelete(produitId) {
+        console.log('[DEBUG] confirmDelete appelée avec ID:', produitId);
 
-            // Désactiver le bouton et afficher un indicateur de chargement
-            deleteBtn.disabled = true;
-            deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Suppression...';
+        // Récupérer le bouton qui a déclenché l'événement
+        const deleteBtn = event.target.closest('button') || event.target;
+        const originalHtml = deleteBtn.innerHTML;
 
-            // Créer un formulaire pour envoyer la requête
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = `/gestion-stock/produit/supprimer/${produitId}`;
-
-            // Ajouter le token CSRF
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-            if (csrfToken) {
-                const csrfInput = document.createElement('input');
-                csrfInput.type = 'hidden';
-                csrfInput.name = 'csrf_token';
-                csrfInput.value = csrfToken;
-                form.appendChild(csrfInput);
-            }
-
-            // Rétablir le bouton en cas d'erreur après 5 secondes
-            const timeoutId = setTimeout(() => {
-                if (deleteBtn.disabled) {
-                    deleteBtn.disabled = false;
-                    deleteBtn.innerHTML = originalHtml;
-                    showAlert('warning', 'La suppression a pris trop de temps. Veuillez réessayer.');
-                }
-            }, 5000);
-
-            // Ajouter le formulaire à la page et le soumettre
-            document.body.appendChild(form);
-            console.log('[DEBUG] Soumission du formulaire de suppression vers:', form.action);
-            form.submit();
-
+        // Vérifier que l'ID est valide
+        if (!produitId) {
+            console.error('[ERREUR] Aucun ID de produit fourni');
+            showAlert('danger', 'Erreur: Aucun produit sélectionné');
             return false;
         }
 
-        // Initialisation des graphiques
-        function initCharts() {
-            try {
-                console.log('Initialisation des graphiques...');
+        // Afficher une boîte de dialogue de confirmation
+        if (!confirm('Êtes-vous sûr de vouloir supprimer ce produit ? Cette action est irréversible.')) {
+            console.log('[INFO] Suppression annulée par l\'utilisateur');
+            return false;
+        }
 
-                // Initialiser l'objet stockCharts s'il n'existe pas
-                window.stockCharts = window.stockCharts || {};
+        console.log('[DEBUG] Confirmation reçue, préparation de la suppression du produit ID:', produitId);
 
-                // Détruire les graphiques existants s'ils existent
-                if (window.stockCharts.movements) {
-                    try {
-                        window.stockCharts.movements.destroy();
-                    } catch (e) {
-                        console.error('Erreur lors de la destruction du graphique des mouvements:', e);
-                    }
+        // Désactiver le bouton et afficher un indicateur de chargement
+        deleteBtn.disabled = true;
+        deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Suppression...';
+
+        // Créer un formulaire pour envoyer la requête
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/gestion-stock/produit/supprimer/${produitId}`;
+
+        // Ajouter le token CSRF
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+        if (csrfToken) {
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = csrfToken;
+            form.appendChild(csrfInput);
+        }
+
+        // Rétablir le bouton en cas d'erreur après 5 secondes
+        const timeoutId = setTimeout(() => {
+            if (deleteBtn.disabled) {
+                deleteBtn.disabled = false;
+                deleteBtn.innerHTML = originalHtml;
+                showAlert('warning', 'La suppression a pris trop de temps. Veuillez réessayer.');
+            }
+        }, 5000);
+
+        // Ajouter le formulaire à la page et le soumettre
+        document.body.appendChild(form);
+        console.log('[DEBUG] Soumission du formulaire de suppression vers:', form.action);
+        form.submit();
+
+        return false;
+    }
+
+    // Initialisation des graphiques
+    function initCharts() {
+        try {
+            console.log('Initialisation des graphiques...');
+
+            // Initialiser l'objet stockCharts s'il n'existe pas
+            window.stockCharts = window.stockCharts || {};
+
+            // Détruire les graphiques existants s'ils existent
+            if (window.stockCharts.movements) {
+                try {
+                    window.stockCharts.movements.destroy();
+                } catch (e) {
+                    console.error('Erreur lors de la destruction du graphique des mouvements:', e);
                 }
+            }
 
-                if (window.stockCharts.categories) {
-                    try {
-                        window.stockCharts.categories.destroy();
-                    } catch (e) {
-                        console.error('Erreur lors de la destruction du graphique des catégories:', e);
-                    }
+            if (window.stockCharts.categories) {
+                try {
+                    window.stockCharts.categories.destroy();
+                } catch (e) {
+                    console.error('Erreur lors de la destruction du graphique des catégories:', e);
                 }
+            }
 
-                // Vérifier que les éléments canvas existent avant de continuer
-                const movementsCanvas = document.getElementById('stockMovementsChart');
-                const categoriesCanvas = document.getElementById('categoryPieChart');
+            // Vérifier que les éléments canvas existent avant de continuer
+            const movementsCanvas = document.getElementById('stockMovementsChart');
+            const categoriesCanvas = document.getElementById('categoryPieChart');
 
-                if (!movementsCanvas || !categoriesCanvas) {
-                    console.error('Impossible de trouver les éléments canvas pour les graphiques');
-                    return;
-                }
+            if (!movementsCanvas || !categoriesCanvas) {
+                console.error('Impossible de trouver les éléments canvas pour les graphiques');
+                return;
+            }
 
-                // Récupérer les contextes des canvas
-                const movementsCtx = movementsCanvas.getContext('2d');
-                const categoriesCtx = categoriesCanvas.getContext('2d');
+            // Récupérer les contextes des canvas
+            const movementsCtx = movementsCanvas.getContext('2d');
+            const categoriesCtx = categoriesCanvas.getContext('2d');
 
-                // Créer les graphiques
-                window.stockCharts.movements = new Chart(movementsCtx, {
-                    type: 'line',
-                    data: {
-                        labels: [],
-                        datasets: [
-                            {
-                                label: 'Entrées',
-                                data: [],
-                                borderColor: 'rgb(75, 192, 192)',
-                                tension: 0.1,
-                                fill: false
-                            },
-                            {
-                                label: 'Sorties',
-                                data: [],
-                                borderColor: 'rgb(255, 99, 132)',
-                                tension: 0.1,
-                                fill: false
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: {
-                                position: 'top',
-                            },
-                            title: {
-                                display: true,
-                                text: 'Mouvements de stock sur 30 jours'
-                            }
-                        },
-                        scales: {
-                            y: {
-                                beginAtZero: true
-                            }
-                        }
-                    }
-                });
-
-                window.stockCharts.categories = new Chart(categoriesCtx, {
-                    type: 'pie',
-                    data: {
-                        labels: [],
-                        datasets: [{
+            // Créer les graphiques
+            window.stockCharts.movements = new Chart(movementsCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Entrées',
                             data: [],
-                            backgroundColor: [
-                                'rgba(255, 99, 132, 0.7)',
-                                'rgba(54, 162, 235, 0.7)',
-                                'rgba(255, 206, 86, 0.7)',
-                                'rgba(75, 192, 192, 0.7)',
-                                'rgba(153, 102, 255, 0.7)',
-                                'rgba(255, 159, 64, 0.7)'
-                            ],
-                            borderWidth: 1
-                        }]
+                            borderColor: 'rgb(75, 192, 192)',
+                            tension: 0.1,
+                            fill: false
+                        },
+                        {
+                            label: 'Sorties',
+                            data: [],
+                            borderColor: 'rgb(255, 99, 132)',
+                            tension: 0.1,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: 'Mouvements de stock sur 30 jours'
+                        }
                     },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                position: 'right',
-                            },
-                            title: {
-                                display: false
-                            }
+                    scales: {
+                        y: {
+                            beginAtZero: true
                         }
                     }
-                });
+                }
+            });
 
-                console.log('Graphiques initialisés avec succès');
+            window.stockCharts.categories = new Chart(categoriesCtx, {
+                type: 'pie',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.7)',
+                            'rgba(54, 162, 235, 0.7)',
+                            'rgba(255, 206, 86, 0.7)',
+                            'rgba(75, 192, 192, 0.7)',
+                            'rgba(153, 102, 255, 0.7)',
+                            'rgba(255, 159, 64, 0.7)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                        },
+                        title: {
+                            display: false
+                        }
+                    }
+                }
+            });
 
-            } catch (error) {
-                console.error('Erreur lors de l\'initialisation des graphiques:', error);
-                // Afficher un message d'erreur à l'utilisateur
-                const errorContainer = document.querySelector('.container-fluid .row:first-child') || document.body;
-                if (errorContainer) {
-                    errorContainer.insertAdjacentHTML('afterend', `
+            console.log('Graphiques initialisés avec succès');
+
+        } catch (error) {
+            console.error('Erreur lors de l\'initialisation des graphiques:', error);
+            // Afficher un message d'erreur à l'utilisateur
+            const errorContainer = document.querySelector('.container-fluid .row:first-child') || document.body;
+            if (errorContainer) {
+                errorContainer.insertAdjacentHTML('afterend', `
                 <div class="alert alert-danger mt-3">
                     Erreur lors de l'initialisation des graphiques: ${error.message}
                 </div>
             `);
-                }
             }
         }
+    }
 
-        // Chargement des statistiques via AJAX
-        function loadStats() {
-            console.log('Chargement des statistiques...');
+    // Chargement des statistiques via AJAX
+    function loadStats() {
+        console.log('Chargement des statistiques...');
 
-            // Afficher un indicateur de chargement
-            const loadingIndicator = document.getElementById('loading-indicator');
-            if (loadingIndicator) {
-                loadingIndicator.style.display = 'block';
-            }
+        // Afficher un indicateur de chargement
+        const loadingIndicator = document.getElementById('loading-indicator');
+        if (loadingIndicator) {
+            loadingIndicator.style.display = 'block';
+        }
 
-            // Récupérer les statistiques globales
-            fetch("{{ url_for('stock.api_stats_stock') }}")
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`Erreur HTTP! statut: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    console.log('Données reçues de l\'API:', data);
+        // Récupérer les statistiques globales
+        fetch("{{ url_for('stock.api_stats_stock') }}")
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Erreur HTTP! statut: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Données reçues de l\'API:', data);
 
-                    if (!data.success) {
-                        throw new Error(data.message || 'Erreur lors de la récupération des données');
-                    }
+                if (!data.success) {
+                    throw new Error(data.message || 'Erreur lors de la récupération des données');
+                }
 
-                    // Mettre à jour les cartes de statistiques
-                    if (document.getElementById('total-products')) {
-                        document.getElementById('total-products').textContent = data.total_produits || '0';
-                    }
-                    if (document.getElementById('monthly-entries')) {
-                        document.getElementById('monthly-entries').textContent = data.entrees_mois || '0';
-                    }
-                    if (document.getElementById('monthly-exits')) {
-                        document.getElementById('monthly-exits').textContent = data.sorties_mois || '0';
-                    }
-                    if (document.getElementById('low-stock')) {
-                        document.getElementById('low-stock').textContent = data.produits_faible_stock || '0';
-                    }
+                // Mettre à jour les cartes de statistiques
+                if (document.getElementById('total-products')) {
+                    document.getElementById('total-products').textContent = data.total_produits || '0';
+                }
+                if (document.getElementById('monthly-entries')) {
+                    document.getElementById('monthly-entries').textContent = data.entrees_mois || '0';
+                }
+                if (document.getElementById('monthly-exits')) {
+                    document.getElementById('monthly-exits').textContent = data.sorties_mois || '0';
+                }
+                if (document.getElementById('low-stock')) {
+                    document.getElementById('low-stock').textContent = data.produits_faible_stock || '0';
+                }
 
-                    // Mettre à jour les graphiques
-                    if (data.mouvements_30j && data.mouvements_30j.length > 0) {
-                        console.log('Données mouvements 30j:', data.mouvements_30j);
-                        const labels = data.mouvements_30j.map(item => item.date);
-                        const entrees = data.mouvements_30j.map(item => item.entrees);
-                        const sorties = data.mouvements_30j.map(item => item.sorties);
+                // Mettre à jour les graphiques
+                if (data.mouvements_30j && data.mouvements_30j.length > 0) {
+                    console.log('Données mouvements 30j:', data.mouvements_30j);
+                    const labels = data.mouvements_30j.map(item => item.date);
+                    const entrees = data.mouvements_30j.map(item => item.entrees);
+                    const sorties = data.mouvements_30j.map(item => item.sorties);
 
-                        console.log('Labels:', labels);
-                        console.log('Entrées:', entrees);
-                        console.log('Sorties:', sorties);
+                    console.log('Labels:', labels);
+                    console.log('Entrées:', entrees);
+                    console.log('Sorties:', sorties);
 
-                        if (window.stockCharts && window.stockCharts.movements) {
-                            window.stockCharts.movements.data.labels = labels;
-                            window.stockCharts.movements.data.datasets[0].data = entrees;
-                            window.stockCharts.movements.data.datasets[1].data = sorties;
-                            window.stockCharts.movements.update();
-                            console.log('Graphique des mouvements mis à jour');
-                        } else {
-                            console.error('Graphique des mouvements non initialisé');
-                        }
+                    if (window.stockCharts && window.stockCharts.movements) {
+                        window.stockCharts.movements.data.labels = labels;
+                        window.stockCharts.movements.data.datasets[0].data = entrees;
+                        window.stockCharts.movements.data.datasets[1].data = sorties;
+                        window.stockCharts.movements.update();
+                        console.log('Graphique des mouvements mis à jour');
                     } else {
-                        console.warn('Aucune donnée de mouvement disponible pour les 30 derniers jours');
-                        // Afficher un message à l'utilisateur si nécessaire
-                        const chartContainer = document.querySelector('.card-body canvas').closest('.card-body');
-                        if (chartContainer) {
-                            chartContainer.innerHTML = '<div class="alert alert-info">Aucune donnée de mouvement disponible pour les 30 derniers jours.</div>';
-                        }
+                        console.error('Graphique des mouvements non initialisé');
                     }
+                } else {
+                    console.warn('Aucune donnée de mouvement disponible pour les 30 derniers jours');
+                    // Afficher un message à l'utilisateur si nécessaire
+                    const chartContainer = document.querySelector('.card-body canvas').closest('.card-body');
+                    if (chartContainer) {
+                        chartContainer.innerHTML = '<div class="alert alert-info">Aucune donnée de mouvement disponible pour les 30 derniers jours.</div>';
+                    }
+                }
 
-                    if (data.categories && data.categories.length > 0) {
-                        console.log('Données catégories:', data.categories);
-                        if (window.stockCharts && window.stockCharts.categories) {
-                            window.stockCharts.categories.data.labels = data.categories.map(cat => cat.nom);
-                            window.stockCharts.categories.data.datasets[0].data = data.categories.map(cat => cat.nombre);
-                            window.stockCharts.categories.update();
-                            console.log('Graphique des catégories mis à jour');
-                        } else {
-                            console.error('Graphique des catégories non initialisé');
-                        }
+                if (data.categories && data.categories.length > 0) {
+                    console.log('Données catégories:', data.categories);
+                    if (window.stockCharts && window.stockCharts.categories) {
+                        window.stockCharts.categories.data.labels = data.categories.map(cat => cat.nom);
+                        window.stockCharts.categories.data.datasets[0].data = data.categories.map(cat => cat.nombre);
+                        window.stockCharts.categories.update();
+                        console.log('Graphique des catégories mis à jour');
                     } else {
-                        console.warn('Aucune donnée de catégorie disponible');
+                        console.error('Graphique des catégories non initialisé');
                     }
-                })
-                .catch(error => {
-                    console.error('Erreur lors du chargement des statistiques:', error);
-                    // Afficher un message d'erreur à l'utilisateur
-                    const errorContainer = document.getElementById('chart-container') || document.body;
-                    errorContainer.innerHTML += `
+                } else {
+                    console.warn('Aucune donnée de catégorie disponible');
+                }
+            })
+            .catch(error => {
+                console.error('Erreur lors du chargement des statistiques:', error);
+                // Afficher un message d'erreur à l'utilisateur
+                const errorContainer = document.getElementById('chart-container') || document.body;
+                errorContainer.innerHTML += `
                 <div class="alert alert-danger mt-3">
                     Erreur lors du chargement des statistiques: ${error.message}
                 </div>`;
-                });
-        }
+            });
+    }
 
-        // Fonction pour charger les produits en faible stock
-        function loadFaiblesStocks() {
-            const url = "{{ url_for('stock.api_produits_faibles_stocks') }}";
+    // Fonction pour charger les produits en faible stock
+    function loadFaiblesStocks() {
+        const url = "{{ url_for('stock.api_produits_faibles_stocks') }}";
 
-            fetch(url)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`Erreur HTTP! statut: ${response.status} ${response.statusText}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (!data.success) {
-                        throw new Error(data.message || 'Erreur lors de la récupération des produits');
-                    }
+        fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Erreur HTTP! statut: ${response.status} ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (!data.success) {
+                    throw new Error(data.message || 'Erreur lors de la récupération des produits');
+                }
 
-                    const produits = data.produits || [];
-                    const tbody = document.getElementById('faiblesStocksBody');
-                    
-                    if (!tbody) {
-                        console.warn('Élément faiblesStocksBody non trouvé');
-                        return;
-                    }
+                const produits = data.produits || [];
+                const tbody = document.getElementById('faiblesStocksBody');
 
-                    tbody.innerHTML = '';
+                if (!tbody) {
+                    console.warn('Élément faiblesStocksBody non trouvé');
+                    return;
+                }
 
-                    if (produits.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-success"><strong>Tous les produits ont un stock suffisant!</strong></td></tr>';
-                        document.getElementById('totalFaiblesStocks').textContent = '0';
-                        document.getElementById('totalCommandeNecessaire').textContent = '0';
-                        document.getElementById('valeurReapprovisionnement').textContent = '0 CFA';
-                        return;
-                    }
+                tbody.innerHTML = '';
 
-                    let totalEcart = 0;
-                    let valeurReapprovisionnement = 0;
+                if (produits.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-success"><strong>Tous les produits ont un stock suffisant!</strong></td></tr>';
+                    document.getElementById('totalFaiblesStocks').textContent = '0';
+                    document.getElementById('totalCommandeNecessaire').textContent = '0';
+                    document.getElementById('valeurReapprovisionnement').textContent = '0 CFA';
+                    return;
+                }
 
-                    produits.forEach(produit => {
-                        const ecart = Math.max(0, produit.seuil_alerte - produit.quantite);
-                        totalEcart += ecart;
-                        
-                        const valeur = ecart * (produit.prix_achat || 0);
-                        valeurReapprovisionnement += valeur;
+                let totalEcart = 0;
+                let valeurReapprovisionnement = 0;
 
-                        const row = `
+                produits.forEach(produit => {
+                    const ecart = Math.max(0, produit.seuil_alerte - produit.quantite);
+                    totalEcart += ecart;
+
+                    const valeur = ecart * (produit.prix_achat || 0);
+                    valeurReapprovisionnement += valeur;
+
+                    const row = `
                             <tr class="table-danger">
                                 <td>${produit.reference || 'N/A'}</td>
                                 <td class="text-center">
-                                    ${produit.code_barres ? 
-                                        `<img src="/static/barcodes/${produit.code_barres}" alt="Code-barres ${produit.reference}" style="max-height: 40px; width: auto;">` :
-                                        '<span class="text-muted">Aucun</span>'
-                                    }
+                                    ${produit.code_barres ?
+                            `<img src="/static/barcodes/${produit.code_barres}" alt="Code-barres ${produit.reference}" style="max-height: 40px; width: auto;">` :
+                            '<span class="text-muted">Aucun</span>'
+                        }
                                 </td>
                                 <td>${produit.nom || 'N/A'}</td>
                                 <td>${produit.categorie || 'Non catégorisé'}</td>
@@ -1470,93 +1500,93 @@
                                 </td>
                             </tr>
                         `;
-                        tbody.innerHTML += row;
-                    });
-
-                    // Mettre à jour les statistiques
-                    document.getElementById('totalFaiblesStocks').textContent = produits.length;
-                    document.getElementById('totalCommandeNecessaire').textContent = Math.round(totalEcart);
-                    document.getElementById('valeurReapprovisionnement').textContent = 
-                        valeurReapprovisionnement.toLocaleString('fr-FR', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                        }) + ' CFA';
-                })
-                .catch(error => {
-                    console.error('Erreur lors du chargement des produits en faible stock:', error);
-                    const tbody = document.getElementById('faiblesStocksBody');
-                    if (tbody) {
-                        tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">Erreur: ${error.message}</td></tr>`;
-                    }
+                    tbody.innerHTML += row;
                 });
+
+                // Mettre à jour les statistiques
+                document.getElementById('totalFaiblesStocks').textContent = produits.length;
+                document.getElementById('totalCommandeNecessaire').textContent = Math.round(totalEcart);
+                document.getElementById('valeurReapprovisionnement').textContent =
+                    valeurReapprovisionnement.toLocaleString('fr-FR', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    }) + ' CFA';
+            })
+            .catch(error => {
+                console.error('Erreur lors du chargement des produits en faible stock:', error);
+                const tbody = document.getElementById('faiblesStocksBody');
+                if (tbody) {
+                    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">Erreur: ${error.message}</td></tr>`;
+                }
+            });
+    }
+
+    // Gestion du modal de détails du produit
+    $('#detailsProduitModal').on('show.bs.modal', function (event) {
+        const button = $(event.relatedTarget);
+        const produitId = button.data('id');
+        const modal = $(this);
+
+        // Vérifier si l'ID du produit est valide
+        if (!produitId) {
+            console.error('ID du produit manquant ou invalide');
+            modal.find('.modal-body').html('<div class="alert alert-danger">Erreur : Impossible de charger les détails du produit (ID manquant ou invalide)</div>');
+            return;
         }
 
-        // Gestion du modal de détails du produit
-        $('#detailsProduitModal').on('show.bs.modal', function (event) {
-            const button = $(event.relatedTarget);
-            const produitId = button.data('id');
-            const modal = $(this);
+        // Charger les détails du produit
+        fetch(`/gestion-stock/api/produits/${produitId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Erreur lors de la récupération des détails du produit');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (!data.success) {
+                    throw new Error(data.message || 'Erreur lors du chargement des détails du produit');
+                }
+                const produit = data.produit;
+                // Mettre à jour les informations du produit
+                // Mettre à jour les informations du produit avec des vérifications de null
+                modal.find('#modal-reference').text(produit.reference || 'N/A');
+                modal.find('#modal-designation').text(produit.nom || 'N/A');
+                modal.find('#modal-categorie').text(produit.categorie || 'Non catégorisé');
 
-            // Vérifier si l'ID du produit est valide
-            if (!produitId) {
-                console.error('ID du produit manquant ou invalide');
-                modal.find('.modal-body').html('<div class="alert alert-danger">Erreur : Impossible de charger les détails du produit (ID manquant ou invalide)</div>');
-                return;
-            }
+                // Vérifier si produit.quantite est défini avant de l'utiliser
+                const quantite = produit.quantite !== undefined ? Math.round(produit.quantite) : 0;
+                const uniteMesure = produit.unite_mesure || '';
+                modal.find('#modal-stock').text(`${quantite} ${uniteMesure}`.trim());
 
-            // Charger les détails du produit
-            fetch(`/gestion-stock/api/produits/${produitId}`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Erreur lors de la récupération des détails du produit');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (!data.success) {
-                        throw new Error(data.message || 'Erreur lors du chargement des détails du produit');
-                    }
-                    const produit = data.produit;
-                    // Mettre à jour les informations du produit
-                    // Mettre à jour les informations du produit avec des vérifications de null
-                    modal.find('#modal-reference').text(produit.reference || 'N/A');
-                    modal.find('#modal-designation').text(produit.nom || 'N/A');
-                    modal.find('#modal-categorie').text(produit.categorie || 'Non catégorisé');
+                // Vérifier si produit.seuil_alerte est défini avant de l'utiliser
+                const seuilAlerte = produit.seuil_alerte !== undefined ? produit.seuil_alerte : 0;
+                modal.find('#modal-seuil').text(`${seuilAlerte}${uniteMesure ? ' ' + uniteMesure : ''}`.trim());
 
-                    // Vérifier si produit.quantite est défini avant de l'utiliser
-                    const quantite = produit.quantite !== undefined ? Math.round(produit.quantite) : 0;
-                    const uniteMesure = produit.unite_mesure || '';
-                    modal.find('#modal-stock').text(`${quantite} ${uniteMesure}`.trim());
+                // Formater les prix avec vérification de null
+                const prixAchat = produit.prix_achat !== undefined && produit.prix_achat !== null ?
+                    parseFloat(produit.prix_achat).toFixed(2) + ' CFA' : 'Non défini';
+                modal.find('#modal-prix-achat').text(prixAchat);
 
-                    // Vérifier si produit.seuil_alerte est défini avant de l'utiliser
-                    const seuilAlerte = produit.seuil_alerte !== undefined ? produit.seuil_alerte : 0;
-                    modal.find('#modal-seuil').text(`${seuilAlerte}${uniteMesure ? ' ' + uniteMesure : ''}`.trim());
+                const prixVente = produit.prix_vente !== undefined && produit.prix_vente !== null ?
+                    parseFloat(produit.prix_vente).toFixed(2) + ' CFA' : 'Non défini';
+                modal.find('#modal-prix-vente').text(prixVente);
+                // Mettre à jour le tableau des mouvements
+                const tbody = $('#mouvementsProduitTable tbody');
+                tbody.empty();
 
-                    // Formater les prix avec vérification de null
-                    const prixAchat = produit.prix_achat !== undefined && produit.prix_achat !== null ?
-                        parseFloat(produit.prix_achat).toFixed(2) + ' CFA' : 'Non défini';
-                    modal.find('#modal-prix-achat').text(prixAchat);
+                const mouvements = data.mouvements;
+                if (!mouvements || !Array.isArray(mouvements)) {
+                    console.error('Les mouvements ne sont pas un tableau valide:', mouvements);
+                    return;
+                }
 
-                    const prixVente = produit.prix_vente !== undefined && produit.prix_vente !== null ?
-                        parseFloat(produit.prix_vente).toFixed(2) + ' CFA' : 'Non défini';
-                    modal.find('#modal-prix-vente').text(prixVente);
-                    // Mettre à jour le tableau des mouvements
-                    const tbody = $('#mouvementsProduitTable tbody');
-                    tbody.empty();
+                mouvements.forEach(mvt => {
+                    const typeClass = mvt.type_mouvement === 'entree' ? 'success' : 'danger';
+                    const typeText = mvt.type_mouvement === 'entree' ? 'Entrée' : 'Sortie';
+                    const date = new Date(mvt.date_mouvement).toLocaleDateString('fr-FR');
+                    const prix = mvt.prix_unitaire ? parseFloat(mvt.prix_unitaire).toFixed(2) + ' CFA' : '-';
 
-                    const mouvements = data.mouvements;
-                    if (!mouvements || !Array.isArray(mouvements)) {
-                        console.error('Les mouvements ne sont pas un tableau valide:', mouvements);
-                        return;
-                    }
-
-                    mouvements.forEach(mvt => {
-                        const typeClass = mvt.type_mouvement === 'entree' ? 'success' : 'danger';
-                        const typeText = mvt.type_mouvement === 'entree' ? 'Entrée' : 'Sortie';
-                        const date = new Date(mvt.date_mouvement).toLocaleDateString('fr-FR');
-                        const prix = mvt.prix_unitaire ? parseFloat(mvt.prix_unitaire).toFixed(2) + ' CFA' : '-';
-
-                        tbody.append(`
+                    tbody.append(`
                     <tr>
                         <td>${date}</td>
                         <td><span class="badge bg-${typeClass}">${typeText}</span></td>
@@ -1564,376 +1594,492 @@
                         <td>${prix}</td>
                     </tr>
                 `);
-                    });
-
-                    // Initialiser le graphique d'évolution du stock
-                    initProduitStockChart(produitId);
-                })
-                .catch(error => {
-                    console.error('Erreur lors du chargement des détails du produit:', error);
-                    alert('Une erreur est survenue lors du chargement des détails du produit.');
                 });
-        });
 
-        // Initialisation du graphique d'évolution du stock d'un produit
-        function initProduitStockChart(produitId) {
-            fetch(`/gestion-stock/api/produits/${produitId}/historique-stock`)
-                .then(response => response.json())
-                .then(data => {
-                    const ctx = document.getElementById('produitStockChart').getContext('2d');
+                // Initialiser le graphique d'évolution du stock
+                initProduitStockChart(produitId);
+            })
+            .catch(error => {
+                console.error('Erreur lors du chargement des détails du produit:', error);
+                alert('Une erreur est survenue lors du chargement des détails du produit.');
+            });
+    });
 
-                    // Détruire le graphique existant s'il y en a un
-                    if (window.produitStockChart) {
-                        window.produitStockChart.destroy();
-                    }
+    // Initialisation du graphique d'évolution du stock d'un produit
+    function initProduitStockChart(produitId) {
+        fetch(`/gestion-stock/api/produits/${produitId}/historique-stock`)
+            .then(response => response.json())
+            .then(data => {
+                const ctx = document.getElementById('produitStockChart').getContext('2d');
 
-                    // Créer un nouveau graphique
-                    window.produitStockChart = new Chart(ctx, {
-                        type: 'line',
-                        data: {
-                            labels: data.labels || [],
-                            datasets: [{
-                                label: 'Quantité en stock',
-                                data: data.data || [],
-                                borderColor: 'rgb(54, 162, 235)',
-                                tension: 0.1,
-                                fill: false
-                            }]
+                // Détruire le graphique existant s'il y en a un
+                if (window.produitStockChart) {
+                    window.produitStockChart.destroy();
+                }
+
+                // Créer un nouveau graphique
+                window.produitStockChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.labels || [],
+                        datasets: [{
+                            label: 'Quantité en stock',
+                            data: data.data || [],
+                            borderColor: 'rgb(54, 162, 235)',
+                            tension: 0.1,
+                            fill: false
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Évolution du stock sur 30 jours'
+                            }
                         },
-                        options: {
-                            responsive: true,
-                            plugins: {
+                        scales: {
+                            y: {
+                                beginAtZero: true,
                                 title: {
                                     display: true,
-                                    text: 'Évolution du stock sur 30 jours'
+                                    text: 'Quantité'
                                 }
                             },
-                            scales: {
-                                y: {
-                                    beginAtZero: true,
-                                    title: {
-                                        display: true,
-                                        text: 'Quantité'
-                                    }
-                                },
-                                x: {
-                                    title: {
-                                        display: true,
-                                        text: 'Date'
-                                    }
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Date'
                                 }
                             }
                         }
-                    });
-                })
-                .catch(error => {
-                    console.error('Erreur lors du chargement de l\'historique du stock:', error);
-                });
-        }
-
-        // Exporter les mouvements au format Excel
-        $('#exporterMouvements').click(function () {
-            // Construire l'URL avec les paramètres de filtre
-            const params = new URLSearchParams({
-                date_debut: $('#dateDebut').val() || '',
-                date_fin: $('#dateFin').val() || '',
-                type_mouvement: $('#typeMouvement').val() || ''
-            });
-
-            // Ouvrir l'URL d'export dans un nouvel onglet
-            window.open(`/api/export/mouvements?${params.toString()}`, '_blank');
-        });
-
-        // Exporter les produits en faible stock au format Excel
-        $('#exporterFaiblesStocks').click(function () {
-            const tbody = document.getElementById('faiblesStocksBody');
-            const rows = tbody.querySelectorAll('tr');
-
-            if (rows.length === 0 || (rows.length === 1 && rows[0].textContent.includes('Tous les produits'))) {
-                alert('Aucun produit en faible stock à exporter');
-                return;
-            }
-
-            // Créer un CSV
-            let csv = 'Référence,Code-barres,Désignation,Catégorie,Emplacement,Stock Actuel,Seuil d\'alerte,Écart\n';
-            rows.forEach(row => {
-                const cells = row.querySelectorAll('td');
-                if (cells.length >= 8) {
-                    const reference = cells[0].textContent.trim();
-                    const codeBarres = cells[1].textContent.trim();
-                    const designation = cells[2].textContent.trim();
-                    const categorie = cells[3].textContent.trim();
-                    const emplacement = cells[4].textContent.trim();
-                    const stock = cells[5].textContent.trim();
-                    const seuil = cells[6].textContent.trim();
-                    const ecart = cells[7].textContent.trim();
-
-                    csv += `"${reference}","${codeBarres}","${designation}","${categorie}","${emplacement}","${stock}","${seuil}","${ecart}"\n`;
-                }
-            });
-
-            // Télécharger le fichier
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', `produits-faibles-stocks-${new Date().toISOString().split('T')[0]}.csv`);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        });
-
-        // Fonction pour afficher une section et masquer les autres
-        function showSection(sectionId) {
-            // Cacher TOUTES les sections avec du JS pur
-            const allSections = document.querySelectorAll('.dashboard-section');
-            allSections.forEach(section => {
-                section.classList.remove('active-section');
-                section.style.display = 'none';
-                section.style.opacity = '0';
-                section.style.visibility = 'hidden';
-            });
-
-            // Afficher la section demandée
-            const targetSection = document.querySelector(sectionId);
-            if (!targetSection) {
-                console.error('Section non trouvée:', sectionId);
-                return;
-            }
-
-            // Ajouter la classe et forcer les styles
-            targetSection.classList.add('active-section');
-            targetSection.style.display = 'block';
-            targetSection.style.opacity = '1';
-            targetSection.style.visibility = 'visible';
-
-            // Charger les données appropriées
-            if (sectionId === '#produits-faibles-stocks') {
-                loadFaiblesStocks();
-            } else if (sectionId === '#mouvements') {
-                // Les mouvements sont chargés via DataTables automatiquement
-            }
-
-            // Mettre à jour l'URL
-            window.location.hash = sectionId;
-
-            // Défiler vers le haut
-            window.scrollTo(0, 0);
-        }
-
-        // Au chargement de la page
-        document.addEventListener('DOMContentLoaded', function () {
-            // Initialiser les graphiques
-            initCharts();
-
-            // Charger les statistiques
-            loadStats();
-
-            // Déterminer quelle section afficher
-            const hash = window.location.hash;
-            if (hash && hash !== '#' && document.querySelector(hash)) {
-                showSection(hash);
-            } else {
-                // Par défaut, afficher le tableau de bord
-                showSection('#dashboard');
-            }
-
-            // Gestion du clic sur les liens de navigation
-            document.addEventListener('click', function(e) {
-                if (e.target.tagName === 'A' && e.target.href.includes('#')) {
-                    const href = e.target.getAttribute('href');
-                    if (href.startsWith('#') && href !== '#') {
-                        e.preventDefault();
-                        showSection(href);
                     }
-                }
+                });
+            })
+            .catch(error => {
+                console.error('Erreur lors du chargement de l\'historique du stock:', error);
             });
+    }
 
-            // Gérer le bouton retour du navigateur
-            window.addEventListener('popstate', function() {
-                const hash = window.location.hash || '#dashboard';
-                if (document.querySelector(hash)) {
-                    showSection(hash);
-                }
-            });
+    // Exporter les mouvements au format Excel
+    $('#exporterMouvements').click(function () {
+        // Construire l'URL avec les paramètres de filtre
+        const params = new URLSearchParams({
+            date_debut: $('#dateDebut').val() || '',
+            date_fin: $('#dateFin').val() || '',
+            type_mouvement: $('#typeMouvement').val() || ''
         });
-    </script>
 
-    <!-- Modal pour afficher les produits d'une catégorie -->
-    <div class="modal fade" id="produitsCategorieModal" tabindex="-1" aria-labelledby="produitsCategorieModalLabel"
-        aria-hidden="true">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="produitsCategorieModalLabel">Produits de la catégorie</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                        aria-label="Fermer"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="table-responsive">
-                        <table id="produitsCategorieTable" class="table table-hover table-striped">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Référence</th>
-                                    <th>Nom</th>
-                                    <th>Description</th>
-                                    <th>Quantité</th>
-                                    <th>Seuil d'alerte</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- Les données seront chargées dynamiquement -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
-                </div>
+        // Ouvrir l'URL d'export dans un nouvel onglet
+        window.open(`/api/export/mouvements?${params.toString()}`, '_blank');
+    });
+
+    // Exporter les produits en faible stock au format Excel
+    $('#exporterFaiblesStocks').click(function () {
+        const tbody = document.getElementById('faiblesStocksBody');
+        const rows = tbody.querySelectorAll('tr');
+
+        if (rows.length === 0 || (rows.length === 1 && rows[0].textContent.includes('Tous les produits'))) {
+            alert('Aucun produit en faible stock à exporter');
+            return;
+        }
+
+        // Créer un CSV
+        let csv = 'Référence,Code-barres,Désignation,Catégorie,Emplacement,Stock Actuel,Seuil d\'alerte,Écart\n';
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            if (cells.length >= 8) {
+                const reference = cells[0].textContent.trim();
+                const codeBarres = cells[1].textContent.trim();
+                const designation = cells[2].textContent.trim();
+                const categorie = cells[3].textContent.trim();
+                const emplacement = cells[4].textContent.trim();
+                const stock = cells[5].textContent.trim();
+                const seuil = cells[6].textContent.trim();
+                const ecart = cells[7].textContent.trim();
+
+                csv += `"${reference}","${codeBarres}","${designation}","${categorie}","${emplacement}","${stock}","${seuil}","${ecart}"\n`;
+            }
+        });
+
+        // Télécharger le fichier
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `produits-faibles-stocks-${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+
+    // Fonction pour afficher une section et masquer les autres
+    function showSection(sectionId) {
+        // Cacher TOUTES les sections avec du JS pur
+        const allSections = document.querySelectorAll('.dashboard-section');
+        allSections.forEach(section => {
+            section.classList.remove('active-section');
+            section.style.display = 'none';
+            section.style.opacity = '0';
+            section.style.visibility = 'hidden';
+        });
+
+        // Afficher la section demandée
+        const targetSection = document.querySelector(sectionId);
+        if (!targetSection) {
+            console.error('Section non trouvée:', sectionId);
+            return;
+        }
+
+        // Ajouter la classe et forcer les styles
+        targetSection.classList.add('active-section');
+        targetSection.style.display = 'block';
+        targetSection.style.opacity = '1';
+        targetSection.style.visibility = 'visible';
+
+        // Charger les données appropriées
+        if (sectionId === '#produits-faibles-stocks') {
+            loadFaiblesStocks();
+        } else if (sectionId === '#mouvements') {
+            // Les mouvements sont chargés via DataTables automatiquement
+        } else if (sectionId === '#zones-suivi') {
+            loadSuiviTransferts();
+        }
+
+        // Mettre à jour l'URL
+        window.location.hash = sectionId;
+
+        // Défiler vers le haut
+        window.scrollTo(0, 0);
+    }
+
+    // Fonction pour charger le suivi des transferts
+    function loadSuiviTransferts() {
+        const tbody = document.getElementById('suiviTransfertsBody');
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>';
+        
+        // On récupère les mouvements récents et on filtre côté client pour TRANS- et RET-
+        // Ou on pourrait créer une API dédiée, mais réutilisons ce qu'on a
+        fetch("{{ url_for('stock.api_mouvements_stock') }}", {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': "{{ csrf_token() }}",
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                start: 0,
+                length: 200, // On prend une grosse marge pour trouver les transferts
+                order: [{column: 0, dir: 'desc'}]
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            const transferts = data.data.filter(m => (m.mouvement_reference && m.mouvement_reference.startsWith('TRANS-')) || (m.mouvement_reference && m.mouvement_reference.startsWith('RET-')));
+            tbody.innerHTML = '';
+            
+            if (transferts.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted fst-italic">Aucun transfert récent trouvé.</td></tr>';
+                return;
+            }
+            
+            transferts.forEach(m => {
+                const isReturn = m.mouvement_reference && m.mouvement_reference.startsWith('RET-');
+                const typeBadge = isReturn ? 
+                    '<span class="badge bg-warning text-dark"><i class="fas fa-undo me-1"></i>RETOUR</span>' : 
+                    '<span class="badge bg-info"><i class="fas fa-shipping-fast me-1"></i>TRANSFERT</span>';
+                
+                const date = new Date(m.date).toLocaleString('fr-FR');
+                
+                tbody.append(Object.assign(document.createElement('tr'), {
+                    innerHTML: `
+                        <td class="ps-4 small text-muted">${date}</td>
+                        <td><code class="fw-bold">${m.mouvement_reference || m.reference}</code></td>
+                        <td><span class="fw-semibold">${m.designation}</span></td>
+                        <td>${typeBadge}</td>
+                        <td class="fw-bold text-center">${m.quantite}</td>
+                        <td>
+                            <div class="small fw-bold">${m.utilisateur}</div>
+                            <div class="small text-muted">${m.type_mouvement === 'entree' ? 'Réception Region' : 'Départ Dakar'}</div>
+                        </td>
+                        <td class="pe-4">
+                            <div class="small text-wrap" style="max-width: 300px;">
+                                ${m.commentaire ? 
+                                    m.commentaire.replace(/\[(REJET|RÉCEIPTION)\]/g, '<span class="badge bg-dark">$1</span>') 
+                                    : '<span class="text-muted fst-italic">Pas de commentaire</span>'}
+                            </div>
+                        </td>
+                    `
+                }));
+            });
+        })
+        .catch(err => {
+            console.error(err);
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-danger">Erreur lors du chargement des données.</td></tr>';
+        });
+    }
+
+    // Au chargement de la page
+    document.addEventListener('DOMContentLoaded', function () {
+        // Initialiser les graphiques
+        initCharts();
+
+        // Charger les statistiques
+        loadStats();
+
+        // Déterminer quelle section afficher
+        const hash = window.location.hash;
+        if (hash && hash !== '#' && document.querySelector(hash)) {
+            showSection(hash);
+        } else {
+            // Par défaut, afficher le tableau de bord
+            showSection('#dashboard');
+        }
+
+        // Gestion du clic sur les liens de navigation
+        document.addEventListener('click', function (e) {
+            if (e.target.tagName === 'A' && e.target.href.includes('#')) {
+                const href = e.target.getAttribute('href');
+                if (href.startsWith('#') && href !== '#') {
+                    e.preventDefault();
+                    showSection(href);
+                }
+            }
+        });
+
+        // Gérer le bouton retour du navigateur
+        window.addEventListener('popstate', function () {
+            const hash = window.location.hash || '#dashboard';
+            if (document.querySelector(hash)) {
+                showSection(hash);
+            }
+        });
+    });
+</script>
+
+<!-- Modal pour afficher les produits d'une catégorie -->
+<div class="modal fade" id="produitsCategorieModal" tabindex="-1" aria-labelledby="produitsCategorieModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="produitsCategorieModalLabel">Produits de la catégorie</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                    aria-label="Fermer"></button>
             </div>
-        </div>
-    </div>
-
-    <!-- Modal d'édition de catégorie -->
-    <div class="modal fade" id="editCategorieModal" tabindex="-1" aria-labelledby="editCategorieModalLabel"
-        aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="editCategorieModalLabel">Modifier la catégorie</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="editCategorieForm">
-                        <input type="hidden" id="editCategorieId">
-                        <div class="mb-3">
-                            <label for="editNomCategorie" class="form-label">Nom de la catégorie</label>
-                            <input type="text" class="form-control" id="editNomCategorie" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="editDescriptionCategorie" class="form-label">Description</label>
-                            <textarea class="form-control" id="editDescriptionCategorie" rows="3"></textarea>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="button" class="btn btn-primary" id="saveCategorieChanges">Enregistrer les
-                        modifications</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Section Catégories -->
-    <section id="categories" class="dashboard-section py-4" style="display: none;">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2><i class="fas fa-tags me-2"></i>Gestion des Catégories</h2>
-        </div>
-
-        <!-- Formulaire d'ajout de catégorie -->
-        <div class="card mb-4">
-            <div class="card-header bg-white">
-                <h5 class="mb-0"><i class="fas fa-plus-circle me-2"></i>Ajouter une catégorie</h5>
-            </div>
-            <div class="card-body">
-                <form id="formCategorie" class="row g-3">
-                    <div class="col-md-6">
-                        <label for="nomCategorie" class="form-label">Nom de la catégorie</label>
-                        <input type="text" class="form-control" id="nomCategorie" required>
-                    </div>
-                    <div class="col-md-6">
-                        <label for="descriptionCategorie" class="form-label">Description</label>
-                        <input type="text" class="form-control" id="descriptionCategorie">
-                    </div>
-                    <div class="col-12">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save me-1"></i> Enregistrer
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <div class="card shadow-sm border-0">
-            <div class="card-body p-0">
-                <div class="table-responsive" style="width: 100%; overflow-x: auto;">
-                    <table id="categoriesTable" class="table table-hover align-middle mb-0">
-                        <thead class="bg-light">
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table id="produitsCategorieTable" class="table table-hover table-striped">
+                        <thead class="table-light">
                             <tr>
-                                <th class="ps-4">Nom</th>
+                                <th>Référence</th>
+                                <th>Nom</th>
                                 <th>Description</th>
-                                <th class="text-center">Produits</th>
-                                <th class="text-center pe-4">Actions</th>
+                                <th>Quantité</th>
+                                <th>Seuil d'alerte</th>
                             </tr>
                         </thead>
-                        <tbody class="border-top-0">
-                            <!-- Les données seront chargées via AJAX -->
+                        <tbody>
+                            <!-- Les données seront chargées dynamiquement -->
                         </tbody>
                     </table>
                 </div>
             </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
         </div>
-    </section>
+    </div>
+</div>
 
-    <!-- Script pour le filtre des mouvements -->
-    <script>
-        $('#filtrerMouvements').click(function () {
-            mouvementsTable.ajax.reload();
-        });
+<!-- Modal d'édition de catégorie -->
+<div class="modal fade" id="editCategorieModal" tabindex="-1" aria-labelledby="editCategorieModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editCategorieModalLabel">Modifier la catégorie</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editCategorieForm">
+                    <input type="hidden" id="editCategorieId">
+                    <div class="mb-3">
+                        <label for="editNomCategorie" class="form-label">Nom de la catégorie</label>
+                        <input type="text" class="form-control" id="editNomCategorie" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editDescriptionCategorie" class="form-label">Description</label>
+                        <textarea class="form-control" id="editDescriptionCategorie" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" id="saveCategorieChanges">Enregistrer les
+                    modifications</button>
+            </div>
+        </div>
+    </div>
+</div>
 
-        // Réinitialiser le filtre
-        $('#reinitialiserFiltres').click(function () {
-            $('#dateDebut').val('');
-            $('#dateFin').val('');
-            $('#typeMouvement').val('');
-            mouvementsTable.ajax.reload();
-        });
+<!-- Section Catégories -->
+<section id="categories" class="dashboard-section py-4" style="display: none;">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-tags me-2"></i>Gestion des Catégories</h2>
+    </div>
 
-        // Gestion des catégories
-        $(document).ready(function () {
-            // Initialisation de DataTable pour les catégories
-            const categoriesTable = $('#categoriesTable').DataTable({
-                language: {
-                    url: 'https://cdn.datatables.net/plug-ins/1.11.5/i18n/fr-FR.json'
+    <!-- Formulaire d'ajout de catégorie -->
+    <div class="card mb-4">
+        <div class="card-header bg-white">
+            <h5 class="mb-0"><i class="fas fa-plus-circle me-2"></i>Ajouter une catégorie</h5>
+        </div>
+        <div class="card-body">
+            <form id="formCategorie" class="row g-3">
+                <div class="col-md-6">
+                    <label for="nomCategorie" class="form-label">Nom de la catégorie</label>
+                    <input type="text" class="form-control" id="nomCategorie" required>
+                </div>
+                <div class="col-md-6">
+                    <label for="descriptionCategorie" class="form-label">Description</label>
+                    <input type="text" class="form-control" id="descriptionCategorie">
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i> Enregistrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive" style="width: 100%; overflow-x: auto;">
+                <table id="categoriesTable" class="table table-hover align-middle mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th class="ps-4">Nom</th>
+                            <th>Description</th>
+                            <th class="text-center">Produits</th>
+                            <th class="text-center pe-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="border-top-0">
+                        <!-- Les données seront chargées via AJAX -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Section Suivi des Régions -->
+<section id="zones-suivi" class="dashboard-section py-4" style="display: none;">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-map-marked-alt me-2"></i>Suivi des Transferts Régionaux</h2>
+        <button class="btn btn-outline-primary btn-sm" onclick="loadSuiviTransferts()">
+            <i class="fas fa-sync-alt me-1"></i> Actualiser
+        </button>
+    </div>
+    
+    <div class="card shadow-sm border-0 border-top border-4 border-info">
+        <div class="card-body p-4">
+            <div class="alert alert-light border-0 shadow-sm d-flex align-items-center mb-4" role="alert">
+                <i class="fas fa-info-circle text-info me-3 fa-2x"></i>
+                <div>
+                    <h6 class="mb-1 fw-bold">Traçabilité des Transferts</h6>
+                    <p class="mb-0 small text-muted">Consultez ici le statut des envois vers les zones, les quantités réellement reçues par les magasiniers et leurs justifications en cas d'écart ou de rejet.</p>
+                </div>
+            </div>
+            
+            <div class="table-responsive">
+                <table id="suiviTransfertsTable" class="table table-hover align-middle mb-0">
+                    <thead class="bg-light">
+                        <tr class="small text-uppercase fw-bold text-muted">
+                            <th class="ps-4">Date</th>
+                            <th>Référence</th>
+                            <th>Article</th>
+                            <th>Type</th>
+                            <th>Quantité</th>
+                            <th>Opérateur / Zone</th>
+                            <th class="pe-4">Statut & Commentaires</th>
+                        </tr>
+                    </thead>
+                    <tbody id="suiviTransfertsBody">
+                        <tr>
+                            <td colspan="7" class="text-center py-5">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Chargement...</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+
+</div> <!-- FIN du container-fluid px-4 - Déplacé ici pour englober toutes les sections -->
+
+<!-- Script pour le filtre des mouvements -->
+<script>
+    $('#filtrerMouvements').click(function () {
+        mouvementsTable.ajax.reload();
+    });
+
+    // Réinitialiser le filtre
+    $('#reinitialiserFiltres').click(function () {
+        $('#dateDebut').val('');
+        $('#dateFin').val('');
+        $('#typeMouvement').val('');
+        mouvementsTable.ajax.reload();
+    });
+
+    // Gestion des catégories
+    $(document).ready(function () {
+        // Initialisation de DataTable pour les catégories
+        const categoriesTable = $('#categoriesTable').DataTable({
+            language: {
+                url: 'https://cdn.datatables.net/plug-ins/1.11.5/i18n/fr-FR.json'
+            },
+            pageLength: 10,
+            order: [[0, 'asc']],
+            ajax: {
+                url: '/api/categories',
+                dataSrc: 'data'
+            },
+            columns: [
+                {
+                    data: 'nom',
+                    render: function (data, type, row) {
+                        return `<span class="fw-semibold">${data}</span>`;
+                    }
                 },
-                pageLength: 10,
-                order: [[0, 'asc']],
-                ajax: {
-                    url: '/api/categories',
-                    dataSrc: 'data'
+                {
+                    data: 'description',
+                    width: '40%',
+                    render: function (data, type, row) {
+                        return data ? `<span class="text-muted">${data}</span>` : '<span class="text-muted fst-italic">Aucune description</span>';
+                    }
                 },
-                columns: [
-                    {
-                        data: 'nom',
-                        render: function (data, type, row) {
-                            return `<span class="fw-semibold">${data}</span>`;
-                        }
-                    },
-                    {
-                        data: 'description',
-                        width: '40%',
-                        render: function (data, type, row) {
-                            return data ? `<span class="text-muted">${data}</span>` : '<span class="text-muted fst-italic">Aucune description</span>';
-                        }
-                    },
-                    {
-                        data: 'nombre_produits',
-                        className: 'text-center',
-                        render: function (data, type, row) {
-                            return `<span class="badge bg-primary bg-opacity-10 text-primary px-3 py-2">
+                {
+                    data: 'nombre_produits',
+                    className: 'text-center',
+                    render: function (data, type, row) {
+                        return `<span class="badge bg-primary bg-opacity-10 text-primary px-3 py-2">
                         <i class="fas fa-boxes me-1"></i> ${data} produit${data !== 1 ? 's' : ''}
                     </span>`;
-                        }
-                    },
-                    {
-                        data: null,
-                        orderable: false,
-                        className: 'text-end pe-4',
-                        width: '280px',
-                        render: function (data, type, row) {
-                            return `
+                    }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    className: 'text-end pe-4',
+                    width: '280px',
+                    render: function (data, type, row) {
+                        return `
                         <div class="btn-group" role="group" aria-label="Actions">
                             <button class="btn btn-sm btn-outline-primary btn-edit-categorie me-2" data-id="${row.id}" title="Modifier">
                                 <i class="fas fa-edit"></i> <span class="d-none d-sm-inline">Modifier</span>
@@ -1946,134 +2092,134 @@
                             </button>
                         </div>
                     `;
-                        }
                     }
-                ]
+                }
+            ]
+        });
+
+        // Soumission du formulaire d'ajout de catégorie
+        $('#formCategorie').on('submit', function (e) {
+            e.preventDefault();
+
+            const categorieData = {
+                nom: $('#nomCategorie').val(),
+                description: $('#descriptionCategorie').val()
+            };
+
+            $.ajax({
+                url: '/api/categories',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(categorieData),
+                success: function (response) {
+                    showAlert('success', 'Catégorie ajoutée avec succès !');
+                    categoriesTable.ajax.reload();
+                    $('#formCategorie')[0].reset();
+                },
+                error: function (xhr) {
+                    const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : 'Une erreur est survenue';
+                    showAlert('danger', errorMsg);
+                }
             });
+        });
 
-            // Soumission du formulaire d'ajout de catégorie
-            $('#formCategorie').on('submit', function (e) {
-                e.preventDefault();
+        // Édition d'une catégorie
+        let currentEditCategorieId = null;
 
-                const categorieData = {
-                    nom: $('#nomCategorie').val(),
-                    description: $('#descriptionCategorie').val()
-                };
+        // Ouverture du modal d'édition
+        $(document).on('click', '.btn-edit-categorie', function () {
+            const categorieId = $(this).data('id');
+            currentEditCategorieId = categorieId;
 
+            // Récupérer les données de la catégorie
+            $.get(`/api/categories/${categorieId}`)
+                .done(function (data) {
+                    $('#editNomCategorie').val(data.nom);
+                    $('#editDescriptionCategorie').val(data.description || '');
+                    $('#editCategorieModal').modal('show');
+                })
+                .fail(function (xhr) {
+                    const errorMsg = xhr.responseJSON ? xhr.responseJSON.error : 'Erreur lors du chargement de la catégorie';
+                    showAlert('danger', errorMsg);
+                });
+        });
+
+        // Sauvegarde des modifications
+        $('#saveCategorieChanges').click(function () {
+            const categorieData = {
+                nom: $('#editNomCategorie').val(),
+                description: $('#editDescriptionCategorie').val()
+            };
+
+            if (!categorieData.nom) {
+                showAlert('warning', 'Le nom de la catégorie est obligatoire');
+                return;
+            }
+
+            $.ajax({
+                url: `/api/categories/${currentEditCategorieId}`,
+                type: 'PUT',
+                contentType: 'application/json',
+                data: JSON.stringify(categorieData),
+                success: function (response) {
+                    showAlert('success', 'Catégorie mise à jour avec succès !');
+                    categoriesTable.ajax.reload();
+                    $('#editCategorieModal').modal('hide');
+                },
+                error: function (xhr) {
+                    const errorMsg = xhr.responseJSON ? xhr.responseJSON.error : 'Erreur lors de la mise à jour de la catégorie';
+                    showAlert('danger', errorMsg);
+                }
+            });
+        });
+
+        // Suppression d'une catégorie
+        $(document).on('click', '.btn-delete-categorie', function () {
+            const categorieId = $(this).data('id');
+
+            if (confirm('Êtes-vous sûr de vouloir supprimer cette catégorie ?')) {
                 $.ajax({
-                    url: '/api/categories',
-                    type: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify(categorieData),
-                    success: function (response) {
-                        showAlert('success', 'Catégorie ajoutée avec succès !');
+                    url: `/api/categories/${categorieId}`,
+                    type: 'DELETE',
+                    success: function () {
+                        showAlert('success', 'Catégorie supprimée avec succès !');
                         categoriesTable.ajax.reload();
-                        $('#formCategorie')[0].reset();
                     },
                     error: function (xhr) {
                         const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : 'Une erreur est survenue';
                         showAlert('danger', errorMsg);
                     }
                 });
-            });
+            }
+        });
 
-            // Édition d'une catégorie
-            let currentEditCategorieId = null;
+        // Voir les produits d'une catégorie dans un modal
+        $(document).on('click', '.btn-view-produits', function (e) {
+            e.preventDefault();
+            const categorieId = $(this).data('id');
+            const categorieNom = $(this).closest('tr').find('td:first').text().trim();
 
-            // Ouverture du modal d'édition
-            $(document).on('click', '.btn-edit-categorie', function () {
-                const categorieId = $(this).data('id');
-                currentEditCategorieId = categorieId;
+            // Mettre à jour le titre du modal
+            $('#produitsCategorieModalLabel').text(`Produits de la catégorie : ${categorieNom}`);
 
-                // Récupérer les données de la catégorie
-                $.get(`/api/categories/${categorieId}`)
-                    .done(function (data) {
-                        $('#editNomCategorie').val(data.nom);
-                        $('#editDescriptionCategorie').val(data.description || '');
-                        $('#editCategorieModal').modal('show');
-                    })
-                    .fail(function (xhr) {
-                        const errorMsg = xhr.responseJSON ? xhr.responseJSON.error : 'Erreur lors du chargement de la catégorie';
-                        showAlert('danger', errorMsg);
-                    });
-            });
+            // Afficher un indicateur de chargement
+            $('#produitsCategorieTable tbody').html('<tr><td colspan="5" class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Chargement...</span></div></td></tr>');
 
-            // Sauvegarde des modifications
-            $('#saveCategorieChanges').click(function () {
-                const categorieData = {
-                    nom: $('#editNomCategorie').val(),
-                    description: $('#editDescriptionCategorie').val()
-                };
+            // Afficher le modal
+            const modal = new bootstrap.Modal(document.getElementById('produitsCategorieModal'));
+            modal.show();
 
-                if (!categorieData.nom) {
-                    showAlert('warning', 'Le nom de la catégorie est obligatoire');
-                    return;
-                }
+            // Charger les produits de la catégorie
+            $.ajax({
+                url: `/gestion-stock/api/produits?categorie_id=${categorieId}`,
+                type: 'GET',
+                success: function (response) {
+                    const tbody = $('#produitsCategorieTable tbody');
+                    tbody.empty();
 
-                $.ajax({
-                    url: `/api/categories/${currentEditCategorieId}`,
-                    type: 'PUT',
-                    contentType: 'application/json',
-                    data: JSON.stringify(categorieData),
-                    success: function (response) {
-                        showAlert('success', 'Catégorie mise à jour avec succès !');
-                        categoriesTable.ajax.reload();
-                        $('#editCategorieModal').modal('hide');
-                    },
-                    error: function (xhr) {
-                        const errorMsg = xhr.responseJSON ? xhr.responseJSON.error : 'Erreur lors de la mise à jour de la catégorie';
-                        showAlert('danger', errorMsg);
-                    }
-                });
-            });
-
-            // Suppression d'une catégorie
-            $(document).on('click', '.btn-delete-categorie', function () {
-                const categorieId = $(this).data('id');
-
-                if (confirm('Êtes-vous sûr de vouloir supprimer cette catégorie ?')) {
-                    $.ajax({
-                        url: `/api/categories/${categorieId}`,
-                        type: 'DELETE',
-                        success: function () {
-                            showAlert('success', 'Catégorie supprimée avec succès !');
-                            categoriesTable.ajax.reload();
-                        },
-                        error: function (xhr) {
-                            const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : 'Une erreur est survenue';
-                            showAlert('danger', errorMsg);
-                        }
-                    });
-                }
-            });
-
-            // Voir les produits d'une catégorie dans un modal
-            $(document).on('click', '.btn-view-produits', function (e) {
-                e.preventDefault();
-                const categorieId = $(this).data('id');
-                const categorieNom = $(this).closest('tr').find('td:first').text().trim();
-
-                // Mettre à jour le titre du modal
-                $('#produitsCategorieModalLabel').text(`Produits de la catégorie : ${categorieNom}`);
-
-                // Afficher un indicateur de chargement
-                $('#produitsCategorieTable tbody').html('<tr><td colspan="5" class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Chargement...</span></div></td></tr>');
-
-                // Afficher le modal
-                const modal = new bootstrap.Modal(document.getElementById('produitsCategorieModal'));
-                modal.show();
-
-                // Charger les produits de la catégorie
-                $.ajax({
-                    url: `/gestion-stock/api/produits?categorie_id=${categorieId}`,
-                    type: 'GET',
-                    success: function (response) {
-                        const tbody = $('#produitsCategorieTable tbody');
-                        tbody.empty();
-
-                        if (response.data && response.data.length > 0) {
-                            response.data.forEach(function (produit) {
-                                tbody.append(`
+                    if (response.data && response.data.length > 0) {
+                        response.data.forEach(function (produit) {
+                            tbody.append(`
                                     <tr>
                                         <td>${produit.reference || 'N/A'}</td>
                                         <td>${produit.nom || 'N/A'}</td>
@@ -2082,35 +2228,35 @@
                                         <td>${produit.seuil_alerte || 'Non défini'}</td>
                                     </tr>
                                 `);
-                            });
-                        } else {
-                            tbody.html('<tr><td colspan="5" class="text-center">Aucun produit trouvé dans cette catégorie</td></tr>');
-                        }
-                    },
-                    error: function (xhr) {
-                        const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : 'Erreur lors du chargement des produits';
-                        $('#produitsCategorieTable tbody').html(`<tr><td colspan="5" class="text-center text-danger">${errorMsg}</td></tr>`);
+                        });
+                    } else {
+                        tbody.html('<tr><td colspan="5" class="text-center">Aucun produit trouvé dans cette catégorie</td></tr>');
                     }
-                });
+                },
+                error: function (xhr) {
+                    const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : 'Erreur lors du chargement des produits';
+                    $('#produitsCategorieTable tbody').html(`<tr><td colspan="5" class="text-center text-danger">${errorMsg}</td></tr>`);
+                }
             });
+        });
 
-            // Fonction utilitaire pour afficher des alertes
-            // Fonction utilitaire pour afficher des alertes
-            function showAlert(type, message) {
-                const alertHtml = `
+        // Fonction utilitaire pour afficher des alertes
+        // Fonction utilitaire pour afficher des alertes
+        function showAlert(type, message) {
+            const alertHtml = `
             <div class="alert alert-${type} alert-dismissible fade show" role="alert">
                 ${message}
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
         `;
 
-                // Supprime les anciennes alertes
-                $('.alert').alert('close');
+            // Supprime les anciennes alertes
+            $('.alert').alert('close');
 
-                // Affiche la nouvelle alerte
-                $('main.container').prepend(alertHtml);
-            }
+            // Affiche la nouvelle alerte
+            $('main.container').prepend(alertHtml);
+        }
 
-        });
-    </script>
-    {% endblock %}
+    });
+</script>
+{% endblock %}

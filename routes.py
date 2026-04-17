@@ -3544,61 +3544,88 @@ def delete_user(user_id):
     if not user:
         return jsonify({'success': False, 'error': 'Utilisateur non trouvé'}), 404
 
-    # Vérifier les dépendances empêchant la suppression
-    from models import Intervention, DemandeIntervention, FichierImport, Equipe, MembreEquipe
-
-    deps = {}
-    deps['interventions_as_technician'] = Intervention.query.filter_by(technicien_id=user.id).count()
-    deps['interventions_as_validator'] = Intervention.query.filter_by(valide_par=user.id).count()
-    deps['demandes_as_technician'] = DemandeIntervention.query.filter_by(technicien_id=user.id).count()
-    deps['imports'] = FichierImport.query.filter_by(importe_par=user.id).count()
-    deps['equipes_as_chef'] = Equipe.query.filter_by(chef_zone_id=user.id).count()
-    deps['membre_equipe'] = MembreEquipe.query.filter_by(technicien_id=user.id).count()
-
-    blocking = {k: v for k, v in deps.items() if v > 0}
-    if blocking:
-        # Construire un message lisible
-        parts = []
-        if blocking.get('interventions_as_technician'):
-            parts.append(f"{blocking['interventions_as_technician']} intervention(s) assignée(s)")
-        if blocking.get('interventions_as_validator'):
-            parts.append(f"{blocking['interventions_as_validator']} validation(s) enregistrée(s)")
-        if blocking.get('demandes_as_technician'):
-            parts.append(f"{blocking['demandes_as_technician']} demande(s) liées")
-        if blocking.get('imports'):
-            parts.append(f"{blocking['imports']} import(s) faits par cet utilisateur")
-        if blocking.get('equipes_as_chef'):
-            parts.append(f"{blocking['equipes_as_chef']} équipe(s) dont il est chef")
-        if blocking.get('membre_equipe'):
-            parts.append(f"{blocking['membre_equipe']} participation(s) à des équipes")
-
-        msg = 'Impossible de supprimer l\'utilisateur car il existe des dépendances: ' + '; '.join(parts)
-        return jsonify({'success': False, 'error': msg}), 400
+    # Import des modèles nécessaires pour le nettoyage
+    from models import (Intervention, DemandeIntervention, FichierImport, Equipe, 
+                        MembreEquipe, ActivityLog, AuditLog, NotificationSMS, 
+                        InterventionHistory, LeaveRequest, NoteRH, Survey, FicheTechnique)
 
     try:
-        # Delete related activity logs first (to avoid foreign key constraint violation)
-        ActivityLog.query.filter_by(user_id=user.id).delete()
+        user_name = f"{user.prenom} {user.nom}"
         
+        # 1. Nettoyage des interventions où l'utilisateur est technicien
+        # Comme Intervention.technicien_id est nullable=False, on doit supprimer l'intervention
+        # mais on préserve la demande en la remettant à l'état 'nouveau'
+        interventions_as_tech = Intervention.query.filter_by(technicien_id=user_id).all()
+        for interv in interventions_as_tech:
+            if interv.demande:
+                interv.demande.technicien_id = None
+                interv.demande.statut = 'nouveau'
+                interv.demande.date_affectation = None
+            
+            # Supprimer les surveys et fiches techniques liés à cette intervention
+            Survey.query.filter_by(intervention_id=interv.id).delete()
+            FicheTechnique.query.filter_by(intervention_id=interv.id).delete()
+            db.session.delete(interv)
+
+        # 2. Nettoyage des interventions où l'utilisateur est valideur
+        Intervention.query.filter_by(valide_par=user_id).update({Intervention.valide_par: None})
+
+        # 3. Nettoyage des demandes d'intervention (technicien direct, sans intervention créée)
+        DemandeIntervention.query.filter_by(technicien_id=user_id).update({
+            DemandeIntervention.technicien_id: None,
+            DemandeIntervention.statut: 'nouveau'
+        })
+
+        # 4. Transfert des équipes dont il est le chef au Chef PUR actuel
+        Equipe.query.filter_by(chef_zone_id=user_id).update({Equipe.chef_zone_id: current_user.id})
+
+        # 5. Transfert des imports qu'il a réalisés au Chef PUR actuel
+        FichierImport.query.filter_by(importe_par=user_id).update({FichierImport.importe_par: current_user.id})
+
+        # 6. Suppression des participations aux équipes (MembreEquipe)
+        MembreEquipe.query.filter_by(technicien_id=user_id).delete()
+
+        # 7. Suppression des logs et historiques
+        ActivityLog.query.filter_by(user_id=user_id).delete()
+        AuditLog.query.filter_by(actor_id=user_id).delete()
+        InterventionHistory.query.filter_by(user_id=user_id).delete()
+        NotificationSMS.query.filter_by(technicien_id=user_id).delete()
+
+        # 8. Suppression des demandes RH (Conge, etc.) et réservations
+        from models import ReservationPiece
+        ReservationPiece.query.filter_by(utilisateur_id=user_id).update({ReservationPiece.utilisateur_id: current_user.id})
+        ReservationPiece.query.filter_by(valide_par_id=user_id).update({ReservationPiece.valide_par_id: current_user.id})
+
+        LeaveRequest.query.filter_by(technicien_id=user_id).delete()
+        LeaveRequest.query.filter_by(manager_id=user_id).delete()
+        NoteRH.query.filter_by(author_id=user_id).update({NoteRH.author_id: current_user.id})
+
+        # 9. Enfin, suppression de l'utilisateur
         db.session.delete(user)
         db.session.commit()
-        log_activity(user_id=current_user.id, action='delete', module='users', entity_id=user.id, entity_name=f"{user.prenom} {user.nom}")
-        return jsonify({'success': True, 'message': 'Utilisateur supprimé avec succès'})
+
+        log_activity(
+            user_id=current_user.id, 
+            action='delete', 
+            module='users', 
+            entity_id=user_id, 
+            entity_name=user_name,
+            details={'deleted_permanently': True}
+        )
+        
+        return jsonify({
+            'success': True, 
+            'message': f'L\'utilisateur "{user_name}" et toutes ses dépendances ont été supprimés avec succès.'
+        })
+
     except Exception as e:
         db.session.rollback()
-        current_app.logger.exception('Erreur lors de la suppression d\'un utilisateur')
-        
-        # Provide user-friendly error messages
-        error_msg = str(e).lower()
-        if 'foreign key constraint' in error_msg:
-            user_friendly_msg = 'Impossible de supprimer cet utilisateur. Des données y sont liées (interventions, demandes, équipes, etc.). Supprimez-les d\'abord.'
-        elif 'field' in error_msg and 'inconnu' in error_msg:
-            user_friendly_msg = 'Erreur technique : schéma de base de données incomplet. Contactez l\'administrateur.'
-        elif 'operational error' in error_msg or 'integrity error' in error_msg:
-            user_friendly_msg = 'Erreur lors de l\'accès à la base de données. Vérifiez que toutes les données associées peuvent être chargées.'
-        else:
-            user_friendly_msg = 'Une erreur est survenue lors de la suppression. Contactez l\'administrateur si le problème persiste.'
-        
-        return jsonify({'success': False, 'error': user_friendly_msg}), 500
+        current_app.logger.exception(f'Erreur lors de la suppression complète de l\'utilisateur {user_id}')
+        return jsonify({
+            'success': False, 
+            'error': f'Erreur lors de la suppression : {str(e)}'
+        }), 500
+
 
 
 # Team APIs moved to routes/teams.py (blueprint 'teams')

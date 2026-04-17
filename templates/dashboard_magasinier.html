@@ -367,8 +367,13 @@
                                         <td><strong>{{ m.quantite|int }}</strong></td>
                                         <td>Dakar (Inter-zone)</td>
                                         <td>
-                                            <button onclick="confirmerReception({{ m.id }})" class="btn btn-sm btn-success">
-                                                Confirmer
+                                            <button type="button" class="btn btn-sm btn-primary"
+                                                data-id="{{ m.id }}"
+                                                data-ref="{{ m.reference }}"
+                                                data-nom="{{ m.produit_relation.nom if m.produit_relation else 'N/A' }}"
+                                                data-quantite="{{ m.quantite }}"
+                                                onclick="ouvrirModalReceptionSafe(this)">
+                                                Traiter →
                                             </button>
                                         </td>
                                     </tr>
@@ -381,6 +386,46 @@
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL DÉTAIL RÉCEPTION -->
+        <div class="modal fade" id="receptionDetailModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header border-0 pb-0">
+                        <h5 class="modal-title fw-bold">📦 Traitement du transfert <span id="receptionRef" class="text-primary"></span></h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="receptionId">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">Article</label>
+                            <input type="text" class="form-control bg-light" id="receptionArticle" readonly disabled>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold text-muted">Quantité attendue</label>
+                                <input type="number" class="form-control bg-light" id="receptionQuantiteAttendue" readonly disabled>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold text-muted">Quantité reçue</label>
+                                <input type="number" class="form-control border-primary" id="receptionQuantiteRecue" min="0">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">Commentaire / Justification</label>
+                            <textarea class="form-control" id="receptionCommentaire" rows="3" placeholder="Ex: Manquant, dommage, ou confirmation standard..."></textarea>
+                        </div>
+                        <div id="receptionWarning" class="alert alert-warning small d-none">
+                            ⚠️ La quantité reçue est inférieure à l'attendue. Le reste sera retourné au stock central.
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0 pt-0">
+                        <button type="button" class="btn btn-outline-danger" onclick="traiterReception('rejeter')">Tout Rejeter</button>
+                        <button type="button" class="btn btn-success px-4" onclick="traiterReception('confirmer')">Confirmer Réception</button>
                     </div>
                 </div>
             </div>
@@ -504,23 +549,85 @@
         }
     }
 
-    // Fonction pour confirmer la réception d'un transfert
-    window.confirmerReception = function(mouvementId) {
-        if (!confirm('Voulez-vous confirmer la réception de cet article ?')) return;
+    // Fonctions pour la gestion des transferts
+    let detailModal;
+
+    window.ouvrirModalReceptionSafe = function(btn) {
+        const id = btn.getAttribute('data-id');
+        const ref = btn.getAttribute('data-ref');
+        const article = btn.getAttribute('data-nom');
+        const quantite = btn.getAttribute('data-quantite');
+        ouvrirModalReception(id, ref, article, quantite);
+    };
+
+    window.ouvrirModalReception = function(id, ref, article, quantite) {
+        document.getElementById('receptionId').value = id;
+        document.getElementById('receptionRef').textContent = ref;
+        document.getElementById('receptionArticle').value = article;
+        document.getElementById('receptionQuantiteAttendue').value = quantite;
+        document.getElementById('receptionQuantiteRecue').value = quantite;
+        document.getElementById('receptionCommentaire').value = '';
+        document.getElementById('receptionWarning').classList.add('d-none');
+
+        // Écouter les changements de quantité pour afficher le warning
+        document.getElementById('receptionQuantiteRecue').oninput = function() {
+            const qteRecue = parseFloat(this.value);
+            const qteAtt = parseFloat(document.getElementById('receptionQuantiteAttendue').value);
+            const warning = document.getElementById('receptionWarning');
+            if (qteRecue < qteAtt) {
+                warning.classList.remove('d-none');
+            } else {
+                warning.classList.add('d-none');
+            }
+        };
+
+        if (!detailModal) {
+            detailModal = new bootstrap.Modal(document.getElementById('receptionDetailModal'));
+        }
         
-        const url = "{{ url_for('stock.recevoir_transfert', mouvement_id=0) }}".replace('/0', '/' + mouvementId);
+        // Fermer le modal de liste avant d'ouvrir le détail
+        const listModal = bootstrap.Modal.getInstance(document.getElementById('receptionsModal'));
+        if (listModal) listModal.hide();
+        
+        detailModal.show();
+    };
+
+    window.traiterReception = function(action) {
+        const id = document.getElementById('receptionId').value;
+        const qteRecue = parseFloat(document.getElementById('receptionQuantiteRecue').value);
+        const qteAtt = parseFloat(document.getElementById('receptionQuantiteAttendue').value);
+        const commentaire = document.getElementById('receptionCommentaire').value;
+
+        if (action === 'confirmer' && (isNaN(qteRecue) || qteRecue < 0)) {
+            alert('Veuillez saisir une quantité reçue valide.');
+            return;
+        }
+
+        if (action === 'rejeter' && !commentaire) {
+            alert('Veuillez saisir un commentaire pour justifier le rejet.');
+            return;
+        }
+
+        if (!confirm(`Voulez-vous vraiment ${action === 'rejeter' ? 'rejeter' : 'confirmer'} ce transfert ?`)) return;
+
+        const url = "{{ url_for('stock.recevoir_transfert', mouvement_id=0) }}".replace('/0', '/' + id);
         
         fetch(url, {
             method: 'POST',
             headers: {
                 'X-CSRFToken': "{{ csrf_token() }}",
                 'Content-Type': 'application/json'
-            }
+            },
+            body: JSON.stringify({
+                action: action,
+                quantite_recue: qteRecue,
+                commentaire: commentaire
+            })
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                alert('Stock réceptionné avec succès !');
+                alert(data.message);
                 location.reload();
             } else {
                 alert('Erreur: ' + data.error);

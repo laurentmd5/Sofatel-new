@@ -291,10 +291,30 @@ def affecter_demande():
                 'success': False,
                 'error': 'ID de demande manquant'
             })
+            
+        # Si le technicien n'est pas fourni mais l'équipe l'est, on cherche le technicien de l'équipe
+        if not technicien_id and equipe_id:
+            equipe = db.session.get(Equipe, equipe_id)
+            if not equipe:
+                return jsonify({'success': False, 'error': 'Équipe non trouvée'})
+            
+            # Trouver le technicien principal de l'équipe
+            membre_tech = next((m for m in equipe.membres if m.type_membre == 'technicien'), None)
+            if not membre_tech and len(equipe.membres) == 1:
+                membre_tech = equipe.membres[0]
+                
+            if membre_tech and membre_tech.technicien_id:
+                technicien_id = membre_tech.technicien_id
+            else:
+                return jsonify({
+                    'success': False, 
+                    'error': 'Cette équipe n\'a pas de technicien configuré. Veuillez sélectionner un technicien manuellement.'
+                })
+
         if not technicien_id:
             return jsonify({
                 'success': False,
-                'error': 'ID de technicien manquant'
+                'error': 'Veuillez sélectionner un technicien ou une équipe avec un technicien.'
             })
 
         demande = db.session.get(DemandeIntervention, demande_id)
@@ -306,7 +326,7 @@ def affecter_demande():
         if not technicien or technicien.role != 'technicien':
             return jsonify({
                 'success': False,
-                'error': 'Technicien non valide'
+                'error': 'Technicien non valide ou non trouvé'
             })
 
         # Vérifier la compatibilité technologique

@@ -623,6 +623,7 @@ def api_mouvements_stock():
                     # Créer l'entrée avec des valeurs par défaut sécurisées
                     entry = {
                         'DT_RowId': f'mvt_{mvt.id}',
+                        'mouvement_reference': mvt.reference or '',
                         'date': mvt.date_mouvement.isoformat() if mvt.date_mouvement else '',
                         'reference': ref if ref is not None else 'N/A',
                         'designation': nom_produit,  # Utilisation de nom_produit au lieu de designation
@@ -3141,9 +3142,16 @@ def initier_transfert():
 def recevoir_transfert(mouvement_id):
     """
     Magasinier confirms reception of a transfer.
+    Supports partial reception, rejection, and comments.
+    Unreceived quantities are returned to source (Dakar Central).
     """
     from workflow_stock import WorkflowState
     try:
+        data = request.get_json() or {}
+        action = data.get('action', 'confirmer')  # 'confirmer' or 'rejeter'
+        quantite_recue = float(data.get('quantite_recue', 0))
+        commentaire_magasinier = data.get('commentaire', '').strip()
+
         mouvement = db.session.get(MouvementStock, mouvement_id)
         if not mouvement or mouvement.type_mouvement != 'entree':
             return jsonify({'success': False, 'error': 'Mouvement introuvable'}), 404
@@ -3155,19 +3163,73 @@ def recevoir_transfert(mouvement_id):
             
         if mouvement.workflow_state != 'EN_ATTENTE':
             return jsonify({'success': False, 'error': 'Déjà traité'}), 400
-            
-        # Confirm reception
-        mouvement.workflow_state = WorkflowState.EXECUTE.value # or VALIDE
-        mouvement.applique_au_stock = True
-        mouvement.date_execution = datetime.now(timezone.utc)
-        mouvement.approuve_par_id = current_user.id
+
+        quantite_attendue = mouvement.quantite
         
+        # Source warehouse for return (Dakar Central)
+        dakar_warehouse = db.session.query(EmplacementStock).filter_by(code='ENTREPOT').first()
+
+        if action == 'rejeter':
+            # 1. Reject the entry movement
+            mouvement.workflow_state = WorkflowState.REJETE.value
+            mouvement.motif_rejet = commentaire_magasinier or "Transfert rejeté par le magasinier"
+            mouvement.commentaire = f"{mouvement.commentaire}\n[REJET] : {commentaire_magasinier}"
+            
+            # 2. Return FULL quantity to Dakar Central
+            if dakar_warehouse:
+                retour = MouvementStock(
+                    type_mouvement='entree', # Entree back to Dakar
+                    reference=f"RET-{mouvement.reference}",
+                    produit_id=mouvement.produit_id,
+                    quantite=quantite_attendue,
+                    utilisateur_id=current_user.id,
+                    emplacement_id=dakar_warehouse.id,
+                    commentaire=f"RETOUR (Rejet) : {mouvement.reference} - {commentaire_magasinier}",
+                    workflow_state=WorkflowState.EXECUTE.value,
+                    applique_au_stock=True
+                )
+                db.session.add(retour)
+                
+            msg = "Transfert rejeté et stock retourné au central"
+            
+        else: # action == 'confirmer'
+            if quantite_recue > quantite_attendue:
+                return jsonify({'success': False, 'error': 'La quantité reçue ne peut pas dépasser la quantité attendue'}), 400
+            
+            # 1. Update movement with received quantity
+            diff = quantite_attendue - quantite_recue
+            mouvement.quantite = quantite_recue
+            mouvement.workflow_state = WorkflowState.EXECUTE.value
+            mouvement.applique_au_stock = True
+            mouvement.date_execution = datetime.now(timezone.utc)
+            mouvement.approuve_par_id = current_user.id
+            mouvement.commentaire = f"{mouvement.commentaire}\n[RÉCEIPTION] : Reçu {quantite_recue}/{quantite_attendue}. {commentaire_magasinier}"
+            
+            # 2. If partial, return the difference to Dakar Central
+            if diff > 0 and dakar_warehouse:
+                retour = MouvementStock(
+                    type_mouvement='entree', # Entree back to Dakar
+                    reference=f"RET-{mouvement.reference}",
+                    produit_id=mouvement.produit_id,
+                    quantite=diff,
+                    utilisateur_id=current_user.id,
+                    emplacement_id=dakar_warehouse.id,
+                    commentaire=f"RETOUR (Partiel) : {diff} unités retournées de la réf {mouvement.reference} - {commentaire_magasinier}",
+                    workflow_state=WorkflowState.EXECUTE.value,
+                    applique_au_stock=True
+                )
+                db.session.add(retour)
+                msg = f"Réception de {quantite_recue} confirmée. {diff} unités retournées au central."
+            else:
+                msg = "Réception confirmée avec succès."
+
         db.session.commit()
-        return jsonify({'success': True, 'message': 'Réception confirmée'})
+        return jsonify({'success': True, 'message': msg})
         
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error receiving transfer: {e}")
+        current_app.logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
