@@ -52,4 +52,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 EXPOSE 5000
 
 ENTRYPOINT ["gunicorn"]
-CMD ["--workers=3", "--bind=0.0.0.0:5000", "--timeout=120", "app:app"]
+CMD ["--workers=2", "--bind=0.0.0.0:5000", "--timeout=600", "--keep-alive=5", "app:app"]

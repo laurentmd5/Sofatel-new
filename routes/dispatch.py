@@ -206,10 +206,11 @@ def dispatching():
 
     equipes_json = [{
         'id': e.id,
-        'nom_equipe': f"★ {e.nom_equipe}" if e.publie and e.date_publication == today else e.nom_equipe,
+        'nom_equipe': f"★ {e.nom_equipe}" if e.publie else e.nom_equipe,
         'zone': normalize_zone(e.zone),
         'technologies': e.technologies,
         'service': e.service,
+        'publie': e.publie,
         'publie_aujourdhui': e.publie and e.date_publication == today,
         'membres': [
             {
@@ -431,12 +432,10 @@ def auto_dispatch_logic(demande_ids=None):
     if not demandes:
         return 0
 
-    # 2. Récupérer les équipes publiées aujourd'hui
-    # On reste sur aujourd'hui car une équipe "publiée" l'est pour la journée
+    # 2. Récupérer les équipes publiées
     equipes = Equipe.query.filter_by(
         actif=True, 
-        publie=True, 
-        date_publication=today
+        publie=True
     ).all()
     
     if not equipes:

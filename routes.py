@@ -4043,9 +4043,9 @@ def api_fiche_technique_details(intervention_id):
 @login_required
 def delete_import(import_id):
     """
-    ✅ SOFT DELETE + Vérification FK (Solutions 1 + 3)
+    ✅ HARD DELETE : Suppression complète de l'import et de ses demandes
     - Vérifie présence interventions liées
-    - Marque import comme inactif (pas de DELETE physique)
+    - Supprime physiquement l'import et les demandes associées
     - Gère proprement les erreurs FK
     """
     if current_user.role not in ['chef_pur', 'chef_pilote', 'chef_zone']:
@@ -4085,37 +4085,38 @@ def delete_import(import_id):
             )
             return redirect(url_for('import_demandes'))
         
-        # ✅ SOLUTION 3: Soft Delete (marquer comme inactif)
-        fichier_import.actif = False
-        fichier_import.date_suppression = datetime.utcnow()
-        
+        # ✅ HARD DELETE : Suppression complète de la base
         # Supprimer d'abord toutes les notifications SMS liées à ces demandes
         if demande_ids:
             NotificationSMS.query.filter(NotificationSMS.demande_id.in_(demande_ids)).delete(
                 synchronize_session=False
             )
+            
+            # Supprimer les demandes liées (bulk delete pour performance)
+            DemandeIntervention.query.filter(DemandeIntervention.fichier_importe_id == import_id).delete(
+                synchronize_session=False
+            )
         
-        # Supprimer les demandes liées (mais pas l'import lui-même)
-        for demande in demandes:
-            db.session.delete(demande)
+        # Supprimer l'import lui-même
+        db.session.delete(fichier_import)
         
         db.session.commit()
         
         # 📝 Logger l'action
         log_activity(
             current_user.id, 
-            'soft_delete_import', 
+            'delete_import', 
             'demandes', 
             import_id, 
-            f'Import marqué comme supprimé: {fichier_import.nom_fichier}', 
+            f'Import supprimé définitivement: {fichier_import.nom_fichier}', 
             {
                 'filename': fichier_import.nom_fichier,
                 'import_date': fichier_import.date_import.isoformat() if fichier_import.date_import else None,
                 'deleted_by': current_user.username,
                 'records_deleted': len(demandes),
                 'imported_by': db.session.get(User, fichier_import.importe_par).username if fichier_import.importe_par else None,
-                'soft_delete': True,
-                'date_suppression': datetime.utcnow().isoformat()
+                'hard_delete': True,
+                'timestamp': datetime.utcnow().isoformat()
             }
         )
 
@@ -4136,7 +4137,7 @@ def delete_import(import_id):
             )
         
         current_app.logger.info(
-            f"✅ Import {import_id} soft-deleted (actif=False) avec {len(demandes)} demandes"
+            f"✅ Import {import_id} supprimé définitivement avec {len(demandes)} demandes"
         )
     
     except IntegrityError as e:
@@ -4433,7 +4434,7 @@ def connection_history():
         return redirect(url_for('dashboard'))
         
     page = request.args.get('page', 1, type=int)
-    per_page = 10
+    per_page = 50
     
     logs = ActivityLog.query.join(User).order_by(
         ActivityLog.timestamp.desc()

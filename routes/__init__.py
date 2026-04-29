@@ -6,7 +6,7 @@ from .auth import register_auth_blueprint
 from .surveys import surveys_bp
 from .dispatch import dispatch_bp
 from .teams import teams_bp
-from flask import redirect, url_for, jsonify, current_app
+from flask import redirect, url_for, jsonify, current_app, request
 import os
 
 
@@ -143,7 +143,7 @@ def register_blueprints(app):
             @app.route('/manage-users')
             @app.route('/manage_users')
             def manage_users():
-                return redirect(url_for('legacy.manage_users'))
+                return redirect(url_for('legacy.manage_users', **request.args))
             
             @app.route('/edit-user/<int:user_id>', methods=['GET', 'POST'])
             @app.route('/edit_user/<int:user_id>', methods=['GET', 'POST'])
@@ -153,7 +153,6 @@ def register_blueprints(app):
             @app.route('/connection-history')
             @app.route('/connection_history')
             def connection_history():
-                return redirect(url_for('legacy.connection_history'))
+                return redirect(url_for('legacy.connection_history', **request.args))
     except Exception as e:
         app.logger.warning(f'Impossible de charger legacy routes: {e}')
-

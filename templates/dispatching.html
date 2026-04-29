@@ -1090,7 +1090,7 @@
             const technoMatch = (equipe.technologies || '').includes(demande.type_techno);
             const serviceMatch = (equipe.service || '') === (demande.service || '');
             
-            const isPublieToday = equipe.publie_aujourdhui === true;
+
 
             if (zoneMatch && technoMatch && (serviceMatch || !demande.service)) {
                 equipesRecommandees.push(equipe);
@@ -1105,7 +1105,7 @@
         if (equipesRecommandees.length > 0) {
             equipeOptions += `<optgroup label="✨ Équipes recommandées (Zone & Techno)">`;
             equipesRecommandees.forEach(function (equipe) {
-                const badge = equipe.publie_aujourdhui ? ' [PUBLIÉE]' : '';
+                const badge = equipe.publie ? ' [PUBLIÉE]' : '';
                 equipeOptions += `<option value="${equipe.id}" style="font-weight:bold; color:#0d6efd;">${equipe.nom_equipe} (${equipe.technologies} - ${equipe.zone})${badge}</option>`;
             });
             equipeOptions += `</optgroup>`;
