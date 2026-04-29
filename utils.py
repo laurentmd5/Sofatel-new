@@ -81,7 +81,8 @@ def process_excel_file(filepath, service, importe_par):
             'libelle_quartier': ['LIBELLE_QUARTIER', 'Adresse', 'ADRESSE_INSTALL'],
             'demande': ['DEMANDE', 'Demande'],
             'taches': ['TACHE', 'Tâches', 'TACHES'],
-            'st': ['ST']
+            'st': ['ST'],
+            'equipe': ['EQUIPE', 'EQUIPES', 'EQUI', 'PILOTE', 'NOM EQUIPE']
         }
         
         # Construction du mapping dynamique
@@ -255,7 +256,8 @@ def process_excel_file_production(filepath, service, importe_par, fichier_import
             'pilotes': ['PILOTES', 'PILOTES REGIS'],
             'adresse': ['ADRESSE'],
             'type_techno': ['TECHO'],
-            'offre': ['OFFRES', 'OFFRE']
+            'offre': ['OFFRES', 'OFFRE'],
+            'equipe': ['EQUIPE', 'EQUIPES', 'EQUI', 'PILOTE', 'NOM EQUIPE', 'ST']
         }
         
         # Construction du mapping dynamique

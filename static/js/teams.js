@@ -845,9 +845,50 @@ function displayEquipesJour(equipes) {
     container.innerHTML = html;
 }
 
+/**
+ * Renommer une équipe via l'API
+ */
+function renameTeam(teamId, currentName, callback) {
+    const newName = prompt(`Entrez le nouveau nom pour l'équipe "${currentName}" :`, currentName);
+    
+    if (newName === null) return; // Annulé
+    if (newName.trim() === '') {
+        alert('Le nom de l\'équipe ne peut pas être vide.');
+        return;
+    }
+    if (newName.trim() === currentName) return; // Pas de changement
+
+    fetch(`/api/rename-team/${teamId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        },
+        body: JSON.stringify({ new_name: newName.trim() })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            if (typeof callback === 'function') {
+                callback(data.new_name);
+            } else {
+                location.reload();
+            }
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('Erreur lors de la communication avec le serveur.');
+    });
+}
+
 // Export du module pour utilisation globale
 window.TeamsModule = TeamsModule;
 window.generateTeamName = generateTeamName;
 window.toggleTechnicienSelect = toggleTechnicienSelect;
 window.removeMembre = removeMembre;
 window.getEquipeIdFromUrl = getEquipeIdFromUrl;
+window.renameTeam = renameTeam;

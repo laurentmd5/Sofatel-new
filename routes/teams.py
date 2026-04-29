@@ -696,3 +696,61 @@ def delete_team(equipe_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@teams_bp.route('/api/rename-team/<int:equipe_id>', methods=['POST'])
+@login_required
+@csrf.exempt
+def rename_team(equipe_id):
+    """API — Renommer une équipe."""
+    if current_user.role not in ['chef_zone', 'chef_pur']:
+        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
+
+    equipe = db.session.get(Equipe, equipe_id)
+    if not equipe:
+        return jsonify({'success': False, 'error': 'Équipe non trouvée'}), 404
+
+    data = request.get_json()
+    new_name = data.get('new_name', '').strip()
+
+    if not new_name:
+        return jsonify({'success': False, 'error': 'Le nouveau nom ne peut pas être vide'}), 400
+
+    # Vérification des droits pour le chef de zone
+    if current_user.role == 'chef_zone':
+        possible_zones = [current_user.zone] if current_user.zone else []
+        if current_user.zone_relation:
+            possible_zones.append(current_user.zone_relation.nom)
+            possible_zones.append(current_user.zone_relation.code)
+            possible_zones.append(f"{current_user.zone_relation.nom} ({current_user.zone_relation.code})")
+        possible_zones = list(set([z for z in possible_zones if z]))
+        if equipe.zone not in possible_zones and equipe.chef_zone_id != current_user.id:
+            return jsonify({'success': False, 'error': 'Cette équipe n\'appartient pas à votre zone'}), 403
+
+    try:
+        # Vérifier si le nom existe déjà (autre que l'équipe actuelle)
+        existing = Equipe.query.filter(Equipe.nom_equipe == new_name, Equipe.id != equipe_id).first()
+        if existing:
+            return jsonify({'success': False, 'error': f'Le nom "{new_name}" est déjà utilisé par une autre équipe.'}), 400
+
+        old_name = equipe.nom_equipe
+        equipe.nom_equipe = new_name
+        db.session.commit()
+
+        log_activity(
+            user_id=current_user.id,
+            action='edit',
+            module='teams',
+            entity_id=equipe_id,
+            entity_name=f"Équipe {new_name}",
+            details={'old_name': old_name, 'new_name': new_name, 'renamed_via_api': True}
+        )
+
+        return jsonify({
+            'success': True, 
+            'message': f'Équipe renommée avec succès de "{old_name}" en "{new_name}"',
+            'new_name': new_name
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500

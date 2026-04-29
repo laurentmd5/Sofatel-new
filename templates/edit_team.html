@@ -17,8 +17,19 @@
                     {{ form.hidden_tag() }}
                     
                     <div class="mb-3">
-                        <p class="text-muted">
-                            <strong>Nom de l'équipe:</strong> {{ equipe.nom_equipe }}<br>
+                        {{ form.nom_equipe.label(class="form-label") }}
+                        {{ form.nom_equipe(class="form-control") }}
+                        {% if form.nom_equipe.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.nom_equipe.errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <p class="text-muted small">
                             <strong>Date de création:</strong> {{ equipe.date_creation.strftime('%d/%m/%Y') }}
                         </p>
                     </div>

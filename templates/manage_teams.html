@@ -8,7 +8,7 @@
     <div class="col-12">
         <h1 class="h3 mb-4">
             <i data-feather="users" class="me-2"></i>
-            Gestion de l'équipe : {{ equipe.nom_equipe }}
+            Gestion de l'équipe : <span id="page-title-name">{{ equipe.nom_equipe }}</span>
         </h1>
     </div>
 </div>
@@ -27,7 +27,10 @@
                 <div class="row">
                     <div class="col-md-6">
                         <p class="mb-2">
-                            <strong>Nom:</strong> {{ equipe.nom_equipe }}
+                            <strong>Nom:</strong> <span id="team-name-display">{{ equipe.nom_equipe }}</span>
+                            <button class="btn btn-link btn-sm p-0 border-0 ms-2 align-baseline" onclick="renameTeam({{ equipe.id }}, '{{ equipe.nom_equipe|replace("'", "\\'") }}', (newName) => { document.getElementById('team-name-display').textContent = newName; document.getElementById('page-title-name').textContent = newName; })" title="Renommer l'équipe">
+                                <i data-feather="edit-3" style="width: 16px;"></i>
+                            </button>
                         </p>
                         <p class="mb-2">
                             <strong>Date:</strong> {{ equipe.date_creation.strftime('%d/%m/%Y') }}

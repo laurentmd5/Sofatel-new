@@ -432,20 +432,26 @@ def auto_dispatch_logic(demande_ids=None):
     if not demandes:
         return 0
 
-    # 2. Récupérer les équipes publiées
+    # 2. Récupérer toutes les équipes actives (même si pas encore publiées)
     equipes = Equipe.query.filter_by(
-        actif=True, 
-        publie=True
+        actif=True
     ).all()
     
     if not equipes:
-        print(f"DEBUG: Aucune équipe publiée")
+        print(f"DEBUG: Aucune équipe active trouvée")
         return 0
 
-    # 3. Préparer le mapping des techniciens par nom pour le dispatch direct
-    # On crée un dictionnaire : "prenomnom" ou "nomprenom" -> (User, Equipe)
+    # 3. Préparer le mapping pour le dispatch direct
+    # On crée deux dicos pour matcher soit le nom de l'équipe, soit le technicien
     tech_by_name = {}
+    team_by_name = {}
+    
     for eq in equipes:
+        # Indexer par nom d'équipe (normalisé)
+        team_key = "".join((eq.nom_equipe or '').lower().split())
+        if team_key:
+            team_by_name[team_key] = eq
+            
         for m in eq.membres:
             if m.technicien_id:
                 # Normalisation : minuscule, sans espaces
@@ -479,38 +485,54 @@ def auto_dispatch_logic(demande_ids=None):
         # Chercher une correspondance exacte dans notre mapping
         search_target = "".join(demande.equipe.lower().split())
         
-        # On essaie aussi le match partiel si l'import contient plus de texte (ex: "Equipe John Doe")
-        matched_tech_data = None
-        if search_target in tech_by_name:
-            matched_tech_data = tech_by_name[search_target]
-        else:
-            # Matcher plus souple (si le nom du technicien est contenu dans la chaîne 'equipe')
-            for name_key, data in tech_by_name.items():
-                if name_key in search_target or search_target in name_key:
-                    matched_tech_data = data
-                    break
+        matched_equipe = None
+        matched_technicien = None
         
-        if matched_tech_data:
-            technicien, equipe = matched_tech_data
-            
-            # Vérifier quand même la zone et techno pour éviter les erreurs grossières d'import
-            # (Optionnel : l'utilisateur veut forcer selon le fichier, on peut être plus souple)
+        # 1. Tentative de match par nom d'équipe
+        if search_target in team_by_name:
+            matched_equipe = team_by_name[search_target]
+            # Trouver le tech principal de cette équipe
+            membre_tech = next((m for m in matched_equipe.membres if m.type_membre == 'technicien'), None)
+            if membre_tech and membre_tech.technicien_id:
+                matched_technicien = User.query.get(membre_tech.technicien_id)
+        
+        # 2. Si pas de match équipe, tentative par nom de technicien
+        if not matched_technicien:
+            if search_target in tech_by_name:
+                matched_technicien, matched_equipe = tech_by_name[search_target]
+            else:
+                # Matcher plus souple pour le technicien
+                for name_key, data in tech_by_name.items():
+                    if name_key in search_target or search_target in name_key:
+                        matched_technicien, matched_equipe = data
+                        break
+
+        if matched_technicien and matched_equipe:
             try:
-                demande.technicien_id = technicien.id
+                demande.technicien_id = matched_technicien.id
                 demande.statut = 'affecte'
                 demande.date_affectation = datetime.now(timezone.utc)
                 
-                intervention = Intervention(
-                    demande_id=demande.id,
-                    technicien_id=technicien.id,
-                    equipe_id=equipe.id,
-                    date_debut=datetime.now(timezone.utc),
-                    statut='en_cours'
-                )
-                db.session.add(intervention)
+                # Vérifier si une intervention existe déjà pour cette demande
+                intervention = Intervention.query.filter_by(demande_id=demande.id).first()
+                if not intervention:
+                    intervention = Intervention(
+                        demande_id=demande.id,
+                        technicien_id=matched_technicien.id,
+                        equipe_id=matched_equipe.id,
+                        date_debut=datetime.now(timezone.utc),
+                        statut='en_cours'
+                    )
+                    db.session.add(intervention)
+                else:
+                    # Update existing intervention if any
+                    intervention.technicien_id = matched_technicien.id
+                    intervention.equipe_id = matched_equipe.id
+                    intervention.statut = 'en_cours'
+
                 assigned_count += 1
                 demande.statut = 'assigned_internal' # Marqueur temporaire
-                print(f"DEBUG Fixe: Demande {demande.nd} -> Tech {technicien.username} (via colonne Equipe)")
+                print(f"DEBUG Fixe: Demande {demande.nd} -> Tech {matched_technicien.username} (Equipe: {matched_equipe.nom_equipe})")
             except Exception as e:
                 db.session.rollback()
                 print(f"Erreur dispatch fixe {demande.id}: {e}")
