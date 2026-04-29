@@ -1,4571 +1,3564 @@
-import os
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, send_file, Response, current_app
+from flask_login import login_required, current_user
+from sqlalchemy import func, and_, or_, desc, asc, case
+from sqlalchemy.sql.expression import case as case_sql
+from datetime import datetime, timedelta, timezone
 import traceback
-from itsdangerous import URLSafeTimedSerializer
+from models import db, Produit, MouvementStock, Categorie, EmplacementStock
+from sqlalchemy import func, extract, and_
+from extensions import db
+from forms import EntreeStockForm, SortieStockForm, ProduitForm, FournisseurForm
+from models import Produit, Categorie, MouvementStock, User, Fournisseur, EmplacementStock, Intervention, ReservationPiece, Zone
 import pandas as pd
-from datetime import datetime, date, timezone
-from flask import json, render_template, request, redirect, session, url_for, flash, jsonify, current_app, send_from_directory, abort
-from flask_login import login_user, logout_user, login_required, current_user
-from pymysql.err import IntegrityError
-from werkzeug.security import check_password_hash, generate_password_hash
-from werkzeug.utils import secure_filename
-import base64
+import traceback
+from io import BytesIO
 import os
-from PIL import Image
-from app import db
-from forms import FicheTechniqueForm
-from models import FicheTechnique, Intervention
-import io
-from app import app, db
-from models import *
-from forms import *
-from utils import log_activity, get_chef_pur_stats, get_chef_pilote_stats, get_chef_zone_stats, get_technicien_interventions, get_performance_data, build_stats_by_zone_tech
-from kpi_utils import get_unified_performance_data
-from extensions import csrf  # needed to exempt login in tests
+from barcode_utils import generate_barcode
+from utils_audit import log_stock_entry, log_stock_removal
+from utils_export import generate_csv, PDFReport, format_datetime, apply_date_filter
+from rbac_stock import require_stock_permission, require_stock_role, has_stock_permission, can_modify_produit, can_delete_produit
+from supplier_import import process_supplier_import
+from sonatel_stock_import import process_sonatel_import
 
-@app.route('/')
-def index():
-    if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
-    return redirect(url_for('login'))
+# Création d'un Blueprint pour les routes de gestion de stock
+stock_bp = Blueprint('stock', __name__, url_prefix='/gestion-stock')
 
+# ============================================================================
+# 🔴 PRODUCTION CRITICAL: Workflow & Stock Validation Helpers
+# ============================================================================
 
-# Surveys routes moved to routes/surveys.py (blueprint 'surveys')
-# See routes/surveys.py for implementation and registration via register_blueprints(app)
-
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
-
-    form = LoginForm()
-    if form.validate_on_submit():
-        user = User.query.filter_by(username=form.username.data).first()
-        if user and user.password_hash and user.actif and check_password_hash(
-                user.password_hash, form.password.data):
-            
-            # 🔴 PHASE 1 FIX: Valider que magasinier a une zone assignée
-            if user.role and user.role.lower() == 'magasinier':
-                if not user.zone_id:
-                    flash('⚠️ Erreur: Vous n\'êtes pas assigné à une zone. Contactez votre administrateur.', 'error')
-                    current_app.logger.warning(
-                        f'Connexion magasinier bloquée: utilisateur {user.username} sans zone_id'
-                    )
-                    return render_template('login.html', form=form)
-            
-            login_user(user)
-            session.permanent = True
-            log_activity(
-                user_id=user.id,
-                action='login',
-                module='auth',
-                entity_name=f"{user.prenom} {user.nom}",
-                details={'username': user.username, 'role': user.role}
-            )
-            
-            flash('Connexion réussie!', 'success')
-            next_page = request.args.get('next')
-            return redirect(next_page) if next_page else redirect(
-                url_for('dashboard'))
-        flash('Nom d\'utilisateur ou mot de passe incorrect.', 'error')
-
-    return render_template('login.html', form=form)
-
-
-@app.route('/api/check-session')
-def check_session():
-    if current_user.is_authenticated:
-        return jsonify({'authenticated': True})
-    return jsonify({'authenticated': False})
-
-@app.route('/api/extend-session', methods=['POST'])
-def extend_session():
-    if current_user.is_authenticated:
-        session.modified = True
-        return jsonify({'success': True})
-    return jsonify({'success': False}), 401
-
-@app.route('/logout')
-@login_required
-def logout():
-    # Ajout du log de déconnexion
-    """ log = UserConnectionLog(
-        user_id=current_user.id,
-        action='logout',
-        ip_address=request.remote_addr
-    )
-    db.session.add(log)
-    db.session.commit() """
-    log_activity(
-        user_id=current_user.id,
-        action='logout',
-        module='auth',
-        entity_name=f"{current_user.prenom} {current_user.nom}",
-        details={'username': current_user.username}
-    )
-    logout_user()
-    flash('Vous avez été déconnecté.', 'info')
-    return redirect(url_for('login'))
-
-
-@app.route('/dashboard')
-@login_required
-def dashboard():
+def validate_and_initialize_mouvement_workflow(mouvement, user):
+    """
+    🔴 PRODUCTION CRITICAL: Initialize workflow state BEFORE any stock is applied.
+    
+    This ensures:
+    1. All stock movements require approval before being applied
+    2. Movements start in EN_ATTENTE state
+    3. Only EN_ATTENTE_DOCS → APPROUVE → EXECUTE → VALIDE flow allowed
+    
+    Args:
+        mouvement: MouvementStock object (not yet committed)
+        user: User object creating the movement
+    
+    Returns:
+        mouvement: Modified MouvementStock with proper workflow state
+    """
+    from workflow_stock import WORKFLOW_RULES, WorkflowState
+    
     try:
-        if current_user.role == 'chef_pur':
-            performance_data = get_performance_data()
-            stats_by_zone_tech = build_stats_by_zone_tech()
-            last_update = datetime.now(timezone.utc).strftime('%d/%m/%Y %H:%M')
-            techniciens = User.query.filter_by(role='technicien', actif=True).all()
-            # Afficher toutes les équipes actives, qu'elles soient publiées ou non
-            equipes = Equipe.query.filter_by(actif=True).order_by(Equipe.date_creation.desc()).all()
-            def normalize_zone(zone):
-                z = (zone or '').upper()
-                if any(x in z for x in ['MBOUR', 'KAOLACK', 'FATICK']):
-                    if 'MBOUR' in z:
-                        return 'MBOUR'
-                    if 'KAOLACK' in z:
-                        return 'KAOLACK'
-                    if 'FATICK' in z:
-                        return 'FATICK'
-                return 'DAKAR'
+        # Ensure workflow state is set BEFORE commit
+        mouvement.workflow_state = WorkflowState.EN_ATTENTE.value
+        mouvement.applique_au_stock = False  # CRITICAL: Never auto-apply
+        
+        # Log the initialization
+        current_app.logger.info(
+            f"✅ Mouvement workflow initialized: ID={mouvement.id}, "
+            f"type={mouvement.type_mouvement}, state={mouvement.workflow_state}, "
+            f"applique_au_stock=False"
+        )
+        
+        return mouvement
+    
+    except Exception as e:
+        current_app.logger.error(f"❌ Error initializing workflow: {str(e)}")
+        raise
 
-            techniciens_json = [{
-                'id': t.id,
-                'prenom': t.prenom,
-                'nom': t.nom,
-                'technologies': t.technologies,
-                'zone': normalize_zone(t.zone)
-            } for t in techniciens]
-            equipes_json = [{
-                'id': e.id,
-                'nom_equipe': e.nom_equipe,
-                'technologies': e.technologies,
-                'zone': normalize_zone(e.zone)
-            } for e in equipes]
-            equipes_mapping = {}
-            for technicien in techniciens:
-                technicien_zone = normalize_zone(technicien.zone)
-                equipes_mapping[technicien.id] = [
-                    equipe for equipe in equipes
-                    if normalize_zone(equipe.zone) == technicien_zone and any(
-                        m.technicien_id == technicien.id for m in equipe.membres)
-                ]
-            return render_template('dashboard_chef_pur.html',
-                                   stats=get_chef_pur_stats(),
-                                   stats_by_zone_tech=stats_by_zone_tech,
-                                   last_update=last_update,
-                                   performance_data=performance_data,
-                                   zones=performance_data.get('zones', []),
-                                   pilots=performance_data.get('pilots', []),
-                                   techniciens_json=techniciens_json,
-                                   equipes_json=equipes_json,
-                                   equipes_mapping=equipes_mapping)
-        elif current_user.role == 'chef_pilote':
-            return render_template('dashboard_chef_pilote.html',
-                                   stats=get_chef_pilote_stats(
-                                       current_user.service, current_user))
-        elif current_user.role == 'chef_zone':
-            print(f"DEBUG: Utilisateur chef_zone connecté: {current_user.username}")
-            
-            # 🔴 FORCE RELOAD: Rechargement forcé des données utilisateur depuis la BD
-            # pour éviter que les changements d'admin ne soient cachés par la session
-            fresh_user = User.query.get(current_user.id)
-            if not fresh_user:
-                flash('⚠️ Erreur: Utilisateur non trouvé', 'error')
-                return redirect(url_for('logout'))
-            
-            print(f"DEBUG: Données utilisateur reloadées depuis la BD")
-            print(f"  - zone: {fresh_user.zone}")
-            print(f"  - zone_id: {fresh_user.zone_id}")
-            print(f"  - zone_relation: {fresh_user.zone_relation}")
-            
-            # Déterminer la zone depuis les données FRAÎCHES (pas du cache session)
-            user_zone = None
-            if fresh_user.zone_relation:
-                user_zone = f"{fresh_user.zone_relation.nom} ({fresh_user.zone_relation.code})"
-                print(f"DEBUG: Zone depuis zone_relation: {user_zone}")
-            elif fresh_user.zone:
-                user_zone = fresh_user.zone
-                print(f"DEBUG: Zone depuis zone texte: {user_zone}")
-            else:
-                flash('⚠️ Erreur: Vous n\'êtes pas assigné à une zone. Contactez votre administrateur.', 'error')
-                return redirect(url_for('logout'))
-            
-            print(f"DEBUG: Dashboard chef_zone - Zone utilisée: {user_zone}")
-            
-            try:
-                stats = get_chef_zone_stats(user_zone)
-                print(f"DEBUG: Stats retournées par get_chef_zone_stats: {stats}")
-            except Exception as e:
-                print(f"DEBUG: Erreur dans get_chef_zone_stats: {e}")
-                flash(f'⚠️ Erreur lors du calcul des statistiques: {str(e)}', 'error')
-                stats = {
-                    'equipes_jour': 0,
-                    'techniciens_zone': 0,
-                    'interventions_cours': 0,
-                    'interventions_terminees_jour': 0
-                }
-            
-            try:
-                stats_pur = get_chef_pur_stats(zone=user_zone)
-                stats_pur['performance_data'] = get_performance_data(zone=user_zone)
-            except Exception as e:
-                print(f"DEBUG: Erreur dans get_chef_pur_stats: {e}")
-                stats_pur = {'performance_data': {}}
-            
-            print(f"DEBUG: Stats finales envoyées au template: {stats}")
-            
-            return render_template('dashboard_chef_zone.html',
-                                   stats=stats,
-                                   stats_pur=stats_pur,
-                                   user_zone=user_zone,
-                                   fresh_user=fresh_user)
-        elif current_user.role == 'technicien':
-            return render_template('dashboard_technicien.html',
-                                   interventions=get_technicien_interventions(
-                                       current_user.id))
-        elif current_user.role == 'gestionnaire_stock':
-            return redirect(url_for('stock.gestion_stock'))
-        elif current_user.role == 'magasinier':
-            # 🔴 PHASE 1 FIX: Dashboard spécialisé pour magasinier
-            # Vérifier que magasinier a une zone assignée
-            if not current_user.zone_id:
-                flash('⚠️ Erreur: Vous n\'êtes pas assigné à une zone. Contactez votre administrateur.', 'error')
-                return redirect(url_for('logout'))
-            
-            from zone_rbac import filter_produit_by_emplacement_zone, filter_mouvement_by_zone
-            
-            # Stats zone magasinier - FIXED: Use zone_relation (object) not legacy zone string
-            zone = current_user.zone_relation
-            
-            # Produits de la zone
-            produits_query = Produit.query
-            produits_zone = filter_produit_by_emplacement_zone(produits_query).all()
-            
-            # Mouvements récents (7 jours)
-            seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
-            mouvements_query = MouvementStock.query.filter(
-                MouvementStock.date_mouvement >= seven_days_ago
+def prevent_negative_stock_on_creation(produit_id, quantite_to_remove):
+    """
+    🔴 PRODUCTION CRITICAL: Prevent negative stock before creating ANY stock movement.
+    
+    Args:
+        produit_id: Product ID
+        quantite_to_remove: Quantity being removed (for sortie movements)
+    
+    Returns:
+        (is_valid: bool, available_stock: float, message: str)
+    """
+    try:
+        current_stock = db.session.query(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (MouvementStock.type_mouvement == 'entree', MouvementStock.quantite),
+                        (MouvementStock.type_mouvement == 'sortie', -MouvementStock.quantite),
+                        else_=0
+                    )
+                ), 
+                0
             )
-            mouvements_zone = filter_mouvement_by_zone(mouvements_query).all()
+        ).filter(MouvementStock.produit_id == produit_id).scalar()
+        
+        if quantite_to_remove > current_stock:
+            return (False, current_stock, f"Insufficient stock: {current_stock} available, {quantite_to_remove} requested")
+        
+        return (True, current_stock, "OK")
+    
+    except Exception as e:
+        current_app.logger.error(f"❌ Error checking stock: {str(e)}")
+        return (False, 0, f"Error checking stock: {str(e)}")
+
+# Routes pour l'API du tableau de bord de gestion des stocks
+
+@stock_bp.route('/api/stats/stock')
+@login_required
+def api_stats_stock():
+    """
+    API pour récupérer les statistiques globales du stock
+    Filtre par zone pour magasinier
+    """
+    try:
+        from rbac_stock import filter_produits_by_zone
+        
+        current_app.logger.info("Début de la récupération des statistiques du stock")
+        
+        # Nombre total de produits (filtré par zone pour magasinier)
+        query = db.session.query(Produit)
+        query = filter_produits_by_zone(query, current_user)
+        total_produits = query.count()
+        current_app.logger.info(f"Nombre total de produits: {total_produits}")
+        
+        # Nombre de produits en dessous du seuil d'alerte
+        try:
+            # Récupérer tous les produits avec leur seuil d'alerte (filtré par zone)
+            produits_query = db.session.query(Produit)
+            produits_query = filter_produits_by_zone(produits_query, current_user)
+            produits = produits_query.all()
+            # Compter ceux dont la quantité est inférieure ou égale au seuil d'alerte spécifique
+            produits_faible_stock = sum(1 for p in produits if p.quantite <= p.seuil_alerte)
+            current_app.logger.info(f"Produits en dessous du seuil d'alerte: {produits_faible_stock}")
+        except Exception as e:
+            current_app.logger.error(f"Erreur lors du calcul des produits en faible stock: {str(e)}")
+            current_app.logger.error(traceback.format_exc())
+            produits_faible_stock = 0
+        
+        # Calcul des entrées/sorties du mois en cours
+        maintenant = datetime.now()
+        debut_mois = maintenant.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        # Entrées du mois (filtrées par zone)
+        try:
+            from rbac_stock import filter_mouvements_by_zone
+            # Pour magasinier: filtrer les mouvements par zone
+            mouvements_entree = db.session.query(MouvementStock).filter(
+                MouvementStock.type_mouvement == 'entree',
+                MouvementStock.date_mouvement >= debut_mois
+            )
+            mouvements_entree = filter_mouvements_by_zone(mouvements_entree, current_user)
+            entrees_mois = sum(m.quantite for m in mouvements_entree)
+        except Exception as e:
+            current_app.logger.error(f"Erreur lors du calcul des entrées du mois: {str(e)}")
+            entrees_mois = 0
+        
+        # Sorties du mois (filtrées par zone)
+        try:
+            mouvements_sortie = db.session.query(MouvementStock).filter(
+                MouvementStock.type_mouvement == 'sortie',
+                MouvementStock.date_mouvement >= debut_mois
+            )
+            mouvements_sortie = filter_mouvements_by_zone(mouvements_sortie, current_user)
+            sorties_mois = sum(m.quantite for m in mouvements_sortie)
+        except Exception as e:
+            current_app.logger.error(f"Erreur lors du calcul des sorties du mois: {str(e)}")
+            sorties_mois = 0
+        
+        current_app.logger.info(f"Entrées du mois: {entrees_mois}, Sorties du mois: {sorties_mois}")
+        
+        # Mouvements des 30 derniers jours pour le graphique
+        date_30j = maintenant - timedelta(days=30)
+        current_app.logger.info(f"Récupération des mouvements depuis le {date_30j}")
+        mouvements_30j = []
+        
+        try:
+            # Récupérer les données par jour (filtrées par zone pour magasinier)
+            from zone_rbac import user_has_global_access
             
-            # Stock summary
-            total_articles = len(produits_zone)
-            # FIXED: Use prix_vente instead of non-existent prix_unitaire
-            total_value = sum([p.quantite * (float(p.prix_vente) if p.prix_vente else 0) for p in produits_zone])
-            articles_low_stock = len([p for p in produits_zone if p.quantite and p.quantite < 10])
-            
-            # Mouvements par type
-            entrees = len([m for m in mouvements_zone if m.type_mouvement == 'entree'])
-            sorties = len([m for m in mouvements_zone if m.type_mouvement == 'sortie'])
-            
-            # ✅ NOUVEAU: Réservations techniciens en attente (inclut hors intervention)
-            reservations_en_attente = db.session.query(ReservationPiece).join(
-                User, ReservationPiece.utilisateur_id == User.id
+            # Build base query
+            base_query = db.session.query(
+                func.date(MouvementStock.date_mouvement).label('date'),
+                func.sum(
+                    case(
+                        (MouvementStock.type_mouvement == 'entree', MouvementStock.quantite),
+                        else_=0
+                    )
+                ).label('entrees'),
+                func.sum(
+                    case(
+                        (MouvementStock.type_mouvement == 'sortie', MouvementStock.quantite),
+                        else_=0
+                    )
+                ).label('sorties')
             ).filter(
-                User.zone_id == current_user.zone_id,
-                ReservationPiece.statut == ReservationPiece.STATUT_EN_ATTENTE
+                MouvementStock.date_mouvement >= date_30j
+            )
+            
+            # Apply zone filter for magasinier
+            if not user_has_global_access():
+                from models import EmplacementStock
+                base_query = base_query.join(EmplacementStock).filter(
+                    EmplacementStock.zone_id == current_user.zone_id
+                )
+            
+            mouvements_par_jour = base_query.group_by(
+                func.date(MouvementStock.date_mouvement)
+            ).order_by(
+                func.date(MouvementStock.date_mouvement)
             ).all()
             
-            nb_reservations_attente = len(reservations_en_attente)
+            current_app.logger.info(f"Mouvements par jour trouvés: {len(mouvements_par_jour)}")
             
-            return render_template('dashboard_magasinier.html',
-                                 zone=zone,
-                                 total_articles=total_articles,
-                                 total_value=total_value,
-                                 articles_low_stock=articles_low_stock,
-                                 produits_zone=produits_zone,
-                                 mouvements_zone=mouvements_zone,
-                                 entrees_7j=entrees,
-                                 sorties_7j=sorties,
-                                 nb_reservations_attente=nb_reservations_attente)
-        else:
-            flash('Rôle utilisateur non reconnu.', 'error')
-            return redirect(url_for('logout'))
-    except OperationalError:
-        current_app.logger.exception('Database OperationalError in dashboard — possibly missing columns')
-        flash('Erreur base de données: schéma incomplet. Veuillez exécuter les migrations (voir IMPROVEMENTS.md).', 'danger')
-        # Render empty/placeholder dashboard to avoid 500 and give operators a hint
-        return render_template('dashboard_chef_pur.html',
-                               stats={},
-                               stats_by_zone_tech={},
-                               last_update=None,
-                               performance_data={},
-                               zones=[],
-                               pilots=[],
-                               techniciens_json=[],
-                               equipes_json=[],
-                               equipes_mapping={})
-
-@app.route('/dashboard/rh')
-@login_required
-def dashboard_rh():
-    """RH Dashboard - Manage leave requests and team absences"""
-    allowed_roles = ['rh', 'chef_pur']
-    if current_user.role not in allowed_roles:
-        flash('Accès refusé: seuls les utilisateurs RH et Chef PUR peuvent accéder au dashboard RH', 'danger')
-        return redirect(url_for('dashboard'))
-    
-    return render_template('dashboard_rh.html')
-
-
-# ===== KPI DASHBOARD ROUTES: UPGRADED IN routes/auth.py =====
-# ✅ The KPI dashboard route has been upgraded in routes/auth.py
-# ✅ Merged with enhanced KPI data sourcing + fallback logic
-# ✅ No duplication: single /dashboard/kpi endpoint
-# ✅ Access: chef_pur, chef_zone, admin
-
-# Dispatch/import routes moved to routes/dispatch.py (blueprint 'dispatch')
-# See routes/dispatch.py for implementation and registration via register_blueprints(app)
-
-@app.route('/import-demandes')
-def import_demandes():
-    """Compatibility wrapper: redirect old top-level endpoint name to the
-    dispatch blueprint's implementation.
-    """
-    return redirect(url_for('dispatch.import_demandes'))
-
-# Dispatching/import endpoints moved to routes/dispatch.py (blueprint 'dispatch')
-# See routes/dispatch.py for implementation and registration via register_blueprints(app)
-
-
-""" @app.route('/dispatching')
-@login_required
-def dispatching():
-    if current_user.role not in ['chef_pur', 'chef_pilote', 'chef_zone']:
-        flash('Accès non autorisé.', 'error')
-        return redirect(url_for('dashboard'))
-
-    page = request.args.get('page', 1, type=int)
-    per_page = min(request.args.get('per_page', 25, type=int),
-                   100)  # Limite à 100
-
-    query = DemandeIntervention.query.filter(
-        DemandeIntervention.statut.in_(['nouveau', 'a_reaffecter']))
-    if current_user.role == 'chef_pilote' and current_user.service:
-        if current_user.service == 'SAV,Production':
-            # Chef pilote principal voit les deux services
-            query = query.filter(DemandeIntervention.service.in_(['SAV', 'Production']))
-        else:
-            # Chef pilote normal voit seulement son service
-            query = query.filter_by(service=current_user.service)
-
-    if current_user.role == 'chef_zone' and current_user.zone:
-        query = query.filter_by(zone=current_user.zone)
-
-    demandes_paginated = query.order_by(
-        DemandeIntervention.priorite_traitement.desc(),
-        DemandeIntervention.date_demande_intervention.asc()).paginate(
-            page=page, per_page=per_page, error_out=False)
-
-    demandes = demandes_paginated.items
-
-    techniciens = User.query.filter_by(role='technicien', actif=True).all()
-    equipes = Equipe.query.filter_by(actif=True,
-                                     publie=True,
-                                     date_publication=date.today()).all()
-
-    # --- NORMALISATION DES ZONES POUR LES DEMANDES ---
-    def normalize_zone(zone):
-        z = (zone or '').upper()
-        if any(x in z for x in ['MBOUR', 'KAOLACK', 'FATICK']):
-            if 'MBOUR' in z:
-                return 'MBOUR'
-            if 'KAOLACK' in z:
-                return 'KAOLACK'
-            if 'FATICK' in z:
-                return 'FATICK'
-        return 'DAKAR'
-
-    # Appliquer la normalisation sur les objets pour le JS
-    techniciens_json = [{
-        'id': t.id,
-        'prenom': t.prenom,
-        'nom': t.nom,
-        'technologies': t.technologies,
-        'zone': normalize_zone(t.zone)
-    } for t in techniciens]
-    equipes_json = [{
-        'id': e.id,
-        'nom_equipe': e.nom_equipe,
-        'technologies': e.technologies,
-        'zone': normalize_zone(e.zone)
-    } for e in equipes]
-
-    # Normaliser la zone sur chaque demande AVANT de passer au template
-    for d in demandes:
-        d.zone = normalize_zone(d.zone)
-
-    equipes_mapping = {}
-    for technicien in techniciens:
-        technicien_zone = normalize_zone(technicien.zone)
-        equipes_mapping[technicien.id] = [
-            equipe for equipe in equipes
-            if normalize_zone(equipe.zone) == technicien_zone and any(
-                m.technicien_id == technicien.id for m in equipe.membres)
-        ]
-    ages = [row[0] for row in db.session.query(DemandeIntervention.age).distinct().all() if row[0]]
-    offres = [row[0] for row in db.session.query(DemandeIntervention.offre).distinct().all() if row[0]]
-    priorites = [row[0] for row in db.session.query(DemandeIntervention.priorite_traitement).distinct().all() if row[0]]
-
-    return render_template('dispatching.html',
-                           demandes=demandes_paginated,
-                           techniciens=techniciens,
-                           equipes=equipes,
-                           ages=ages,
-                           offres=offres,
-                           priorites=priorites,
-                           techniciens_json=techniciens_json,
-                           equipes_json=equipes_json,
-                           equipes_mapping=equipes_mapping)
-
- """
-""" @app.route('/affecter-demande', methods=['POST'])
-@login_required
-def affecter_demande():
-    if current_user.role not in ['chef_pur', 'chef_pilote', 'chef_zone']:
-        return jsonify({'success': False, 'error': 'Accès non autorisé'})
-
-    try:
-        print("Données reçues:", request.json)  # Debug
-        demande_id = request.json.get('demande_id')
-        technicien_id = request.json.get('technicien_id')
-        equipe_id = request.json.get('equipe_id')
-        mode = request.json.get('mode', 'manuel')  # manuel ou automatique
-
-        if not demande_id:
-            return jsonify({
-                'success': False,
-                'error': 'ID de demande manquant'
-            })
-        if not technicien_id:
-            return jsonify({
-                'success': False,
-                'error': 'ID de technicien manquant'
-            })
-
-        demande = db.session.get(DemandeIntervention, demande_id)
-        if not demande:
-            return jsonify({'success': False, 'error': 'Demande non trouvée'})
-
-        # Vérifications de compatibilité
-        technicien = db.session.get(User, technicien_id)
-        if not technicien or technicien.role != 'technicien':
-            return jsonify({
-                'success': False,
-                'error': 'Technicien non valide'
-            })
-
-        # Vérifier la compatibilité technologique
-        if not is_technicien_compatible(technicien, demande):
-            return jsonify({
-                'success':
-                False,
-                'error':
-                'Technicien non compatible avec cette technologie'
-            })
-
-        # Affecter la demande
-        demande.technicien_id = technicien_id
-        demande.statut = 'affecte'
-        demande.date_affectation = datetime.now(timezone.utc)
-
-        if equipe_id:
-            # Créer une intervention liée à l'équipe
-            intervention = Intervention(demande_id=demande_id,
-                                        technicien_id=technicien_id,
-                                        equipe_id=equipe_id,
-                                        date_debut=datetime.now(timezone.utc),
-                                        statut='en_cours')
-            db.session.add(intervention)
-
-        db.session.commit()
-        log_activity(
-            user_id=current_user.id,
-            action='assign',
-            module='demandes',
-            entity_id=demande.id,
-            entity_name=f"Demande {demande.nd}",
-            details={
-                'technicien': f"{technicien.prenom} {technicien.nom}",
-                'zone': demande.zone,
-                'service': demande.service,
-                'type_techno': demande.type_techno
-            }
-        )
-        # Envoyer notification SMS (simulé)
-        create_sms_notification(technicien_id, demande_id, 'affectation')
-
-        # Envoyer email au technicien
-        subject = "Nouvelle intervention affectée"
-        recipients = [technicien.email] if technicien.email else []
-        body = f"Bonjour {technicien.prenom},\n\nVous avez une nouvelle intervention affectée :\nND : {demande.nd}\nClient : {demande.nom_client} {demande.prenom_client}\nZone : {demande.zone}\n\nMerci de consulter votre espace Sofatelcom."
-        send_email(subject, recipients, body=body)
-
-        return jsonify({
-            'success': True,
-            'message': 'Demande affectée avec succès'
-        })
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)})
-
-"""
-
-@app.route('/affecter-demande', methods=['POST'])
-@login_required
-def affecter_demande():
-    if current_user.role not in ['chef_pur', 'chef_pilote', 'chef_zone']:
-        return jsonify({'success': False, 'error': 'Accès non autorisé'})
-
-    try:
-        print("Données reçues:", request.json)  # Debug
-        demande_id = request.json.get('demande_id')
-        technicien_id = request.json.get('technicien_id')
-        equipe_id = request.json.get('equipe_id')
-        mode = request.json.get('mode', 'manuel')  # manuel ou automatique
-
-        if not demande_id:
-            return jsonify({
-                'success': False,
-                'error': 'ID de demande manquant'
-            })
-        if not technicien_id:
-            return jsonify({
-                'success': False,
-                'error': 'ID de technicien manquant'
-            })
-
-        demande = db.session.get(DemandeIntervention, demande_id)
-        if not demande:
-            return jsonify({'success': False, 'error': 'Demande non trouvée'})
-
-        # Vérifications de compatibilité
-        technicien = db.session.get(User, technicien_id)
-        if not technicien or technicien.role != 'technicien':
-            return jsonify({
-                'success': False,
-                'error': 'Technicien non valide'
-            })
-
-        # Vérifier la compatibilité technologique
-        if not is_technicien_compatible(technicien, demande):
-            return jsonify({
-                'success': False,
-                'error': 'Technicien non compatible avec cette technologie'
-            })
-
-        # Gestion des réaffectations
-        intervention_existante = None
-        if demande.statut == 'a_reaffecter':
-            # Rechercher l'intervention rejetée pour cette demande
-            intervention_existante = Intervention.query.filter_by(
-                demande_id=demande_id, statut='rejete'
-            ).order_by(Intervention.date_debut.desc()).first()  # Prendre la plus récente si plusieurs
-            
-            if intervention_existante:
-                # Remettre l'intervention à 'en_cours' et changer le technicien
-                intervention_existante.statut = 'en_cours'
-                intervention_existante.technicien_id = technicien_id
-                intervention_existante.date_debut = datetime.now(timezone.utc)  # Optionnel : mettre à jour la date
-                if equipe_id:
-                    intervention_existante.equipe_id = equipe_id
-                print(f"Intervention {intervention_existante.id} remise à 'en_cours' pour réaffectation")
-            else:
-                print("Aucune intervention rejetée trouvée pour cette demande réaffectée")
-
-        # Affecter la demande
-        demande.technicien_id = technicien_id
-        demande.statut = 'affecte'
-        demande.date_affectation = datetime.now(timezone.utc)
-
-        # Créer une nouvelle intervention seulement si ce n'est pas une réaffectation ou si aucune intervention existante
-        if not intervention_existante:
-            intervention = Intervention(demande_id=demande_id,
-                                        technicien_id=technicien_id,
-                                        equipe_id=equipe_id if equipe_id else None,
-                                        date_debut=datetime.now(timezone.utc),
-                                        statut='en_cours')
-            db.session.add(intervention)
-            print(f"Nouvelle intervention créée pour demande {demande_id}")
-
-        db.session.commit()
-        
-        # Post-commit actions (logging and notifications) should not crash the main flow
-        try:
-            log_activity(
-                user_id=current_user.id,
-                action='assign',
-                module='demandes',
-                entity_id=demande.id,
-                entity_name=f"Demande {demande.nd}",
-                details={
-                    'technicien': f"{technicien.prenom} {technicien.nom}",
-                    'zone': demande.zone,
-                    'service': demande.service,
-                    'type_techno': demande.type_techno,
-                    'reaffectation': demande.statut == 'a_reaffecter'
-                }
-            )
-            
-            # Envoyer notification SMS (simulé)
-            create_sms_notification(technicien_id, demande_id, 'affectation')
-
-            # Envoyer email au technicien
-            subject = "Nouvelle intervention affectée"
-            recipients = [technicien.email] if technicien.email else []
-            body = f"Bonjour {technicien.prenom},\n\nVous avez une nouvelle intervention affectée :\nND : {demande.nd}\nClient : {demande.nom_client} {demande.prenom_client}\nZone : {demande.zone}\n\nMerci de consulter votre espace Sofatelcom."
-            send_email(subject, recipients, body=body)
-        except Exception as post_e:
-            current_app.logger.warning(f"Post-assignment background tasks failed for demand {demande_id}: {str(post_e)}")
-            # We don't flash an error here to not confuse the user JSON response
-
-        return jsonify({
-            'success': True,
-            'message': 'Demande affectée avec succès'
-        })
-
-    except Exception as e:
-        db.session.rollback()
-        print(f"Erreur lors de l'affectation: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)})
-
-
-@app.route('/dispatching-automatique', methods=['POST'])
-@login_required
-def dispatching_automatique():
-    if current_user.role not in ['chef_pur', 'chef_pilote']:
-        return jsonify({'success': False, 'error': 'Accès non autorisé'})
-
-    try:
-        # Récupérer les demandes non affectées
-        query = DemandeIntervention.query.filter_by(statut='nouveau')
-        if current_user.role == 'chef_pilote' and current_user.service:
-            query = query.filter_by(service=current_user.service)
-
-        demandes = query.all()
-        affectations = 0
-
-        for demande in demandes:
-            # Trouver le meilleur technicien selon les critères
-            technicien = find_best_technicien(demande)
-            if technicien:
-                demande.technicien_id = technicien.id
-                demande.statut = 'affecte'
-                demande.date_affectation = datetime.now(timezone.utc)
-
-                # Créer notification SMS
-                create_sms_notification(technicien.id, demande.id,
-                                        'affectation')
-                affectations += 1
-
-        db.session.commit()
-
-        return jsonify({
-            'success':
-            True,
-            'message':
-            f'{affectations} demandes affectées automatiquement'
-        })
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)})
-
-
-@app.route('/api/demande/<int:demande_id>')
-@login_required
-def api_get_demande(demande_id):
-    demande = db.session.get(DemandeIntervention, demande_id)
-    if not demande:
-        return jsonify({'success': False, 'error': 'Demande non trouvée'}), 404
-
-    # Adaptez les champs selon votre modèle
-    demande_data = {
-        'id': demande.id,
-        'nom_client': demande.nom_client,
-        'prenom_client': demande.prenom_client,
-        'nd': demande.nd,
-        'type_techno': demande.type_techno,
-        'service': demande.service,
-        'zone': demande.zone,
-        # Ajoutez d'autres champs si nécessaire
-    }
-    return jsonify({'success': True, 'demande': demande_data})
-
-
-# Team management routes moved to routes/teams.py (blueprint 'teams')
-# See routes/teams.py for implementation and registration via register_blueprints(app)
-
-@app.route('/add-membre-equipe/<int:equipe_id>', methods=['POST'])
-@login_required
-def add_membre_equipe(equipe_id):
-    if current_user.role not in ['chef_zone', 'chef_pur']:
-        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
-
-    # Vérification du token CSRF
-    from flask_wtf.csrf import validate_csrf
-    from wtforms import ValidationError
-    
-    try:
-        # Vérifier si la requête est en JSON
-        if request.is_json:
-            data = request.get_json()
-            csrf_token = data.get('csrf_token')
-        else:
-            data = request.form.to_dict()
-            csrf_token = request.form.get('csrf_token')
-            
-        # Valider le token CSRF
-        validate_csrf(csrf_token)
-    except ValidationError as e:
-        current_app.logger.error(f'Erreur de validation CSRF: {str(e)}')
-        return jsonify({'success': False, 'error': 'Token CSRF invalide ou expiré'}), 403
-    except Exception as e:
-        current_app.logger.error(f'Erreur lors de la vérification CSRF: {str(e)}')
-        return jsonify({'success': False, 'error': 'Erreur lors de la vérification CSRF'}), 400
-
-    try:
-        equipe = db.session.get(Equipe, equipe_id)
-        
-        # Vérification des permissions
-        if not equipe:
-            return jsonify({
-                'success': False,
-                'error': 'Équipe non trouvée'
-            }), 404
-            
-        # Chef zone : peut ajouter sur toutes les équipes de sa zone
-        if current_user.role == 'chef_zone':
-            user_zone = current_user.zone
-            user_zone_formatted = None
-            if current_user.zone_relation:
-                user_zone_formatted = f"{current_user.zone_relation.nom} ({current_user.zone_relation.code})"
-            
-            is_in_zone = (equipe.zone == user_zone or 
-                         (user_zone_formatted and equipe.zone == user_zone_formatted) or
-                         (current_user.zone_relation and (equipe.zone == current_user.zone_relation.nom or equipe.zone == current_user.zone_relation.code)) or
-                         equipe.chef_zone_id == current_user.id)
-            
-            if not is_in_zone:
-                return jsonify({
-                    'success': False,
-                    'error': 'Vous ne pouvez pas ajouter de membre à cette équipe car elle n\'est pas dans votre zone'
-                }), 403
-
-        # Essayer de récupérer les données JSON
-        try:
-            if request.is_json:
-                data = request.get_json()
-            else:
-                data = request.form.to_dict()
+            # Formater les données pour le graphique
+            for date, entrees, sorties in mouvements_par_jour:
+                entrees = int(entrees or 0)
+                sorties = int(sorties or 0)
+                date_str = date.strftime('%Y-%m-%d')
+                mouvements_30j.append({
+                    'date': date_str,
+                    'entrees': entrees,
+                    'sorties': sorties
+                })
+                current_app.logger.debug(f"Date: {date_str}, Entrées: {entrees}, Sorties: {sorties}")
         except Exception as e:
-            return jsonify({
-                'success': False,
-                'error': 'Format de données invalide',
-                'details': str(e)
-            }), 400
-
-        nom = (data.get('nom') or '').strip()
-        prenom = (data.get('prenom') or '').strip()
-        telephone = (data.get('telephone') or '').strip()
-        type_membre = (data.get('type_membre') or '').strip()
-        technicien_id = data.get('technicien_id')
-
-        # Vérification des champs obligatoires
-        if not nom or not prenom or not telephone or not type_membre:
-            return jsonify({
-                'success': False,
-                'error': 'Tous les champs sont obligatoires.',
-                'missing_fields': [
-                    field for field, value in {
-                        'nom': nom,
-                        'prenom': prenom,
-                        'telephone': telephone,
-                        'type_membre': type_membre
-                    }.items() if not value
-                ]
-            }), 400
-
-        # Vérifier si le technicien existe et est actif
-        if technicien_id:
-            try:
-                technicien_id = int(technicien_id)
-                technicien = User.query.filter_by(id=technicien_id, role='technicien', actif=True).first()
-                if not technicien:
-                    return jsonify({
-                        'success': False,
-                        'error': 'Technicien non valide ou inactif'
-                    }), 400
-            except (ValueError, TypeError):
-                technicien_id = None
-
-        # Création du membre
-        membre = MembreEquipe(
-            equipe_id=equipe_id,
-            nom=nom,
-            prenom=prenom,
-            telephone=telephone,
-            type_membre=type_membre,
-            technicien_id=technicien_id if technicien_id else None
-        )
-
-        db.session.add(membre)
-        db.session.commit()
+            current_app.logger.error(f"Erreur lors de la récupération des mouvements: {str(e)}")
+            current_app.logger.error(traceback.format_exc())
+            mouvements_30j = []
         
-        # Journalisation de l'action
-        log_activity(
-            user_id=current_user.id,
-            action='add_member',
-            module='teams',
-            entity_id=membre.id,
-            entity_name=f"Membre {membre.nom} {membre.prenom}",
-            details={
-                'equipe_id': equipe.id,
-                'equipe_nom': equipe.nom_equipe,
-                'type_membre': membre.type_membre,
-                'technicien_id': membre.technicien_id
-            }
-        )
+        # Répartition par catégorie
+        repartition_categories = []
+        try:
+            categories = db.session.query(
+                Categorie.nom,
+                func.count(Produit.id).label('nombre')
+            ).outerjoin(
+                Produit, Produit.categorie_id == Categorie.id
+            ).group_by(
+                Categorie.nom
+            ).all()
+            
+            current_app.logger.info(f"Catégories trouvées: {len(categories)}")
+            
+            for nom, nombre in categories:
+                repartition_categories.append({
+                    'nom': nom,
+                    'nombre': int(nombre or 0)
+                })
+                current_app.logger.debug(f"Catégorie: {nom}, Nombre de produits: {nombre}")
+        except Exception as e:
+            current_app.logger.error(f"Erreur lors de la récupération des catégories: {str(e)}")
+            current_app.logger.error(traceback.format_exc())
+            repartition_categories = []
         
-        # Préparation de la réponse
+        # Créer la réponse
         response_data = {
             'success': True,
-            'message': 'Membre ajouté avec succès',
-            'membre': {
-                'id': membre.id,
-                'nom': membre.nom,
-                'prenom': membre.prenom,
-                'telephone': membre.telephone,
-                'type_membre': membre.type_membre,
-                'technicien_id': membre.technicien_id
-            }
+            'total_produits': total_produits,
+            'produits_faible_stock': produits_faible_stock,
+            'entrees_mois': int(entrees_mois or 0),
+            'sorties_mois': int(sorties_mois or 0),
+            'mouvements_30j': mouvements_30j,
+            'categories': repartition_categories
         }
         
+        current_app.logger.info("Réponse de l'API générée avec succès")
         return jsonify(response_data)
-
+        
     except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f'Erreur lors de l\'ajout du membre: {str(e)}')
+        error_msg = f"Erreur dans api_stats_stock: {str(e)}"
+        current_app.logger.error(error_msg)
         current_app.logger.error(traceback.format_exc())
         return jsonify({
             'success': False,
-            'error': 'Une erreur est survenue lors de l\'ajout du membre',
-            'details': str(e)
-        }), 500
-
-@app.route('/remove-membre-equipe/<int:membre_id>', methods=['DELETE'])
-@login_required
-def remove_membre_equipe(membre_id):
-    # Vérification du token CSRF
-    from flask_wtf.csrf import validate_csrf
-    from wtforms import ValidationError
-    
-    try:
-        # Vérifier si la requête est en JSON
-        if request.is_json:
-            data = request.get_json()
-            csrf_token = data.get('csrf_token')
-        else:
-            data = request.form.to_dict()
-            csrf_token = request.form.get('csrf_token')
-            
-        # Valider le token CSRF
-        validate_csrf(csrf_token)
-    except ValidationError as e:
-        current_app.logger.error(f'Erreur de validation CSRF: {str(e)}')
-        return jsonify({'success': False, 'error': 'Token CSRF invalide ou expiré'}), 403
-    except Exception as e:
-        current_app.logger.error(f'Erreur lors de la vérification CSRF: {str(e)}')
-        return jsonify({'success': False, 'error': 'Erreur de vérification CSRF'}), 400
-    
-    # Récupération du membre
-    membre = db.session.get(MembreEquipe, membre_id)
-    if not membre:
-        return jsonify({'success': False, 'error': 'Membre introuvable'}), 404
-        
-    # Vérification des permissions
-    equipe = db.session.get(Equipe, membre.equipe_id)
-    if not equipe:
-        return jsonify({'success': False, 'error': 'Équipe non trouvée'}), 404
-        
-    # Vérifier que l'utilisateur a le droit de modifier cette équipe
-    if current_user.role == 'chef_zone':
-        user_zone = current_user.zone
-        user_zone_formatted = None
-        if current_user.zone_relation:
-            user_zone_formatted = f"{current_user.zone_relation.nom} ({current_user.zone_relation.code})"
-        
-        is_in_zone = (equipe.zone == user_zone or 
-                     (user_zone_formatted and equipe.zone == user_zone_formatted) or
-                     (current_user.zone_relation and (equipe.zone == current_user.zone_relation.nom or equipe.zone == current_user.zone_relation.code)) or
-                     equipe.chef_zone_id == current_user.id)
-        
-        if not is_in_zone:
-            return jsonify({'success': False, 'error': 'Non autorisé à modifier cette équipe car elle n\'est pas dans votre zone'}), 403
-    
-    try:
-        # Journalisation de l'action
-        log_activity(
-            user_id=current_user.id,
-            action='remove_member',
-            module='teams',
-            entity_id=membre.id,
-            entity_name=f"Membre {membre.nom} {membre.prenom}",
-            details={
-                'equipe_id': equipe.id,
-                'equipe_nom': equipe.nom_equipe,
-                'type_membre': membre.type_membre,
-                'technicien_id': membre.technicien_id
-            }
-        )
-        
-        # Suppression du membre
-        db.session.delete(membre)
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Membre supprimé avec succès',
-            'membre_id': membre_id
-        })
-        
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f'Erreur lors de la suppression du membre: {str(e)}')
-        current_app.logger.error(traceback.format_exc())
-        return jsonify({
-            'success': False, 
-            'error': 'Une erreur est survenue lors de la suppression du membre',
-            'details': str(e)
-        }), 500
-
-
-@app.route('/api/check-team-name', methods=['POST'])
-def check_team_name():
-    data = request.get_json()
-    nom_equipe = data.get('nom_equipe', '').strip()
-    if not nom_equipe:
-        return jsonify({'available': False, 'error': 'Nom manquant'}), 400
-
-    # Vérifie si une équipe avec ce nom existe déjà aujourd'hui
-    existe = Equipe.query.filter_by(nom_equipe=nom_equipe,
-                                    date_creation=date.today()).first()
-    return jsonify({'available': not bool(existe)})
-
-
-@app.route('/intervention/<int:demande_id>')
-@login_required
-def intervention_form(demande_id):
-    if current_user.role != 'technicien':
-        flash('Accès non autorisé.', 'error')
-        return redirect(url_for('dashboard'))
-
-    demande = db.session.get(DemandeIntervention, demande_id)
-    if not demande:
-        abort(404)
-    if demande.technicien_id != current_user.id:
-        flash('Cette intervention ne vous est pas affectée.', 'error')
-        return redirect(url_for('dashboard'))
-
-    # Vérifier si une intervention existe déjà
-    intervention = Intervention.query.filter_by(demande_id=demande_id).first()
-    if not intervention:
-        intervention = Intervention(demande_id=demande_id,
-                                    technicien_id=current_user.id)
-        db.session.add(intervention)
-        db.session.commit()
-
-    # Initialiser les formulaires
-    form = InterventionForm(obj=intervention)
-    survey_form = None
-    fiche_technique_form = None
-
-    # Charger le survey existant s'il existe
-    survey = Survey.query.filter_by(intervention_id=intervention.id).first()
-
-    if demande.service == 'Production':
-        survey_form = SurveyForm(obj=survey) if survey else SurveyForm()
-        survey_form.n_demande.data = demande.nd
-        survey_form.nom_raison_sociale.data = f"{demande.nom_client} {demande.prenom_client}"
-        survey_form.adresse_demande.data = demande.libelle_commune
-        survey_form.service_demande.data = demande.type_techno
-
-        fiche_technique_form = FicheTechniqueForm()
-        if intervention.fichier_technique_accessible:
-            fiche_technique_form.adresse_demandee.data = demande.libelle_commune
-            fiche_technique_form.nom_raison_sociale.data = f"{demande.nom_client} {demande.prenom_client}"
-            fiche_technique_form.date_installation.data = survey.date_survey if survey and survey.date_survey else date.today(
-            )
-            fiche_technique_form.tel1.data = survey.tel1 if survey else ''
-            fiche_technique_form.tel2.data = survey.tel2 if survey else ''
-            fiche_technique_form.etage.data = survey.etage if survey else ''
-            fiche_technique_form.contact.data = survey.contact if survey else ''
-            fiche_technique_form.represente_par.data = survey.represente_par if survey else ''
-            fiche_technique_form.adresse_demandee.data = survey.adresse_demande if survey else ''
-
-    return render_template('intervention_form.html',
-                           form=form,
-                           survey_form=survey_form,
-                           fiche_technique_form=fiche_technique_form,
-                           demande=demande,
-                           intervention=intervention,
-                           survey=survey)
-
-
-@app.route('/auto-save-intervention/<int:intervention_id>', methods=['POST'])
-@login_required
-def auto_save_intervention(intervention_id):
-    if current_user.role != 'technicien':
-        return jsonify({'success': False, 'error': 'Accès non autorisé'})
-
-    try:
-        intervention = db.session.get(Intervention, intervention_id)
-        if not intervention or intervention.technicien_id != current_user.id:
-            return jsonify({
-                'success': False,
-                'error': 'Intervention non trouvée'
-            })
-
-        form = InterventionForm()
-        if form.validate_on_submit():
-            # Sauvegarder tous les champs du formulaire
-            for field_name in form._fields:
-                if hasattr(intervention, field_name):
-                    setattr(intervention, field_name,
-                            getattr(form, field_name).data)
-
-            db.session.commit()
-            return jsonify({
-                'success': True,
-                'message': 'Sauvegarde automatique réussie'
-            })
-        else:
-            return jsonify({'success': False, 'errors': form.errors})
-
-    except Exception as e:
-        db.session.rollback()
-        print('Erreur lors de la sauvegarde automatique:', str(e))
-        return jsonify({'success': False, 'error': str(e)})
-
-
-@app.route('/save-intervention/<int:intervention_id>', methods=['POST'])
-@login_required
-def save_intervention(intervention_id):
-    if current_user.role != 'technicien':
-        return jsonify({'success': False, 'error': 'Accès non autorisé'})
-
-    try:
-        intervention = db.session.get(Intervention, intervention_id)
-        if not intervention or intervention.technicien_id != current_user.id:
-            return jsonify({
-                'success': False,
-                'error': 'Intervention non trouvée'
-            })
-
-        form = InterventionForm()
-        if form.validate_on_submit():
-            # Sauvegarder tous les champs du formulaire avec conversion de type
-            for field_name, field in form._fields.items():
-                if hasattr(intervention, field_name):
-                    field_data = field.data
-                    # Conversion des champs numériques si nécessaire
-                    if field_name in ['lc_metre', 'bti_metre', 'kitpto_metre'
-                                      ]:  # Exemple de champs numériques
-                        try:
-                            field_data = float(
-                                field_data) if field_data else None
-                        except (ValueError, TypeError):
-                            field_data = None
-                    setattr(intervention, field_name, field_data)
-
-            # Gestion des photos uploadées
-            uploaded_files = request.files.getlist('photos')
-            photo_paths = []
-
-            for file in uploaded_files:
-                if file and file.filename != '':
-                    filename = secure_filename(file.filename)
-                    unique_filename = f"{datetime.now().timestamp()}_{filename}"
-                    save_path = os.path.join(app.config['UPLOAD_FOLDER'],
-                                             unique_filename)
-                    file.save(save_path)
-                    photo_paths.append(
-                        unique_filename
-                    )  # Stocker uniquement le nom du fichier
-
-            if photo_paths:
-                intervention.photos = json.dumps(photo_paths)
-
-            intervention.date_fin = datetime.now(timezone.utc)
-            intervention.statut = 'termine'
-
-            if intervention.demande:
-                intervention.demande.statut = 'termine'
-                intervention.demande.date_completion = datetime.now(timezone.utc)
-
-            db.session.commit()
-    
-            # Post-commit actions (logging and notifications) should not crash the main flow
-            try:
-                # Créer notification pour validation
-                create_sms_notification(intervention.technicien_id , intervention.demande_id, 'validation', notify_managers=True)
-        
-                # Envoi mail pour validation
-                destinataires = []
-                demande = intervention.demande
-        
-                if demande:
-                    # Chef PUR
-                    chef_pur = User.query.filter_by(role='chef_pur').first()
-                    if chef_pur and chef_pur.email:
-                        destinataires.append(chef_pur.email)
-                    # Chef Zone
-                    if demande.zone:
-                        chef_zone = User.query.filter_by(
-                            role='chef_zone', zone=demande.zone).first()
-                        if chef_zone and chef_zone.email:
-                            destinataires.append(chef_zone.email)
-                    # Chef Pilote
-                    if demande.service:
-                        chef_pilote = User.query.filter_by(
-                            role='chef_pilote', service=demande.service).first()
-                        if chef_pilote and chef_pilote.email:
-                            destinataires.append(chef_pilote.email)
-                    # Récupérer le nom du technicien
-                    technicien_nom = f"{intervention.technicien.nom} {intervention.technicien.prenom}" if intervention.technicien else "N/A"
-                    # Récupérer le nom de l'équipe liée
-                    equipe_nom = ""
-                    if intervention.equipe_id:
-                        equipe = db.session.get(Equipe, intervention.equipe_id)
-                        equipe_nom = equipe.nom_equipe if equipe else ""
-        
-                    subject = "Intervention à valider"
-                    body = f"""Bonjour,\n\nUne intervention vient d'être terminée et nécessite votre validation.\n
-                    ND : {demande.nd}\nClient : {demande.nom_client} {demande.prenom_client}\nZone : {demande.zone}\nService : {demande.service}\n
-                    Technicien : {technicien_nom}\nÉquipe : {equipe_nom}\n
-                    Merci de vous connecter à Sofatelcom pour valider ou rejeter cette intervention."""
-                    if destinataires:
-                        send_email(subject, destinataires, body=body)
-                log_activity(
-                    user_id=current_user.id,
-                    action='complete',
-                    module='interventions',
-                    entity_id=intervention.id,
-                    entity_name=f"Intervention {intervention.demande.nd if intervention.demande else 'N/A'}",
-                    details={
-                        'statut': 'termine',
-                        'technicien': f"{intervention.technicien.prenom} {intervention.technicien.nom}" if intervention.technicien else 'N/A',
-                        'demande_nd': intervention.demande.nd if intervention.demande else 'N/A',
-                        'service': intervention.demande.service if intervention.demande else 'N/A'
-                    }
-                )
-            except Exception as post_e:
-                current_app.logger.warning(f"Post-completion background tasks failed for intervention {intervention.id}: {str(post_e)}")
-            return redirect(url_for('dashboard'))
-
-        else:
-            errors = {
-                field: errors[0]
-                for field, errors in form.errors.items()
-            }
-            return jsonify({'success': False, 'errors': errors})
-
-    except Exception as e:
-        db.session.rollback()
-        app.logger.error(f"Erreur lors de la sauvegarde: {str(e)}",
-                         exc_info=True)
-        return jsonify({
-            'success': False,
-            'error': "Une erreur est survenue lors de la sauvegarde"
-        })
-
-
-@app.route('/validate-intervention/<int:intervention_id>', methods=['POST'])
-@login_required
-def validate_intervention(intervention_id):
-    if current_user.role not in ['chef_pur', 'chef_pilote', 'chef_zone']:
-        return jsonify({'success': False, 'error': 'Accès non autorisé'})
-
-    try:
-        intervention = db.session.get(Intervention, intervention_id)
-        if not intervention:
-            return jsonify({
-                'success': False,
-                'error': 'Intervention non trouvée'
-            })
-
-        if current_user.role == 'chef_zone':
-            if not intervention.demande or intervention.demande.zone != current_user.zone:
-                return jsonify({
-                    'success': False,
-                    'error': 'Accès non autorisé'
-                })
-
-        action = request.json.get('action')  # 'valider' ou 'rejeter'
-        commentaire = request.json.get('commentaire', '')
-
-        if action == 'valider':
-            intervention.statut = 'valide'
-            intervention.demande.statut = 'valide'
-        else:
-            intervention.statut = 'rejete'
-            intervention.demande.statut = 'affecte'  # Retour en affectation
-
-        intervention.date_validation = datetime.now(timezone.utc)
-        intervention.valide_par = current_user.id
-        intervention.commentaire_validation = commentaire
-
-        db.session.commit()
-
-        return jsonify({
-            'success':
-            True,
-            'message':
-            f'Intervention {intervention.statut}e avec succès'
-        })
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)})
-
-
-""" @app.route('/api/intervention/<int:intervention_id>')
-@login_required
-def api_get_intervention(intervention_id):
-    intervention = db.session.get(Intervention, intervention_id)
-    if not intervention:
-        abort(404)
-
-    # Vérifier les permissions selon le rôle
-    if current_user.role == 'technicien' and intervention.technicien_id != current_user.id:
-        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
-    elif current_user.role == 'chef_pilote':
-        if intervention.demande and intervention.demande.service != current_user.service:
-            return jsonify({
-                'success': False,
-                'error': 'Accès non autorisé'
-            }), 403
-    elif current_user.role == 'chef_zone':
-        technicien = db.session.get(User, intervention.technicien_id)
-        if not technicien or technicien.zone != current_user.zone:
-            return jsonify({
-                'success': False,
-                'error': 'Accès non autorisé'
-            }), 403
-
-    # Préparer les données de l'intervention
-    intervention_data = {
-        'id':
-        intervention.id,
-        'date_debut':
-        intervention.date_debut.strftime('%d/%m/%Y %H:%M')
-        if intervention.date_debut else None,
-        'date_fin':
-        intervention.date_fin.strftime('%d/%m/%Y %H:%M')
-        if intervention.date_fin else None,
-        'statut':
-        intervention.statut,
-        'diagnostic_technicien':
-        intervention.diagnostic_technicien,
-        'nature_signalisation':
-        intervention.nature_signalisation,
-        'cause_derangement':
-        intervention.cause_derangement,
-        'action_releve':
-        intervention.action_releve,
-        'constitutions':
-        intervention.constitutions,
-        'valeur_pB0':
-        intervention.valeur_pB0,
-        'materiel_livre':
-        intervention.materiel_livre,
-        'numero_serie_livre':
-        intervention.numero_serie_livre,
-        'materiel_recup':
-        intervention.materiel_recup,
-        'numero_serie_recup':
-        intervention.numero_serie_recup,
-        'jarretiere':
-        intervention.jarretiere,
-        'nombre_type_bpe':
-        intervention.nombre_type_bpe,
-        'coupleur_c1':
-        intervention.coupleur_c1,
-        'coupleur_c2':
-        intervention.coupleur_c2,
-        'arobase':
-        intervention.arobase,
-        'malico':
-        intervention.malico,
-        'type_cable':
-        intervention.type_cable,
-        'lc_metre':
-        intervention.lc_metre,
-        'bti_metre':
-        intervention.bti_metre,
-        'pto_one':
-        intervention.pto_one,
-        'kitpto_metre':
-        intervention.kitpto_metre,
-        'piton':
-        intervention.piton,
-        'ds6':
-        intervention.ds6,
-        'autres_accessoires':
-        intervention.autres_accessoires,
-        'appel_sortant':
-        intervention.appel_sortant,
-        'envoi_numero':
-        intervention.envoi_numero,
-        'appel_entrant':
-        intervention.appel_entrant,
-        'affichage_numero':
-        intervention.affichage_numero,
-        'tvo_mono_ok':
-        intervention.tvo_mono_ok,
-        'debit_cable_montant':
-        intervention.debit_cable_montant,
-        'debit_mbs_descendant':
-        intervention.debit_mbs_descendant,
-        'debit_mbs_ping':
-        intervention.debit_mbs_ping,
-        'debit_ms':
-        intervention.debit_ms,
-        'pieces':
-        intervention.pieces,
-        'communes':
-        intervention.communes,
-        'chambres':
-        intervention.chambres,
-        'bureau':
-        intervention.bureau,
-        'wifi_extender':
-        intervention.wifi_extender,
-        'mesure_dbm':
-        intervention.mesure_dbm,
-        'satisfaction':
-        intervention.satisfaction,
-        'signature_equipe':
-        intervention.signature_equipe,
-        'signature_client':
-        intervention.signature_client,
-        'photos_list':
-        json.loads(intervention.photos) if intervention.photos else [],
-        'technicien': {
-            'id':
-            intervention.technicien_id,
-            'nom':
-            intervention.technicien.nom if intervention.technicien else 'N/A',
-            'prenom':
-            intervention.technicien.prenom
-            if intervention.technicien else 'N/A'
-        },
-        'demande': {
-            'id':
-            intervention.demande_id,
-            'nom_client':
-            intervention.demande.nom_client if intervention.demande else 'N/A',
-            'prenom_client':
-            intervention.demande.prenom_client
-            if intervention.demande else 'N/A',
-            'nd':
-            intervention.demande.nd if intervention.demande else 'N/A',
-            'type_techno':
-            intervention.demande.type_techno
-            if intervention.demande else 'N/A',
-            'service':
-            intervention.demande.service if intervention.demande else 'N/A',
-            'libelle_commune':
-            intervention.demande.libelle_commune
-            if intervention.demande else 'N/A',
-            'libelle_quartier':
-            intervention.demande.libelle_quartier
-            if intervention.demande else ''
-        } if intervention.demande else None
-    }
-
-    return jsonify({'success': True, 'intervention': intervention_data})
-
- """
-
-@app.route('/api/intervention/<int:intervention_id>')
-@login_required
-def api_get_intervention(intervention_id):
-    try:
-        intervention = db.session.get(Intervention, intervention_id)
-        if not intervention:
-            abort(404)
-
-        # Vérifier les permissions selon le rôle
-        if current_user.role == 'technicien' and intervention.technicien_id != current_user.id:
-            return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
-        elif current_user.role == 'chef_pilote':
-            if intervention.demande and intervention.demande.service != current_user.service:
-                return jsonify({
-                    'success': False,
-                    'error': 'Accès non autorisé'
-                }), 403
-        elif current_user.role == 'chef_zone':
-            technicien = db.session.get(User, intervention.technicien_id)
-            if not technicien or technicien.zone != current_user.zone:
-                return jsonify({
-                    'success': False,
-                    'error': 'Accès non autorisé'
-                }), 403
-
-        # Vérifier si c'est une fiche technique ou SAV
-        is_fiche_technique = FicheTechnique.query.filter_by(intervention_id=intervention_id).first() is not None
-        intervention_type = 'fiche_technique' if is_fiche_technique else 'sav'
-
-        # Préparer les données de l'intervention avec gestion des None
-        # Gérer le parsing JSON des photos de manière sécurisée
-        photos_list = []
-        if intervention.photos:
-            try:
-                if isinstance(intervention.photos, str) and intervention.photos.strip():
-                    photos_list = json.loads(intervention.photos)
-            except (json.JSONDecodeError, ValueError, TypeError):
-                photos_list = []
-        
-        intervention_data = {
-            'id': intervention.id,
-            'valide_par': intervention.valide_par,
-            'fichier_technique_accessible': intervention.fichier_technique_accessible,
-            'date_debut': intervention.date_debut.strftime('%d/%m/%Y %H:%M') if intervention.date_debut else None,
-            'date_fin': intervention.date_fin.strftime('%d/%m/%Y %H:%M') if intervention.date_fin else None,
-            'statut': intervention.statut,
-            'diagnostic_technicien': intervention.diagnostic_technicien or '',
-            'nature_signalisation': intervention.nature_signalisation or '',
-            'cause_derangement': intervention.cause_derangement or '',
-            'action_releve': intervention.action_releve or '',
-            'gps_lat': intervention.gps_lat,
-            'gps_long': intervention.gps_long,
-            'constitutions': intervention.constitutions or '',
-            'valeur_pB0': intervention.valeur_pB0 or '',
-            'materiel_livre': intervention.materiel_livre or '',
-            'numero_serie_livre': intervention.numero_serie_livre or '',
-            'materiel_recup': intervention.materiel_recup or '',
-            'numero_serie_recup': intervention.numero_serie_recup or '',
-            'jarretiere': intervention.jarretiere or '',
-            'nombre_type_bpe': intervention.nombre_type_bpe or '',
-            'coupleur_c1': intervention.coupleur_c1 or '',
-            'coupleur_c2': intervention.coupleur_c2 or '',
-            'arobase': intervention.arobase or '',
-            'malico': intervention.malico or '',
-            'type_cable': intervention.type_cable or '',
-            'lc_metre': intervention.lc_metre or '',
-            'bti_metre': intervention.bti_metre or '',
-            'pto_one': intervention.pto_one or '',
-            'kitpto_metre': intervention.kitpto_metre or '',
-            'piton': intervention.piton or '',
-            'ds6': intervention.ds6 or '',
-            'autres_accessoires': intervention.autres_accessoires or '',
-            'appel_sortant': bool(intervention.appel_sortant),
-            'envoi_numero': intervention.envoi_numero or '',
-            'appel_entrant': bool(intervention.appel_entrant),
-            'affichage_numero': intervention.affichage_numero or '',
-            'tvo_mono_ok': bool(intervention.tvo_mono_ok),
-            'debit_cable_montant': intervention.debit_cable_montant or '',
-            'debit_mbs_descendant': intervention.debit_mbs_descendant or '',
-            'debit_mbs_ping': intervention.debit_mbs_ping or '',
-            'debit_ms': intervention.debit_ms or '',
-            'pieces': intervention.pieces or '',
-            'communes': intervention.communes or '',
-            'chambres': intervention.chambres or 0,
-            'bureau': intervention.bureau or 0,
-            'wifi_extender': bool(intervention.wifi_extender),
-            'mesure_dbm': intervention.mesure_dbm or '',
-            'satisfaction': intervention.satisfaction or '',
-            'signature_equipe': intervention.signature_equipe or '',
-            'signature_client': intervention.signature_client or '',
-            'photos_list': photos_list,
-            'type': intervention_type,
-            'has_fiche_technique': is_fiche_technique,
-            'technicien': {
-                'id': intervention.technicien_id,
-                'nom': intervention.technicien.nom if intervention.technicien else 'N/A',
-                'prenom': intervention.technicien.prenom if intervention.technicien else 'N/A'
-            } if intervention.technicien else None,
-            'valideur': {
-                'id': intervention.valideur.id if intervention.valideur else None,
-                'nom': intervention.valideur.nom if intervention.valideur else None,
-                'prenom': intervention.valideur.prenom if intervention.valideur else None
-            } if intervention.valideur else None,
-            'demande': {
-                'id': intervention.demande_id,
-                'nom_client': intervention.demande.nom_client if intervention.demande else 'N/A',
-                'prenom_client': intervention.demande.prenom_client if intervention.demande else 'N/A',
-                'nd': intervention.demande.nd if intervention.demande else 'N/A',
-                'type_techno': intervention.demande.type_techno if intervention.demande else 'N/A',
-                'service': intervention.demande.service if intervention.demande else 'N/A',
-                'libelle_commune': intervention.demande.libelle_commune if intervention.demande else 'N/A',
-                'libelle_quartier': intervention.demande.libelle_quartier if intervention.demande else ''
-            } if intervention.demande else None
-        }
-
-        return jsonify({'success': True, 'intervention': intervention_data})
-
-    except Exception as e:
-        app.logger.error(f"Erreur dans api_get_intervention: {str(e)}")
-        app.logger.error(traceback.format_exc())
-        return jsonify({'success': False, 'error': 'Erreur interne du serveur'}), 500
-
-""" @app.route('/intervention-history')
-@login_required
-def intervention_history():
-    page = request.args.get('page', 1, type=int)
-    per_page = min(request.args.get('per_page', 25, type=int),
-                   100)  # Limite à 100
-
-    # Filtrer selon le rôle - requêtes simplifiées pour éviter les erreurs de join
-    if current_user.role == 'chef_pur':
-        query = Intervention.query.order_by(Intervention.date_debut.desc())
-    elif current_user.role == 'chef_pilote':
-        # Déterminer le filtre de service selon le profil de l'utilisateur
-        if current_user.service == 'SAV,Production':
-            # Chef pilote principal - récupérer les IDs des deux services
-            demande_ids = [
-                d.id for d in DemandeIntervention.query.filter(
-                    DemandeIntervention.service.in_(['SAV', 'Production'])
-                ).all()
-            ]
-        else:
-            # Chef pilote normal - récupérer les IDs de son service seulement
-            demande_ids = [
-                d.id for d in DemandeIntervention.query.filter_by(
-                    service=current_user.service).all()
-            ]
-        query = Intervention.query.filter(
-            Intervention.demande_id.in_(demande_ids)).order_by(
-                Intervention.date_debut.desc())
-    elif current_user.role == 'chef_zone':
-        # Récupérer les IDs des techniciens de la zone
-        technicien_ids = [
-            u.id for u in User.query.filter_by(role='technicien',
-                                               zone=current_user.zone).all()
-        ]
-        query = Intervention.query.filter(
-            Intervention.technicien_id.in_(technicien_ids)).order_by(
-                Intervention.date_debut.desc())
-    elif current_user.role == 'technicien':
-        query = Intervention.query.filter_by(
-            technicien_id=current_user.id).order_by(
-                Intervention.date_debut.desc())
-    else:
-        query = Intervention.query.filter(
-            Intervention.id == -1)  # Aucun résultat
-
-    interventions = query.paginate(page=page,
-                                   per_page=per_page,
-                                   error_out=False)
-
-    # Ajoute photos_list à chaque intervention
-    for intervention in interventions.items:
-        try:
-            intervention.photos_list = json.loads(
-                intervention.photos) if intervention.photos else []
-        except Exception:
-            intervention.photos_list = []
-
-    return render_template('intervention_history.html',
-                           interventions=interventions)
-
-"""
-
-
-@app.route('/intervention-history')
-@login_required
-def intervention_history():
-    page = request.args.get('page', 1, type=int)
-    per_page = min(request.args.get('per_page', 5, type=int), 100)  # Limite à 100
-
-    # Récupérer les paramètres de filtre
-    statut = request.args.get('statut')
-    technologie = request.args.get('technologie')
-    service_filter = request.args.get('service')  # Renommé pour éviter conflit avec current_user.service
-    zone_filter = request.args.get('zone')
-    date_debut = request.args.get('date_debut')
-    date_fin = request.args.get('date_fin')
-    search_text = request.args.get('search_text')
-
-    # Classe pagination vide pour le fallback erreur
-    class _EmptyPagination:
-        items = []
-        total = 0
-        pages = 0
-        page = 1
-        has_prev = False
-        has_next = False
-
-    current_filters = {
-        'statut': statut,
-        'technologie': technologie,
-        'service': service_filter,
-        'zone': zone_filter,
-        'date_debut': date_debut,
-        'date_fin': date_fin,
-        'search_text': search_text,
-        'per_page': per_page
-    }
-
-    try:
-        # Filtrer selon le rôle - requêtes simplifiées pour éviter les erreurs de join
-        if current_user.role == 'chef_pur':
-            query = Intervention.query.order_by(Intervention.date_debut.desc())
-        elif current_user.role == 'chef_pilote':
-            if current_user.service == 'SAV,Production':
-                demande_ids = [
-                    d.id for d in DemandeIntervention.query.filter(
-                        DemandeIntervention.service.in_(['SAV', 'Production'])
-                    ).all()
-                ]
-            else:
-                demande_ids = [
-                    d.id for d in DemandeIntervention.query.filter_by(
-                        service=current_user.service).all()
-                ]
-            query = Intervention.query.filter(
-                Intervention.demande_id.in_(demande_ids)).order_by(
-                    Intervention.date_debut.desc())
-        elif current_user.role == 'chef_zone':
-            technicien_ids = [
-                u.id for u in User.query.filter_by(role='technicien',
-                                                   zone=current_user.zone).all()
-            ]
-            query = Intervention.query.filter(
-                Intervention.technicien_id.in_(technicien_ids)).order_by(
-                    Intervention.date_debut.desc())
-        elif current_user.role == 'technicien':
-            query = Intervention.query.filter_by(
-                technicien_id=current_user.id).order_by(
-                    Intervention.date_debut.desc())
-        else:
-            query = Intervention.query.filter(Intervention.id == -1)  # Aucun résultat
-
-        # Appliquer les filtres supplémentaires
-        # On track les tables déjà jointes pour éviter les doublons de JOIN
-        demande_joined = False
-        user_joined = False
-
-        if statut:
-            query = query.filter(Intervention.statut == statut)
-
-        if technologie:
-            if not demande_joined:
-                query = query.join(DemandeIntervention, Intervention.demande_id == DemandeIntervention.id)
-                demande_joined = True
-            query = query.filter(DemandeIntervention.type_techno == technologie)
-
-        if service_filter:
-            if not demande_joined:
-                query = query.join(DemandeIntervention, Intervention.demande_id == DemandeIntervention.id)
-                demande_joined = True
-            query = query.filter(DemandeIntervention.service == service_filter)
-
-        if zone_filter:
-            if not user_joined:
-                query = query.join(User, Intervention.technicien_id == User.id)
-                user_joined = True
-            query = query.filter(User.zone == zone_filter)
-
-        if date_debut:
-            try:
-                query = query.filter(Intervention.date_debut >= datetime.strptime(date_debut, '%Y-%m-%d'))
-            except ValueError:
-                pass
-
-        if date_fin:
-            try:
-                query = query.filter(Intervention.date_debut <= datetime.strptime(date_fin, '%Y-%m-%d'))
-            except ValueError:
-                pass
-
-        if search_text:
-            from sqlalchemy import or_
-            if not demande_joined:
-                query = query.join(DemandeIntervention, Intervention.demande_id == DemandeIntervention.id)
-                demande_joined = True
-            if not user_joined:
-                query = query.join(User, Intervention.technicien_id == User.id)
-                user_joined = True
-            query = query.filter(
-                or_(
-                    DemandeIntervention.nd.contains(search_text),
-                    DemandeIntervention.nom_client.contains(search_text),
-                    DemandeIntervention.prenom_client.contains(search_text),
-                    User.prenom.contains(search_text),
-                    User.nom.contains(search_text)
-                )
-            )
-
-        interventions = query.paginate(page=page, per_page=per_page, error_out=False)
-
-        # Ajoute photos_list à chaque intervention de façon sécurisée
-        for intervention in interventions.items:
-            try:
-                intervention.photos_list = json.loads(
-                    intervention.photos) if intervention.photos else []
-            except Exception:
-                intervention.photos_list = []
-
-        return render_template('intervention_history.html',
-                               interventions=interventions,
-                               current_filters=current_filters)
-
-    except Exception as e:
-        db.session.rollback()
-        app.logger.error(f"[intervention_history] {type(e).__name__}: {e}")
-        app.logger.error(traceback.format_exc())
-        err_lower = str(e).lower()
-        if 'no such column' in err_lower or 'unknown column' in err_lower or 'operational' in err_lower:
-            flash('⚠️ Erreur de base de données : schéma incomplet ou migration manquante.', 'danger')
-        elif 'ambiguous' in err_lower:
-            flash('⚠️ Erreur de requête SQL (jointure ambiguë). Signalez ce problème.', 'danger')
-        else:
-            flash(f'⚠️ Erreur inattendue ({type(e).__name__}). Réessayez ou contactez l\'administrateur.', 'danger')
-        return render_template('intervention_history.html',
-                               interventions=_EmptyPagination(),
-                               current_filters=current_filters)
-
-
-
-
-@app.route('/api/stats')
-@login_required
-def api_stats():
-    """API pour les statistiques temps réel"""
-    if current_user.role == 'chef_pur':
-        stats = get_chef_pur_stats()
-    elif current_user.role == 'chef_pilote':
-        stats = get_chef_pilote_stats(current_user.service)
-    elif current_user.role == 'chef_zone':
-        stats = get_chef_zone_stats(current_user.zone)
-    else:
-        stats = {}
-
-    return jsonify(stats)
-
-
-# Route pour gérer les erreurs
-@app.errorhandler(404)
-def not_found_error(error):
-    return render_template('404.html'), 404
-
-
-@app.errorhandler(500)
-def internal_error(error):
-    db.session.rollback()
-    return render_template('500.html'), 500
-
-
-@app.route('/api/equipes-jour')
-@login_required
-def api_equipes_jour():
-    today = date.today()
-    equipes = Equipe.query.filter_by(publie=True,
-                                     date_publication=date.today(),
-                                     actif=True,
-                                     zone=current_user.zone).all()
-    equipes_data = []
-    for equipe in equipes:
-        equipes_data.append({
-            'id':
-            equipe.id,
-            'zone':
-            equipe.zone,
-            'nom_equipe':
-            equipe.nom_equipe,
-            'service':
-            equipe.service,
-            'technologies':
-            equipe.technologies,
-            'nb_membres':
-            len(equipe.membres) if hasattr(equipe, 'membres') else 0
-        })
-    return jsonify({'success': True, 'equipes': equipes_data})
-
-
-@app.route('/intervention/<int:intervention_id>/fiche_technique',
-           methods=['GET', 'POST'])
-@login_required
-def fiche_technique(intervention_id):
-    intervention = db.session.get(Intervention, intervention_id)
-    if not intervention:
-        abort(404)
-    form = FicheTechniqueForm()
-
-    if request.method == 'POST' and form.validate_on_submit():
-        fiche = FicheTechnique(
-            intervention_id=intervention_id,
-            nom_raison_sociale=form.nom_raison_sociale.data,
-            contact=form.contact.data,
-            represente_par=form.represente_par.data,
-            date_installation=form.date_installation.data,
-            tel1=form.tel1.data,
-            tel2=form.tel2.data,
-            adresse_demandee=form.adresse_demandee.data,
-            etage=form.etage.data,
-            gps_lat=form.gps_lat.data,
-            gps_long=form.gps_long.data,
-            type_logement_avec_bpi=form.type_logement_avec_bpi.data,
-            type_logement_sans_bpi=form.type_logement_sans_bpi.data,
-            h_arrivee=form.h_arrivee.data,
-            h_depart=form.h_depart.data,
-
-            # Informations techniques
-            n_ligne=form.n_ligne.data,
-            n_demande=form.n_demande.data,
-            technicien_structure=form.technicien_structure.data,
-            pilote_structure=form.pilote_structure.data,
-            offre=form.offre.data,
-            debit=form.debit.data,
-            type_mc=form.type_mc.data,
-            type_na=form.type_na.data,
-            type_transfert=form.type_transfert.data,
-            type_autre=form.type_autre.data,
-            backoffice_structure=form.backoffice_structure.data,
-
-            # Matériels
-            type_ont=form.type_ont.data,
-            nature_ont=form.nature_ont.data,
-            numero_serie_ont=form.numero_serie_ont.data,
-            type_decodeur=form.type_decodeur.data,
-            nature_decodeur=form.nature_decodeur.data,
-            numero_serie_decodeur=form.numero_serie_decodeur.data,
-            disque_dur=form.disque_dur.data,
-            telephone=form.telephone.data,
-            recepteur_wifi=form.recepteur_wifi.data,
-            cpl=form.cpl.data,
-            carte_vaccess=form.carte_vaccess.data,
-
-            # Accessoires
-            type_cable_lc=form.type_cable_lc.data,
-            type_cable_bti=form.type_cable_bti.data,
-            type_cable_pto_one=form.type_cable_pto_one.data,
-            kit_pto=form.kit_pto.data,
-            piton=form.piton.data,
-            arobase=form.arobase.data,
-            malico=form.malico.data,
-            ds6=form.ds6.data,
-            autre_accessoire=form.autre_accessoire.data,
-
-            # Tests de services
-            appel_sortant_ok=form.appel_sortant_ok.data,
-            appel_sortant_nok=form.appel_sortant_nok.data,
-            appel_entrant_ok=form.appel_entrant_ok.data,
-            appel_entrant_nok=form.appel_entrant_nok.data,
-            tvo_mono_ok=form.tvo_mono_ok.data,
-            tvo_mono_nok=form.tvo_mono_nok.data,
-            tvo_multi_ok=form.tvo_multi_ok.data,
-            tvo_multi_nok=form.tvo_multi_nok.data,
-            enregistreur_dd_ok=form.enregistreur_dd_ok.data,
-            enregistreur_dd_nok=form.enregistreur_dd_nok.data,
-
-            # Tests de débits
-            par_cable_salon=form.par_cable_salon.data,
-            par_cable_chambres=form.par_cable_chambres.data,
-            par_cable_bureau=form.par_cable_bureau.data,
-            par_cable_autres=form.par_cable_autres.data,
-            par_cable_vitesse_wifi=form.par_cable_vitesse_wifi.data,
-            par_cable_mesure_mbps=form.par_cable_mesure_mbps.data,
-            par_wifi_salon=form.par_wifi_salon.data,
-            par_wifi_chambres=form.par_wifi_chambres.data,
-            par_wifi_bureau=form.par_wifi_bureau.data,
-            par_wifi_autres=form.par_wifi_autres.data,
-            par_wifi_vitesse_wifi=form.par_wifi_vitesse_wifi.data,
-            par_wifi_mesure_mbps=form.par_wifi_mesure_mbps.data,
-
-            # Etiquetages et Nettoyage
-            etiquetage_colliers_serres=form.etiquetage_colliers_serres.data,
-            etiquetage_pbo_normalise=form.etiquetage_pbo_normalise.data,
-            nettoyage_depose=form.nettoyage_depose.data,
-            nettoyage_tutorat=form.nettoyage_tutorat.data,
-
-            # Rattachement
-            rattachement_nro=form.rattachement_nro.data,
-            rattachement_type=form.rattachement_type.data,
-            rattachement_num_carte=form.rattachement_num_carte.data,
-            rattachement_num_port=form.rattachement_num_port.data,
-            rattachement_plaque=form.rattachement_plaque.data,
-            rattachement_bpi_pbo=form.rattachement_bpi_pbo.data,
-            rattachement_coupleur=form.rattachement_coupleur.data,
-            rattachement_fibre=form.rattachement_fibre.data,
-            rattachement_ref_dbm=form.rattachement_ref_dbm.data,
-            rattachement_mesure_dbm=form.rattachement_mesure_dbm.data,
-
-            # Commentaires
-            commentaires=form.commentaires.data,
-
-            # Signatures et satisfaction client
-            signature_equipe=form.signature_equipe.data,
-            signature_client=form.signature_client.data,
-            client_tres_satisfait=form.client_tres_satisfait.data,
-            client_satisfait=form.client_satisfait.data,
-            client_pas_satisfait=form.client_pas_satisfait.data)
-
-        db.session.add(fiche)
-        db.session.commit()
-        # Log de création de fiche technique
-        log_activity(
-            user_id=current_user.id,
-            action='create',
-            module='fiches_techniques',
-            entity_id=fiche.id,
-            entity_name=f"Fiche Technique {fiche.n_demande}",
-            details={
-                'intervention_id': intervention_id,
-                'client': fiche.nom_raison_sociale,
-                'technicien': f"{current_user.prenom} {current_user.nom}"
-            }
-        )
-        flash('La fiche technique a été enregistrée avec succès.', 'success')
-        return redirect(
-            url_for('intervention_details', intervention_id=intervention_id))
-
-    # Si une fiche technique existe déjà, on charge ses données
-    if intervention.fiche_technique:
-        for field in form:
-            if hasattr(intervention.fiche_technique, field.name):
-                field.data = getattr(intervention.fiche_technique, field.name)
-
-    return render_template('fiche_technique_form.html',
-                           form=form,
-                           intervention=intervention)
-
-
-""" @app.route('/save-survey/<int:intervention_id>', methods=['POST'])
-@login_required
-def save_survey(intervention_id):
-    import sys
-    print(f"[DEBUG] Appel de save_survey pour intervention_id={intervention_id}", file=sys.stderr)
-    print(f"[DEBUG] request.form: {request.form}", file=sys.stderr)
-    print(f"[DEBUG] request.files: {request.files}", file=sys.stderr)
-    print(f"[DEBUG] request.headers: {dict(request.headers)}", file=sys.stderr)
-
-    intervention = db.session.get(Intervention, intervention_id)
-    if not intervention:
-        abort(404)
-    form = SurveyForm(request.form)
-    action = request.form.get('action', 'save_and_continue')
-
-    if form.validate_on_submit():
-        try:
-            # Créer un nouveau survey ou mettre à jour l'existant
-            survey = Survey.query.filter_by(
-                intervention_id=intervention_id).first()
-            if not survey:
-                survey = Survey(intervention_id=intervention_id)
-                db.session.add(survey)
-
-            # Mettre à jour les champs du survey
-            survey.date_survey = form.date_survey.data
-            survey.nom_raison_sociale = form.nom_raison_sociale.data
-            survey.contact = form.contact.data
-            survey.represente_par = form.represente_par.data
-            survey.tel1 = form.tel1.data
-            survey.tel2 = form.tel2.data
-            survey.adresse_demande = form.adresse_demande.data
-            survey.etage = form.etage.data
-            survey.gps_lat = form.gps_lat.data
-            survey.gps_long = form.gps_long.data
-            survey.h_debut = form.h_debut.data
-            survey.h_fin = form.h_fin.data
-            survey.n_ligne = form.n_ligne.data
-            survey.n_demande = form.n_demande.data
-            survey.service_demande = form.service_demande.data
-            survey.etat_client = form.etat_client.data
-            survey.nature_local = form.nature_local.data
-            survey.type_logement = form.type_logement.data
-            survey.fibre_dispo = form.fibre_dispo.data
-            survey.cuivre_dispo = form.cuivre_dispo.data
-            survey.gpon_olt = form.gpon_olt.data
-            survey.splitter = form.splitter.data
-            survey.distance_fibre = form.distance_fibre.data
-            survey.etat_fibre = form.etat_fibre.data
-            survey.sr = form.sr.data
-            survey.pc = form.pc.data
-            survey.distance_cuivre = form.distance_cuivre.data
-            survey.etat_cuivre = form.etat_cuivre.data
-            survey.modem = form.modem.data
-            survey.ont = form.ont.data
-            survey.nb_prises = form.nb_prises.data
-            survey.quantite_cable = form.quantite_cable.data
-            survey.observation_tech = form.observation_tech.data
-            survey.observation_client = form.observation_client.data
-            survey.conclusion = form.conclusion.data
-            survey.photo_batiment = form.photo_batiment.data
-            survey.photo_environ = form.photo_environ.data
-            survey.technicien_structure = form.technicien_structure.data
-            survey.backoffice_structure = form.backoffice_structure.data
-            survey.offre = form.offre.data
-            survey.debit = form.debit.data
-            survey.type_mi = form.type_mi.data
-            survey.type_na = form.type_na.data
-            survey.type_transfer = form.type_transfer.data
-            survey.type_autre = form.type_autre.data
-            survey.nro = form.nro.data
-            survey.type_reseau = form.type_reseau.data
-            survey.plaque = form.plaque.data
-            survey.bpi = form.bpi.data
-            survey.pbo = form.pbo.data
-            survey.coupleur = form.coupleur.data
-            survey.fibre = form.fibre.data
-            survey.nb_clients = form.nb_clients.data
-            survey.valeur_pbo_dbm = form.valeur_pbo_dbm.data
-            survey.bpi_b1 = form.bpi_b1.data
-            survey.pbo_b1 = form.pbo_b1.data
-            survey.coupleur_b1 = form.coupleur_b1.data
-            survey.nb_clients_b1 = form.nb_clients_b1.data
-            survey.valeur_pbo_dbm_b1 = form.valeur_pbo_dbm_b1.data
-            survey.description_logement_avec_bpi = form.description_logement_avec_bpi.data
-            survey.description_logement_sans_bpi = form.description_logement_sans_bpi.data
-            survey.emplacement_pto = form.emplacement_pto.data
-            survey.passage_cable = form.passage_cable.data
-            survey.longueur_tirage_pbo_bti = form.longueur_tirage_pbo_bti.data
-            survey.longueur_tirage_bti_pto = form.longueur_tirage_bti_pto.data
-            survey.materiel_existant_decodeur_carte = form.materiel_existant_decodeur_carte.data
-            survey.materiel_existant_wifi_extender = form.materiel_existant_wifi_extender.data
-            survey.materiel_existant_fax = form.materiel_existant_fax.data
-            survey.materiel_existant_videosurveillance = form.materiel_existant_videosurveillance.data
-            survey.qualite_ligne_adsl_defaut_couverture = form.qualite_ligne_adsl_defaut_couverture.data
-            survey.qualite_ligne_adsl_lenteurs = form.qualite_ligne_adsl_lenteurs.data
-            survey.qualite_ligne_adsl_deconnexions = form.qualite_ligne_adsl_deconnexions.data
-            survey.qualite_ligne_adsl_ras = form.qualite_ligne_adsl_ras.data
-            survey.niveau_wifi_salon = form.niveau_wifi_salon.data
-            survey.niveau_wifi_chambre1 = form.niveau_wifi_chambre1.data
-            survey.niveau_wifi_bureau1 = form.niveau_wifi_bureau1.data
-            survey.niveau_wifi_autres_pieces = form.niveau_wifi_autres_pieces.data
-            survey.choix_bf_hall = form.choix_bf_hall.data
-            survey.choix_bf_chambre2 = form.choix_bf_chambre2.data
-            survey.choix_bf_bureau2 = form.choix_bf_bureau2.data
-            survey.choix_bf_mesure_dbm = form.choix_bf_mesure_dbm.data
-            survey.cuisine_chambre3 = form.cuisine_chambre3.data
-            survey.cuisine_bureau3 = form.cuisine_bureau3.data
-            survey.cuisine_mesure_dbm = form.cuisine_mesure_dbm.data
-            survey.repeteur_wifi_oui = form.repeteur_wifi_oui.data
-            survey.repeteur_wifi_non = form.repeteur_wifi_non.data
-            survey.repeteur_wifi_quantite = form.repeteur_wifi_quantite.data
-            survey.repeteur_wifi_emplacement = form.repeteur_wifi_emplacement.data
-            survey.cpl_oui = form.cpl_oui.data
-            survey.cpl_non = form.cpl_non.data
-            survey.cpl_quantite = form.cpl_quantite.data
-            survey.cpl_emplacement = form.cpl_emplacement.data
-            survey.cable_local_type = form.cable_local_type.data
-            survey.cable_local_longueur = form.cable_local_longueur.data
-            survey.cable_local_connecteurs = form.cable_local_connecteurs.data
-            survey.goulottes_oui = form.goulottes_oui.data
-            survey.goulottes_non = form.goulottes_non.data
-            survey.goulottes_quantite = form.goulottes_quantite.data
-            survey.goulottes_nombre_x2m = form.goulottes_nombre_x2m.data
-            survey.survey_ok = form.survey_ok.data
-            survey.survey_nok = form.survey_nok.data
-            survey.motif = form.motif.data
-            survey.commentaires = form.commentaires.data
-            survey.signature_equipe = form.signature_equipe.data
-            survey.signature_client = form.signature_client.data
-            survey.client_tres_satisfait = form.client_tres_satisfait.data
-            survey.client_satisfait = form.client_satisfait.data
-            survey.client_pas_satisfait = form.client_pas_satisfait.data
-
-            # Mettre à jour l'intervention
-            intervention.survey_ok = form.survey_ok.data
-            intervention.survey_date = datetime.now(timezone.utc)
-            intervention.fichier_technique_accessible = 1 if form.survey_ok.data else 0
-
-            db.session.commit()
-
-            print("[DEBUG] Commit DB effectué", file=sys.stderr)
-
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                print("[DEBUG] Requête AJAX détectée, retour JSON", file=sys.stderr)
-                return jsonify({
-                    'success': True,
-                    'message': 'Survey enregistré avec succès',
-                    'redirect': url_for('intervention_form', demande_id=intervention.demande_id)
-                })
-
-            flash(f'[DEBUG] Survey enregistré avec succès (action={action})', 'success')
-            if action == 'save_only':
-                print("[DEBUG] Redirection vers intervention_history", file=sys.stderr)
-                return redirect(url_for('intervention_history'))
-            else:
-                print("[DEBUG] Redirection vers intervention_form", file=sys.stderr)
-                return redirect(url_for('intervention_form', demande_id=intervention.demande_id))
-        except Exception as e:
-            db.session.rollback()
-            print(f"[DEBUG] Exception: {str(e)}", file=sys.stderr)
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return jsonify({
-                    'success': False,
-                    'message': f"Erreur lors de l'enregistrement: {str(e)}"
-                }), 500
-
-            flash(f"[DEBUG] Erreur lors de l'enregistrement: {str(e)}", 'error')
-            return redirect(
-                url_for('intervention_form',
-                        demande_id=intervention.demande_id))
-
-    else:
-        print("[DEBUG] Formulaire non validé, erreurs:", form.errors, file=sys.stderr)
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return jsonify({
-                'success': False,
-                'errors': form.errors,
-                'message': 'Veuillez corriger les erreurs du formulaire'
-            }), 400
-
-        demande = db.session.get(DemandeIntervention, intervention.demande_id)
-    if not demandeintervention:
-        abort(404)
-        flash(f"[DEBUG] Erreurs formulaire: {form.errors}", 'error')
-        return render_template('intervention_form.html',
-                               form=InterventionForm(obj=intervention),
-                               survey_form=form,
-                               demande=demande,
-                               intervention=intervention)
-"""
-
-@app.route('/save-survey/<int:intervention_id>', methods=['POST'])
-@login_required
-def save_survey(intervention_id):
-    try:
-        # Vérification de base
-        intervention = db.session.get(Intervention, intervention_id)
-        if not intervention:
-            abort(404)
-        if intervention.technicien_id != current_user.id:
-            return jsonify({
-                'success': False,
-                'error': 'Accès non autorisé'
-            }), 403
-
-        # Initialisation du formulaire
-        form = SurveyForm(request.form)
-        action = request.form.get('action', 'save_and_continue')  # save_only ou save_and_continue
-
-        # Validation du formulaire
-        if not form.validate_on_submit():
-            return jsonify({
-                'success': False,
-                'errors': form.errors,
-                'message': 'Veuillez corriger les erreurs du formulaire'
-            }), 400
-
-        # Démarrer une transaction
-        db.session.begin_nested()
-
-        # Récupérer ou créer le survey
-        survey = Survey.query.filter_by(intervention_id=intervention_id).first()
-        if not survey:
-            survey = Survey(intervention_id=intervention_id)
-            db.session.add(survey)
-
-        # Mise à jour des champs du survey
-        for field in form:
-            if hasattr(Survey, field.name):
-                try:
-                    column_type = getattr(Survey, field.name).type
-                    if isinstance(column_type, db.Boolean):
-                        setattr(survey, field.name, bool(field.data))
-                    else:
-                        setattr(survey, field.name, field.data)
-                except Exception as e:
-                    db.session.rollback()
-                    return jsonify({
-                        'success': False,
-                        'message': f"Erreur dans le champ {field.name}: {str(e)}",
-                        'field': field.name,
-                        'error_type': str(type(e))
-                    }), 400
-
-        # Gestion des photos
-        uploaded_files = request.files.getlist('photos[]')
-        photo_paths = []
-        for file in uploaded_files:
-            if file and file.filename != '':
-                filename = secure_filename(file.filename)
-                unique_filename = f"{datetime.now().timestamp()}_{filename}"
-                save_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
-                os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                file.save(save_path)
-                photo_paths.append(unique_filename)
-
-        if photo_paths:
-            existing_photos = []
-            if survey.photos:
-                try:
-                    existing_photos = json.loads(survey.photos)
-                except json.JSONDecodeError:
-                    existing_photos = survey.photos.split(',') if isinstance(survey.photos, str) else []
-            all_photos = existing_photos + photo_paths
-            survey.photos = json.dumps(all_photos)
-
-        # Mise à jour des timestamps
-        survey.updated_at = datetime.now(timezone.utc)
-
-        #  Logique différente selon l’action
-        if action == 'save_only':
-            # On clôture directement l’intervention
-            intervention.fichier_technique_accessible = 0
-            intervention.date_fin = datetime.now(timezone.utc)
-            intervention.statut = 'termine'
-
-            if intervention.demande:
-                intervention.demande.statut = 'termine'
-                intervention.demande.date_completion = datetime.now(timezone.utc)
-
-        else:
-            intervention.survey_ok = form.survey_ok.data
-            intervention.survey_date = datetime.now(timezone.utc)
-            intervention.fichier_technique_accessible = 1 if form.survey_ok.data else 0
-
-        db.session.commit()
-
-
-        # Envoi du mail si survey validé
-        if survey.survey_ok:
-            create_sms_notification(current_user.id, intervention.demande_id, 'validation', notify_managers=True)
-            destinataires = []
-            demande = intervention.demande
-            if demande:
-                chef_pur = User.query.filter_by(role='chef_pur').first()
-                if chef_pur and chef_pur.email:
-                    destinataires.append(chef_pur.email)
-                if demande.zone:
-                    chef_zone = User.query.filter_by(role='chef_zone', zone=demande.zone).first()
-                    if chef_zone and chef_zone.email:
-                        destinataires.append(chef_zone.email)
-                if demande.service:
-                    chef_pilote = User.query.filter_by(role='chef_pilote', service=demande.service).first()
-                    if chef_pilote and chef_pilote.email:
-                        destinataires.append(chef_pilote.email)
-
-            technicien_nom = f"{intervention.technicien.nom} {intervention.technicien.prenom}" if intervention.technicien else "N/A"
-            equipe_nom = ""
-            if intervention.equipe_id:
-                equipe = db.session.get(Equipe, intervention.equipe_id)
-                equipe_nom = equipe.nom_equipe if equipe else ""
-
-            # Envoi mail notification validation
-            try:
-                if destinataires:
-                    subject = "Survey à valider"
-                    body = f"""Bonjour,
-
-Un survey vient d'être enregistré et nécessite votre validation.
-
-ND : {demande.nd if demande else 'N/A'}
-Client : {demande.nom_client if demande else ''} {demande.prenom_client if demande else ''}
-Zone : {demande.zone if demande else ''}
-Service : {demande.service if demande else ''}
-Technicien : {technicien_nom}
-Équipe : {equipe_nom}
-
-Merci de vous connecter à Sofatelcom pour valider ou rejeter ce survey.
-"""
-                    send_email(subject, destinataires, body=body)
-            except Exception as post_e:
-                current_app.logger.warning(f"Failed to send survey validation email: {str(post_e)}")
-
-        # Réponse AJAX
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return jsonify({
-                'success': True,
-                'message': 'Survey enregistré avec succès',
-                'redirect': url_for('intervention_history') if action == 'save_only' else url_for('intervention_form', demande_id=intervention.demande_id)
-            })
-
-        # Redirection classique (fallback)
-        if action == 'save_only':
-            flash('Survey enregistré et intervention clôturée', 'success')
-            return redirect(url_for('intervention_history'))
-        else:
-            flash('Survey enregistré avec succès', 'success')
-            return redirect(url_for('intervention_form', demande_id=intervention.demande_id))
-
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Erreur inattendue: {traceback.format_exc()}")
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return jsonify({
-                'success': False,
-                'message': f"Erreur technique lors de la sauvegarde: {str(e)}",
-                'traceback': traceback.format_exc()
-            }), 500
-
-        flash(f"Erreur technique lors de la sauvegarde: {str(e)}", 'error')
-        return redirect(url_for('intervention_form', demande_id=intervention.demande_id))
-
-
-@app.route('/save-fiche-technique/<int:intervention_id>', methods=['POST'])
-@login_required
-def save_fiche_technique(intervention_id):
-    try:
-        # Vérification de base
-        intervention = db.session.get(Intervention, intervention_id)
-        if not intervention:
-            abort(404)
-        if intervention.technicien_id != current_user.id:
-            return jsonify({
-                'success': False,
-                'error': 'Accès non autorisé'
-            }), 403
-
-        # Initialisation du formulaire
-        form = FicheTechniqueForm(request.form)
-
-        # Validation du formulaire
-        if not form.validate_on_submit():
-            return jsonify({
-                'success':
-                False,
-                'errors':
-                form.errors,
-                'message':
-                'Veuillez corriger les erreurs du formulaire'
-            }), 400
-
-        # Démarrer une transaction
-        db.session.begin_nested()
-
-        # Gestion de la fiche technique
-        fiche = FicheTechnique.query.filter_by(
-            intervention_id=intervention_id).first()
-
-        if not fiche:
-            fiche = FicheTechnique(intervention_id=intervention_id,
-                                   technicien_id=current_user.id,
-                                   date_creation=datetime.now(timezone.utc))
-            db.session.add(fiche)
-
-        # Mise à jour des champs avec gestion des erreurs
-        for field in form:
-            if hasattr(fiche, field.name):
-                try:
-                    # Conversion spéciale pour les champs booléens
-                    if isinstance(
-                            getattr(FicheTechnique, field.name).type,
-                            db.Boolean):
-                        setattr(fiche, field.name, bool(field.data))
-                    else:
-                        setattr(fiche, field.name, field.data)
-                except Exception as e:
-                    db.session.rollback()
-                    return jsonify({
-                        'success': False,
-                        'message':
-                        f"Erreur dans le champ {field.name}: {str(e)}",
-                        'field': field.name,
-                        'error_type': str(type(e))
-                    }), 400
-        # Gestion des photos uploadées
-        uploaded_files = request.files.getlist('photos[]')
-        photo_paths = []
-
-        for file in uploaded_files:
-            if file and file.filename != '':
-                filename = secure_filename(file.filename)
-                unique_filename = f"{datetime.now().timestamp()}_{filename}"
-                save_path = os.path.join(app.config['UPLOAD_FOLDER'],
-                                         unique_filename)
-                
-                # Créer le dossier s'il n'existe pas
-                os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                
-                file.save(save_path)
-                photo_paths.append(unique_filename)  # Stocker uniquement le nom du fichier
-
-        # Si des photos ont été uploadées, les sauvegarder dans la fiche technique
-        if photo_paths:
-            # Si des photos existent déjà, les fusionner avec les nouvelles
-            existing_photos = []
-            if fiche.photos:
-                try:
-                    existing_photos = json.loads(fiche.photos)
-                except json.JSONDecodeError:
-                    existing_photos = fiche.photos.split(',') if isinstance(fiche.photos, str) else []
-            
-            # Ajouter les nouvelles photos aux existantes
-            all_photos = existing_photos + photo_paths
-            fiche.photos = json.dumps(all_photos)
-
-        # Mise à jour des timestamps
-        fiche.updated_at = datetime.now(timezone.utc)
-
-        # Mise à jour de l'intervention associée
-        intervention.date_fin = datetime.now(timezone.utc)
-        intervention.statut = 'termine'
-
-        # Mise à jour de la demande
-        if intervention.demande:
-            intervention.demande.statut = 'termine'
-            intervention.demande.date_completion = datetime.now(timezone.utc)
-
-        # Créer notification de fiche technique terminée
-        create_sms_notification(current_user.id, intervention.demande_id, 'validation', notify_managers=True)
-        # Validation finale
-        try:
-            db.session.commit()
-
-            # Envoi mail pour validation fiche technique
-            destinataires = []
-            demande = intervention.demande
-
-            if demande:
-                # Chef PUR
-                chef_pur = User.query.filter_by(role='chef_pur').first()
-                if chef_pur and chef_pur.email:
-                    destinataires.append(chef_pur.email)
-                # Chef Zone
-                if demande.zone:
-                    chef_zone = User.query.filter_by(
-                        role='chef_zone', zone=demande.zone).first()
-                    if chef_zone and chef_zone.email:
-                        destinataires.append(chef_zone.email)
-                # Chef Pilote
-                if demande.service:
-                    chef_pilote = User.query.filter_by(
-                        role='chef_pilote', service=demande.service).first()
-                    if chef_pilote and chef_pilote.email:
-                        destinataires.append(chef_pilote.email)
-                # Récupérer le nom du technicien
-                technicien_nom = f"{intervention.technicien.nom} {intervention.technicien.prenom}" if intervention.technicien else "N/A"
-                # Récupérer le nom de l'équipe liée
-                equipe_nom = ""
-                if intervention.equipe_id:
-                    equipe = db.session.get(Equipe, intervention.equipe_id)
-                    equipe_nom = equipe.nom_equipe if equipe else ""
-
-                subject = "Fiche technique à valider"
-                body = f"""Bonjour,\n\nUne fiche technique vient d'être enregistrée et nécessite votre validation.\n
-                ND : {demande.nd}\nClient : {demande.nom_client} {demande.prenom_client}\nZone : {demande.zone}\nService : {demande.service}\n
-                Technicien : {technicien_nom}\nÉquipe : {equipe_nom}\n
-                Merci de vous connecter à Sofatelcom pour valider ou rejeter cette fiche technique."""
-                if destinataires:
-                    send_email(subject, destinataires, body=body)
-
-            return jsonify({
-                'success': True,
-                'message':
-                'Fiche technique et intervention enregistrées avec succès',
-                'redirect': url_for('dashboard')
-            })
-        except IntegrityError as e:
-            db.session.rollback()
-            current_app.logger.error(f"Erreur d'intégrité: {str(e)}")
-            return jsonify({
-                'success': False,
-                'message': 'Erreur de cohérence dans la base de données',
-                'error': str(e.orig)
-            }), 500
-
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(
-            f"Erreur inattendue: {traceback.format_exc()}")
-        return jsonify({
-            'success': False,
-            'message': 'Erreur technique lors de la sauvegarde',
-            'error': str(e),
+            'message': error_msg,
+            'error_details': str(e),
             'traceback': traceback.format_exc()
         }), 500
 
-
-@app.route('/toggle-equipe-status/<int:equipe_id>', methods=['POST'])
+@stock_bp.route('/api/produits-faibles-stocks')
 @login_required
-def toggle_equipe_status(equipe_id):
-    equipe = db.session.get(Equipe, equipe_id)
-    if not equipe:
-        abort(404)
-    # Vérification des permissions
-    if current_user.role not in ['chef_zone', 'chef_pur', 'admin']:
-        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
-    
-    if current_user.role == 'chef_zone':
-        # Vérifier si l'équipe appartient à la zone du chef de zone
-        user_zone = current_user.zone
-        user_zone_formatted = None
-        if current_user.zone_relation:
-            user_zone_formatted = f"{current_user.zone_relation.nom} ({current_user.zone_relation.code})"
+def api_produits_faibles_stocks():
+    """
+    API pour récupérer la liste des produits en faible stock
+    """
+    try:
+        current_app.logger.info("Récupération des produits en faible stock")
         
-        is_in_zone = (equipe.zone == user_zone or 
-                     (user_zone_formatted and equipe.zone == user_zone_formatted) or
-                     (current_user.zone_relation and (equipe.zone == current_user.zone_relation.nom or equipe.zone == current_user.zone_relation.code)) or
-                     equipe.chef_zone_id == current_user.id)
+        # Récupérer tous les produits
+        produits = db.session.query(Produit).all()
         
-        if not is_in_zone:
-            return jsonify({'success': False, 'error': 'Accès non autorisé : cette équipe n\'appartient pas à votre zone'}), 403
-    try:
-        data = request.get_json() or {}
-        actif = data.get('actif')
-        if actif is None:
-            return jsonify({
-                'success': False,
-                'error': 'Valeur du statut manquante'
-            }), 400
-        equipe.actif = bool(actif)
-        db.session.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/equipes-inactives')
-@login_required
-def api_equipes_inactives():
-    if current_user.role != 'chef_zone':
-        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
-    equipes = Equipe.query.filter_by(actif=False, zone=current_user.zone).all()
-    equipes_data = []
-    for equipe in equipes:
-        equipes_data.append({
-            'id':
-            equipe.id,
-            'zone':
-            equipe.zone,
-            'nom_equipe':
-            equipe.nom_equipe,
-            'service':
-            equipe.service,
-            'technologies':
-            equipe.technologies,
-            'nb_membres':
-            len(equipe.membres) if hasattr(equipe, 'membres') else 0
-        })
-    return jsonify({'success': True, 'equipes': equipes_data})
-
-
-# API endpoints for detailed statistics
-@app.route('/api/stats/details/<stats_type>')
-@login_required
-def get_stats_details(stats_type):
-    """Get detailed data for statistics cards"""
-    if current_user.role != 'chef_pur':
-        return jsonify({'error': 'Access denied'}), 403
-
-    today = datetime.now().date()
-    limit = request.args.get('limit', 20, type=int)
-
-    try:
-        if stats_type == 'total_demandes':
-            demandes = DemandeIntervention.query.order_by(
-                DemandeIntervention.date_creation.desc()).limit(limit).all()
-            items = []
-            for d in demandes:
-                items.append({
-                    'numero_demande':
-                    d.nd,
-                    'nom_client':
-                    d.nom_client,
-                    'service_demande':
-                    d.service,
-                    'zone':
-                    d.zone,
-                    'date_creation':
-                    d.date_creation.isoformat() if d.date_creation else None,
-                    'statut':
-                    d.statut
+        # Filtrer les produits en faible stock
+        faibles_stocks = []
+        for produit in produits:
+            if produit.quantite <= produit.seuil_alerte:
+                faibles_stocks.append({
+                    'id': produit.id,
+                    'reference': produit.reference,
+                    'nom': produit.nom,
+                    'quantite': float(produit.quantite) if produit.quantite else 0,
+                    'seuil_alerte': float(produit.seuil_alerte) if produit.seuil_alerte else 0,
+                    'unite_mesure': produit.unite_mesure or '',
+                    'categorie': produit.categorie.nom if produit.categorie else 'Non catégorisé',
+                    'emplacement': produit.emplacement.designation if produit.emplacement else 'Non spécifié',
+                    'code_barres': produit.code_barres,
+                    'prix_achat': float(produit.prix_achat) if produit.prix_achat else 0
                 })
-            total = DemandeIntervention.query.count()
-            
-            # --- AJOUT DU DÉTAIL PAR SERVICE ET TECHNOLOGIE ---
-            detail_service_tech = {}
-            for service in ['SAV', 'Production']:
-                detail_service_tech[service] = {}
-                for tech in ['Fibre', 'Cuivre', '5G']:
-                    count = DemandeIntervention.query.filter_by(service=service, type_techno=tech).count()
-                    detail_service_tech[service][tech] = count
-
-            details = {
-                'service_tech': detail_service_tech
-            }
-
-        elif stats_type in ['demande_jour','demandes_jour_sav', 'demandes_jour_production']:
-            service = 'SAV' if stats_type == 'demandes_jour_sav' else 'Production'
-            demandes = DemandeIntervention.query.filter(
-                db.func.date(DemandeIntervention.date_creation) == today,
-                DemandeIntervention.service == service
-            ).order_by(
-                DemandeIntervention.date_creation.desc()
-            ).limit(limit).all()
-            items = []
-            for d in demandes:
-                items.append({
-                    'id': d.id,
-                    'numero_demande': d.nd,
-                    'age': d.age,
-                    'priorite_traitement': d.priorite_traitement,
-                    'offre': d.offre,
-                    'nom_client': d.nom_client,
-                    'service_demande': d.service,
-                    'zone': d.zone,
-                    'date_creation': d.date_creation.isoformat() if d.date_creation else None,
-                    'statut': d.statut
-                })
-            total = DemandeIntervention.query.filter(
-                db.func.date(DemandeIntervention.date_creation) == today,
-                DemandeIntervention.service == service
-            ).count()
-            # Détail par âge, priorité, offre
-            demandes_jour_query = DemandeIntervention.query.filter(
-                db.func.date(DemandeIntervention.date_creation) == today,
-                DemandeIntervention.service == service,
-                DemandeIntervention.statut.in_(['nouveau', 'a_reaffecter'])
-            )
-            age_ids, priorite_ids, offre_ids = {}, {}, {}
-            for d in demandes_jour_query.all():
-                age_val = d.age if d.age is not None else ''
-                age_ids.setdefault(age_val, []).append(d.id)
-                priorite_val = d.priorite_traitement if d.priorite_traitement is not None else ''
-                priorite_ids.setdefault(priorite_val, []).append(d.id)
-                offre_val = d.offre if d.offre is not None else ''
-                offre_ids.setdefault(offre_val, []).append(d.id)
-            age_stats = demandes_jour_query.with_entities(
-                DemandeIntervention.age, db.func.count()).group_by(DemandeIntervention.age).all()
-            priorite_stats = demandes_jour_query.with_entities(
-                DemandeIntervention.priorite_traitement, db.func.count()).group_by(DemandeIntervention.priorite_traitement).all()
-            offre_stats = demandes_jour_query.with_entities(
-                DemandeIntervention.offre, db.func.count()).group_by(DemandeIntervention.offre).all()
-            details = {
-                'age': dict(age_stats),
-                'priorite_traitement': dict(priorite_stats),
-                'offre': dict(offre_stats),
-                'age_ids': age_ids,
-                'priorite_ids': priorite_ids,
-                'offre_ids': offre_ids
-            }
         
-        elif stats_type == 'interventions_cours':
-            interventions = Intervention.query.filter_by(
-                statut='en_cours').limit(limit).all()
-            items = []
-            for i in interventions:
-                items.append({
-                    'numero_intervention':
-                    i.demande.nd,
-                    'nom_client':
-                    i.demande.nom_client if i.demande else '',
-                    'technicien_nom':
-                    f"{i.technicien_user.nom} {i.technicien_user.prenom}"
-                    if i.technicien_user else '',
-                    'zone':
-                    i.demande.zone if i.demande else '',
-                    'date_planifiee':
-                    i.date_debut.isoformat() if i.date_debut else None,
-                    'statut':
-                    i.statut
-                })
-            total = Intervention.query.filter_by(statut='en_cours').count()
-
-        elif stats_type in ['interventions_validees', 'interventions_validees_sav', 'interventions_validees_production']:
-            service = 'SAV' if stats_type == 'interventions_validees_sav' else 'Production'
-            interventions = Intervention.query.join(DemandeIntervention).filter(
-                Intervention.statut == 'valide',
-                db.func.date(Intervention.date_validation) == today,
-                DemandeIntervention.service == service
-            ).order_by(
-                Intervention.date_validation.desc()
-            ).limit(limit).all()
-            items = []
-            for i in interventions:
-                items.append({
-                    'numero_intervention':
-                    i.demande.nd,
-                    'nom_client':
-                    i.demande.nom_client if i.demande else '',
-                    'technicien_nom':
-                    f"{i.technicien_user.nom} {i.technicien_user.prenom}"
-                    if i.technicien_user else '',
-                    'zone':
-                    i.demande.zone if i.demande else '',
-                    'date_planifiee':
-                    i.date_debut.isoformat() if i.date_debut else None,
-                    'statut':
-                    i.statut
-                })
-            total = Intervention.query.join(DemandeIntervention).filter(
-                Intervention.statut == 'valide',
-                db.func.date(Intervention.date_validation) == today,
-                DemandeIntervention.service == service
-            ).count()
-
-        elif stats_type == 'attente_validation':
-            interventions = Intervention.query.filter_by(
-                statut='termine').order_by(
-                    Intervention.date_validation.desc()).limit(limit).all()
-            items = []
-            for i in interventions:
-                items.append({
-                    'numero_intervention':
-                    i.demande.nd,
-                    'nom_client':
-                    i.demande.nom_client if i.demande else '',
-                    'technicien_nom':
-                    f"{i.technicien_user.nom} {i.technicien_user.prenom}"
-                    if i.technicien_user else '',
-                    'zone':
-                    i.demande.zone if i.demande else '',
-                    'date_planifiee':
-                    i.date_debut.isoformat() if i.date_debut else None,
-                    'statut':
-                    i.statut
-                })
-            total = Intervention.query.filter_by(statut='termine').count()
-
-        elif stats_type == 'interventions_rejetees':
-            interventions = Intervention.query.filter_by(
-                statut='rejete').order_by(
-                    Intervention.date_validation.desc()).limit(limit).all()
-            items = []
-            for i in interventions:
-                items.append({
-                    'numero_intervention':
-                    i.demande.nd,
-                    'nom_client':
-                    i.demande.nom_client if i.demande else '',
-                    'technicien_nom':
-                    f"{i.technicien_user.nom} {i.technicien_user.prenom}"
-                    if i.technicien_user else '',
-                    'zone':
-                    i.demande.zone if i.demande else '',
-                    'date_planifiee':
-                    i.date_debut.isoformat() if i.date_debut else None,
-                    'statut':
-                    i.statut
-                })
-            total = Intervention.query.filter_by(statut='rejete').count()
-
-        else:
-            return jsonify({'error': 'Invalid stats type'}), 400
-        if 'details' not in locals():
-            details = {}
-        return jsonify({'items': items, 'total': total, 'showing': len(items), 'details': details})
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/zone_stats/details/<stats_type>')
-@login_required
-def get_zone_stats_details(stats_type):
-    zone = current_user.zone
-    today = datetime.now().date()
-    limit = request.args.get('limit', 20, type=int)
-    items = []
-    total = 0
-
-    try:
-        if stats_type == 'equipes_jour':
-            equipes = Equipe.query.filter_by(zone=zone).filter(
-                db.func.date(Equipe.date_publication) == today).order_by(
-                    Equipe.date_publication.desc()).limit(limit).all()
-            for e in equipes:
-                items.append({
-                    'nom_equipe': e.nom_equipe,
-                    'zone': e.zone,
-                    'service': e.service,
-                    'technologies': e.technologies,
-                    'nb_membres': len(e.membres),
-                    'publie': e.publie
-                })
-            total = Equipe.query.filter_by(zone=zone).filter(
-                db.func.date(Equipe.date_publication) == today).count()
-
-        elif stats_type == 'techniciens_zone':
-            techniciens = User.query.filter_by(zone=zone,
-                                               role='technicien',
-                                               actif=True).limit(limit).all()
-            for t in techniciens:
-                items.append({
-                    'nom': f"{t.prenom} {t.nom}",
-                    'zone': t.zone,
-                    'technologies': t.technologies,
-                })
-            total = User.query.filter_by(zone=zone,
-                                         role='technicien',
-                                         actif=True).count()
-
-        elif stats_type == 'interventions_cours':
-            interventions = Intervention.query.join(User, Intervention.technicien_id == User.id)\
-                .filter(User.zone == zone, Intervention.statut == 'en_cours')\
-                .order_by(Intervention.date_debut.desc()).limit(limit).all()
-            for i in interventions:
-                items.append({
-                    'numero_intervention':
-                    i.numero,
-                    'nom_client':
-                    i.demande.nom_client if i.demande else '',
-                    'technicien_nom':
-                    f"{i.technicien.prenom} {i.technicien.nom}"
-                    if i.technicien else '',
-                    'zone':
-                    i.demande.zone if i.demande else zone,
-                    'date_planifiee':
-                    i.date_debut.isoformat() if i.date_debut else None,
-                    'statut':
-                    i.statut
-                })
-            total = Intervention.query.join(User, Intervention.technicien_id == User.id)\
-                .filter(User.zone == zone, Intervention.statut == 'en_cours').count()
-
-        elif stats_type == 'interventions_terminees_jour':
-            interventions = Intervention.query.join(User, Intervention.technicien_id == User.id)\
-                .filter(
-                    User.zone == zone,
-                    Intervention.statut == 'termine',
-                    db.func.date(Intervention.date_fin) == today
-                ).order_by(Intervention.date_fin.desc()).limit(limit).all()
-            for i in interventions:
-                items.append({
-                    'numero_intervention':
-                    i.numero,
-                    'nom_client':
-                    i.demande.nom_client if i.demande else '',
-                    'technicien_nom':
-                    f"{i.technicien.prenom} {i.technicien.nom}"
-                    if i.technicien else '',
-                    'zone':
-                    i.demande.zone if i.demande else zone,
-                    'date_planifiee':
-                    i.date_fin.isoformat() if i.date_fin else None,
-                    'statut':
-                    i.statut
-                })
-            total = Intervention.query.join(User, Intervention.technicien_id == User.id)\
-                .filter(
-                    User.zone == zone,
-                    Intervention.statut == 'termine',
-                    db.func.date(Intervention.date_fin) == today
-                ).count()
-
-        else:
-            return jsonify({'error': 'Invalid stats type'}), 400
-
-        return jsonify({'items': items, 'total': total, 'showing': len(items)})
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-# API routes for daily team publication
-@app.route('/api/publication-stats')
-@login_required
-def get_publication_stats():
-    """Get daily team publication statistics"""
-    if current_user.role not in ['chef_zone', 'chef_pur']:
-        return jsonify({'error': 'Access denied'}), 403
-
-    today = datetime.now().date()
-
-    # Get teams created today in this zone
-    teams_created = Equipe.query.filter_by(zone=current_user.zone,
-                                           date_creation=today).count()
-
-    teams_published = Equipe.query.filter_by(zone=current_user.zone,
-                                             actif=True,
-                                             date_publication=today,
-                                             publie=True).count()
-
-    teams_draft = teams_created - teams_published
-
-    # Get last publication time
-    last_published = Equipe.query.filter_by(zone=current_user.zone,
-                                            date_publication=today,
-                                            publie=True).order_by(
-                                                Equipe.id.desc()).first()
-
-    last_publication = None
-    if last_published:
-        last_publication = last_published.date_publication.strftime(
-            '%H:%M') if last_published.date_publication else None
-    # Get all unpublished teams in this zone
-    unpublished_teams = Equipe.query.filter_by(zone=current_user.zone,
-                                               actif=True,
-                                               publie=False).count()
-    total_teams = Equipe.query.filter_by(
-        zone=current_user.zone,
-    ).count()
-    return jsonify({
-        'success': True,
-        'stats': {
-            'created': teams_created,
-            'published': teams_published,
-            'unpublished': unpublished_teams,
-            'total': total_teams,
-            'draft': teams_draft,
-            'last_publication': last_publication
-        }
-    })
-
-
-@app.route('/api/publish-daily-teams', methods=['POST'])
-@login_required
-def publish_daily_teams():
-    """Publish all unpublished teams for this chef zone"""
-    if current_user.role not in ['chef_zone', 'chef_pur']:
-        return jsonify({'error': 'Access denied'}), 403
-
-    now = datetime.now()
-    today = now.date()
-
-    try:
-        # Get all unpublished teams in this zone
-        unpublished_teams = Equipe.query.filter_by(
-            zone=current_user.zone,
-            actif=True,
-            publie=False).all()
-
-        published_count = 0
-        for team in unpublished_teams:
-            team.publie = True
-            team.date_publication = today
-            published_count += 1
-
-        db.session.commit()
-
-        return jsonify({
-            'success':
-            True,
-            'published_count':
-            published_count,
-            'message':
-            f'{published_count} équipe(s) publiée(s) avec succès'
-        })
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/preview-teams')
-@login_required
-def preview_teams():
-    """Preview teams created today for publication"""
-    if current_user.role != 'chef_zone':
-        return jsonify({'error': 'Access denied'}), 403
-
-    today = datetime.now().date()
-
-    try:
-        teams = Equipe.query.filter_by(zone=current_user.zone,
-                                       actif=True,
-                                       date_creation=today).all()
-
-        teams_data = []
-        for team in teams:
-            teams_data.append({
-                'id':
-                team.id,
-                'nom_equipe':
-                team.nom_equipe,
-                'zone':
-                team.zone,
-                'service':
-                team.service,
-                'technologies':
-                team.technologies,
-                'nb_membres':
-                len(team.membres) if hasattr(team, 'membres') else 0,
-                'publie':
-                team.publie,
-                'date_creation':
-                team.date_creation.isoformat(),
-                'date_publication':
-                team.date_publication.isoformat()
-                if team.date_publication else None
-            })
-
-        return jsonify({'success': True, 'teams': teams_data})
-
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/publish-selected-teams', methods=['POST'])
-@login_required
-def publish_selected_teams():
-    """Publish specific selected teams"""
-    if current_user.role not in ['chef_zone', 'chef_pur']:
-        return jsonify({'error': 'Access denied'}), 403
-
-    data = request.get_json()
-    team_ids = data.get('team_ids', [])
-
-    if not team_ids:
-        return jsonify({
-            'success': False,
-            'error': 'Aucune équipe sélectionnée'
-        }), 400
-
-    today = datetime.now().date()
-
-    try:
-        if current_user.role == 'chef_pur':
-            # Chef PUR peut publier n'importe quelle équipe active non publiée
-            teams_to_publish = Equipe.query.filter(
-                Equipe.id.in_(team_ids),
-                Equipe.actif == True,
-                Equipe.publie == False
-            ).all()
-        else:
-            # Chef Zone publie toutes les équipes de sa zone
-            teams_to_publish = Equipe.query.filter(
-                Equipe.id.in_(team_ids),
-                Equipe.zone == current_user.zone,
-                Equipe.actif == True,
-                Equipe.publie == False
-            ).all()
-
-        published_count = 0
-        for team in teams_to_publish:
-            team.publie = True
-            team.date_publication = today
-            published_count += 1
-
-        db.session.commit()
-
+        current_app.logger.info(f"Nombre de produits en faible stock: {len(faibles_stocks)}")
+        
         return jsonify({
             'success': True,
-            'published_count': published_count,
-            'message': f'{published_count} équipe(s) sélectionnée(s) publiée(s) avec succès'
+            'produits': faibles_stocks,
+            'total': len(faibles_stocks)
         })
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-
-@app.route('/intervention/reject', methods=['POST'])
-@login_required
-def reject_intervention():
-    data = request.get_json()
-    intervention_id = data.get('intervention_id')
-    motif = data.get('motif', '').strip()
-
-    if not intervention_id or not motif:
-        return jsonify({
-            'success': False,
-            'message': 'Motif obligatoire.'
-        }), 400
-
-    intervention = db.session.get(Intervention, intervention_id)
-    if not intervention:
-        return jsonify({
-            'success': False,
-            'message': 'Intervention introuvable.'
-        }), 404
-
-    # Vérifie que l'utilisateur est bien le technicien affecté
-    if intervention.technicien_id != current_user.id:
-        return jsonify({'success': False, 'message': 'Non autorisé.'}), 403
-
-    # Met à jour le statut et le motif
-    intervention.statut = 'rejete'
-    intervention.motif_rejet = motif
-    # Mettre à jour le statut de la demande liée
-    if intervention.demande:
-        intervention.demande.statut = 'a_reaffecter'
-    db.session.commit()
-
-    # Créer notification de rejet
-    #create_sms_notification(current_user.id, intervention.demande_id, 'rejet')
-    create_sms_notification(current_user.id, intervention.demande_id, 'urgence', notify_managers=True)
-    # Notifie le chef pilote (exemple simple, adapte selon ton système)
-    """ notif = NotificationSMS(
-        technicien_id=intervention.technicien_id,
-        message=
-        f"Intervention #{intervention.id} rejetée par {current_user.prenom} : {motif}",
-        type_notification='urgent')
-    db.session.add(notif)"""
-    db.session.commit() 
-    log_activity(
-        user_id=current_user.id,
-        action='reject',
-        module='interventions',
-        entity_id=intervention.id,
-        entity_name=f"Intervention {intervention.demande.nd if intervention.demande else 'N/A'}",
-        details={
-            'motif': motif,
-            'technicien': f"{intervention.technicien.prenom} {intervention.technicien.nom}" if intervention.technicien else 'N/A'
-        }
-    )
-    # Envoi mail au chef_pur, chef_zone et chef_pilote
-    destinataires = []
-    demande = intervention.demande
-    if demande:
-        chef_pur = User.query.filter_by(role='chef_pur').first()
-        if chef_pur and chef_pur.email:
-            destinataires.append(chef_pur.email)
-        if demande.zone:
-            chef_zone = User.query.filter_by(role='chef_zone',
-                                             zone=demande.zone).first()
-            if chef_zone and chef_zone.email:
-                destinataires.append(chef_zone.email)
-        if demande.service:
-            chef_pilote = User.query.filter_by(
-                role='chef_pilote', service=demande.service).first()
-            if chef_pilote and chef_pilote.email:
-                destinataires.append(chef_pilote.email)
-        technicien_nom = f"{current_user.nom} {current_user.prenom}"
-        equipe_nom = ""
-        if intervention.equipe_id:
-            equipe = db.session.get(Equipe, intervention.equipe_id)
-            equipe_nom = equipe.nom_equipe if equipe else ""
-        # Envoi mail notification rejet
-        try:
-            if destinataires:
-                subject = "Intervention rejetée"
-                body = f"""Bonjour,\n\nL'intervention #{intervention.id} a été rejetée par le technicien.\n
-                ND : {demande.nd}\nClient : {demande.nom_client} {demande.prenom_client}\nZone : {demande.zone}\nService : {demande.service}\n
-                Technicien : {technicien_nom}\nÉquipe : {equipe_nom}\nMotif du rejet : {motif}\n
-                Merci de vous connecter à Sofatelcom pour réaffecter la demande."""
-                send_email(subject, destinataires, body=body)
-        except Exception as post_e:
-            current_app.logger.warning(f"Failed to send rejection email: {str(post_e)}")
-    return jsonify({'success': True})
-
-
-@app.route('/api/stats/performance')
-@login_required
-def api_stats_performance():
-    """
-    API pour récupérer les données de performance:
-    - Teams (équipes avec leurs interventions validées)
-    - Zones (chefs zone avec leurs statistiques)
-    - Pilots (chefs pilote avec leurs statistiques)
     
-    Accès restreint aux chefs PUR uniquement.
-    """
-    if current_user.role != 'chef_pur':
-        return jsonify({'error': 'Accès refusé'}), 403
+    except Exception as e:
+        error_msg = f"Erreur dans api_produits_faibles_stocks: {str(e)}"
+        current_app.logger.error(error_msg)
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': error_msg,
+            'error_details': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
 
+@stock_bp.route('/produits-faibles-stocks')
+@login_required
+def page_produits_faibles_stocks():
+    """
+    Page dédiée pour afficher les produits en faible stock
+    Cette page remplace la section du dashboard
+    """
     try:
-        # Utilisation de la fonction unifiée et optimisée
-        perf_data = get_unified_performance_data(period=request.args.get('period', 'day'))
+        return render_template('produits_faibles_stocks.html')
+    except Exception as e:
+        current_app.logger.error(f"Erreur dans page_produits_faibles_stocks: {str(e)}")
+        current_app.logger.error(traceback.format_exc())
+        flash('Erreur: ' + str(e), 'danger')
+        return redirect(url_for('stock.liste_produits'))
+
+@stock_bp.route('/produits-en-stock')
+@login_required
+def page_produits_en_stock():
+    """
+    Page dédiée pour afficher tous les produits en stock
+    """
+    try:
+        return render_template('produits_stock.html')
+    except Exception as e:
+        current_app.logger.error(f"Erreur dans page_produits_en_stock: {str(e)}")
+        current_app.logger.error(traceback.format_exc())
+        flash('Erreur: ' + str(e), 'danger')
+        return redirect(url_for('stock.liste_produits'))
+
+@stock_bp.route('/entrees-mois')
+@login_required
+def page_entrees_mois():
+    """
+    Page dédiée pour afficher les entrées du mois courant
+    """
+    try:
+        return render_template('entrees_mois.html')
+    except Exception as e:
+        current_app.logger.error(f"Erreur dans page_entrees_mois: {str(e)}")
+        current_app.logger.error(traceback.format_exc())
+        flash('Erreur: ' + str(e), 'danger')
+        return redirect(url_for('stock.liste_produits'))
+
+@stock_bp.route('/sorties-mois')
+@login_required
+def page_sorties_mois():
+    """
+    Page dédiée pour afficher les sorties du mois courant
+    """
+    try:
+        return render_template('sorties_mois.html')
+    except Exception as e:
+        current_app.logger.error(f"Erreur dans page_sorties_mois: {str(e)}")
+        current_app.logger.error(traceback.format_exc())
+        flash('Erreur: ' + str(e), 'danger')
+        return redirect(url_for('stock.liste_produits'))
+
+@stock_bp.route('/debug/mouvements')
+@login_required
+def debug_mouvements():
+    """
+    Route de débogage pour afficher le contenu de la table mouvement_stock
+    """
+    try:
+        current_app.logger.info("Début du débogage des mouvements de stock")
+        
+        # Vérifier si la table existe
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        if 'mouvement_stock' not in inspector.get_table_names():
+            return jsonify({
+                'success': False,
+                'error': 'La table mouvement_stock n\'existe pas dans la base de données',
+                'tables_disponibles': inspector.get_table_names()
+            }), 500
+        
+        # Compter le nombre total d'entrées
+        try:
+            total_entrees = db.session.query(MouvementStock).filter(
+                MouvementStock.type_mouvement == 'entree'
+            ).count()
+        except Exception as e:
+            current_app.logger.error(f"Erreur lors du comptage des entrées: {str(e)}")
+            total_entrees = 0
+        
+        # Compter le nombre total de sorties
+        try:
+            total_sorties = db.session.query(MouvementStock).filter(
+                MouvementStock.type_mouvement == 'sortie'
+            ).count()
+        except Exception as e:
+            current_app.logger.error(f"Erreur lors du comptage des sorties: {str(e)}")
+            total_sorties = 0
+        
+        # Récupérer les 5 derniers mouvements avec les informations du produit
+        try:
+            derniers_mouvements = db.session.query(
+                MouvementStock,
+                Produit.nom.label('produit_nom')
+            ).outerjoin(
+                Produit, MouvementStock.produit_id == Produit.id
+            ).order_by(
+                MouvementStock.date_mouvement.desc()
+            ).limit(5).all()
+            
+            # Formater les résultats
+            mouvements_formates = []
+            for m, produit_nom in derniers_mouvements:
+                mouvements_formates.append({
+                    'id': m.id,
+                    'type': m.type_mouvement,
+                    'produit_id': m.produit_id,
+                    'produit_nom': produit_nom,
+                    'quantite': float(m.quantite) if m.quantite is not None else 0.0,
+                    'date': m.date_mouvement.isoformat() if m.date_mouvement else None,
+                    'reference': m.reference,
+                    'utilisateur_id': m.utilisateur_id,
+                    'date_creation': m.date_creation.isoformat() if hasattr(m, 'date_creation') and m.date_creation else None
+                })
+        except Exception as e:
+            current_app.logger.error(f"Erreur lors de la récupération des derniers mouvements: {str(e)}")
+            current_app.logger.error(traceback.format_exc())
+            mouvements_formates = []
+        
+        # Vérifier la structure de la table
+        try:
+            colonnes = [c['name'] for c in inspector.get_columns('mouvement_stock')]
+            current_app.logger.info(f"Colonnes de la table mouvement_stock: {colonnes}")
+        except Exception as e:
+            current_app.logger.error(f"Erreur lors de la récupération des colonnes: {str(e)}")
+            colonnes = []
+        
+        result = {
+            'total_entrees': total_entrees,
+            'total_sorties': total_sorties,
+            'derniers_mouvements': mouvements_formates,
+            'structure_table': {
+                'nom': 'mouvement_stock',
+                'colonnes': colonnes,
+                'nombre_total': db.session.query(MouvementStock).count()
+            }
+        }
+        
+        current_app.logger.info("Débogage des mouvements terminé avec succès")
+        return jsonify({
+            'success': True,
+            'data': result
+        })
+        
+    except Exception as e:
+        error_msg = f"Erreur lors du débogage des mouvements: {str(e)}"
+        current_app.logger.error(error_msg)
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': error_msg,
+            'traceback': traceback.format_exc()
+        }), 500
+
+@stock_bp.route('/api/mouvements/stock', methods=['POST'])
+@login_required
+def api_mouvements_stock():
+    """
+    API pour la liste paginée des mouvements de stock (pour DataTables)
+    """
+    current_app.logger.info("Début de la fonction api_mouvements_stock")
+    try:
+        # Récupérer les données de la requête (form ou json)
+        current_app.logger.info(f"Headers: {request.headers}")
+        current_app.logger.info(f"Content-Type: {request.content_type}")
+        current_app.logger.info(f"Données brutes: {request.get_data()}")
+        
+        if request.is_json or request.content_type == 'application/json':
+            try:
+                data = request.get_json()
+                current_app.logger.info(f"Données JSON reçues: {data}")
+                draw = int(data.get('draw', 1))
+                start = int(data.get('start', 0))
+                length = int(data.get('length', 10))
+                date_debut = data.get('dateDebut')
+                date_fin = data.get('dateFin')
+                type_mouvement = data.get('typeMouvement')
+                order = data.get('order', [{}])[0] if data.get('order') else {}
+                order_column = int(order.get('column', 0))
+                order_dir = order.get('dir', 'desc')
+            except Exception as e:
+                current_app.logger.error(f"Erreur lors du parsing JSON: {str(e)}")
+                return jsonify({'error': 'Format de requête invalide'}), 400
+        else:
+            draw = int(request.form.get('draw', 1))
+            start = int(request.form.get('start', 0))
+            length = int(request.form.get('length', 10))
+            date_debut = request.form.get('dateDebut')
+            date_fin = request.form.get('dateFin')
+            type_mouvement = request.form.get('typeMouvement')
+            order_column = int(request.form.get('order[0][column]', 0))
+            order_dir = request.form.get('order[0][dir]', 'desc')
+        
+        current_app.logger.info(f"Paramètres: draw={draw}, start={start}, length={length}, date_debut={date_debut}, date_fin={date_fin}, type_mouvement={type_mouvement}")
+        
+        # Construire la requête de base avec des labels explicites
+        current_app.logger.info("Construction de la requête avec jointures...")
+        
+        query = db.session.query(
+            MouvementStock,
+            Produit.reference.label('produit_reference'),
+            Produit.nom.label('produit_nom'),  # Utilisation de 'nom' au lieu de 'designation'
+            User.nom.label('user_nom'),
+            User.prenom.label('user_prenom')
+        ).outerjoin(
+            Produit, MouvementStock.produit_id == Produit.id
+        ).outerjoin(
+            User, MouvementStock.utilisateur_id == User.id
+        )
+        
+        # Appliquer les filtres
+        if date_debut:
+            query = query.filter(MouvementStock.date_mouvement >= date_debut)
+        if date_fin:
+            # Ajouter 1 jour pour inclure toute la journée de fin
+            date_fin_dt = datetime.strptime(date_fin, '%Y-%m-%d') + timedelta(days=1)
+            query = query.filter(MouvementStock.date_mouvement < date_fin_dt)
+        if type_mouvement:
+            query = query.filter(MouvementStock.type_mouvement == type_mouvement)
+        
+        # Compter le nombre total de résultats (sans pagination)
+        try:
+            total_records = query.count()
+            current_app.logger.info(f"Nombre total d'enregistrements: {total_records}")
+        except Exception as e:
+            current_app.logger.error(f"Erreur lors du comptage des enregistrements: {str(e)}")
+            return jsonify({'error': 'Erreur lors du comptage des enregistrements'}), 500
+        
+        # Mapper les colonnes triables avec les bons noms de colonnes
+        column_mapping = {
+            0: 'MouvementStock.date_mouvement',
+            1: 'produit_reference',
+            2: 'produit_nom',  # Changé de produit_designation à produit_nom
+            3: 'MouvementStock.type_mouvement',
+            4: 'MouvementStock.quantite',
+            5: 'MouvementStock.prix_unitaire',
+            6: 'MouvementStock.montant_total',
+            7: 'user_nom',  # Nom de l'utilisateur
+        }
+        
+        current_app.logger.info(f"Mapping des colonnes: {column_mapping}")
+        current_app.logger.info(f"Ordre demandé: colonne={order_column}, direction={order_dir}")
+        
+        # Vérifier si la colonne de tri est valide
+        if order_column not in column_mapping:
+            current_app.logger.warning(f"Colonne de tri invalide: {order_column}. Utilisation de la date par défaut.")
+            order_column = 0  # Utiliser la date par défaut
+        
+        # Appliquer le tri
+        try:
+            if order_column in column_mapping:
+                order_field = column_mapping[order_column]
+                
+                # Gérer le tri ascendant/descendant
+                if order_dir == 'desc':
+                    order_expr = getattr(MouvementStock if order_field.startswith('MouvementStock') else None, 
+                                      order_field.split('.')[-1], None).desc()
+                else:
+                    order_expr = getattr(MouvementStock if order_field.startswith('MouvementStock') else None, 
+                                      order_field.split('.')[-1], None).asc()
+                
+                if order_expr is not None:
+                    query = query.order_by(order_expr)
+                    current_app.logger.info(f"Tri appliqué: {order_field} ({order_dir})")
+                else:
+                    # Si le champ n'est pas trouvé dans MouvementStock, essayer avec un accès direct
+                    if order_dir == 'desc':
+                        query = query.order_by(db.desc(order_field))
+                    else:
+                        query = query.order_by(order_field)
+                    current_app.logger.info(f"Tri direct appliqué: {order_field} ({order_dir})")
+        except Exception as e:
+            current_app.logger.error(f"Erreur lors de l'application du tri: {str(e)}\n{traceback.format_exc()}")
+            # Continuer sans tri en cas d'erreur
+            query = query.order_by(MouvementStock.date_mouvement.desc())
+            current_app.logger.info("Tri par défaut appliqué: date_mouvement DESC")
+        
+        # Appliquer la pagination
+        try:
+            current_app.logger.info(f"Application de la pagination: offset={start}, limit={length}")
+            mouvements = query.offset(start).limit(length).all()
+            current_app.logger.info(f"Nombre de mouvements récupérés: {len(mouvements)}")
+            
+            # Formater les résultats pour DataTables
+            data = []
+            current_app.logger.info(f"Formatage de {len(mouvements)} mouvements...")
+            
+            for row in mouvements:
+                try:
+                    mvt = row[0]  # L'objet MouvementStock
+                    ref = getattr(row, 'produit_reference', '')
+                    nom_produit = getattr(row, 'produit_nom', 'Produit inconnu')  # Changé de designation à nom
+                    nom_utilisateur = getattr(row, 'user_nom', '')
+                    prenom_utilisateur = getattr(row, 'user_prenom', '')
+                    
+                    # Créer l'entrée avec des valeurs par défaut sécurisées
+                    entry = {
+                        'DT_RowId': f'mvt_{mvt.id}',
+                        'mouvement_reference': mvt.reference or '',
+                        'date': mvt.date_mouvement.isoformat() if mvt.date_mouvement else '',
+                        'reference': ref if ref is not None else 'N/A',
+                        'designation': nom_produit,  # Utilisation de nom_produit au lieu de designation
+                        'type_mouvement': mvt.type_mouvement or 'inconnu',
+                        'quantite': float(mvt.quantite) if mvt.quantite is not None else 0,
+                        'prix_unitaire': float(mvt.prix_unitaire) if mvt.prix_unitaire is not None else 0,
+                        'montant_total': float(mvt.montant_total) if mvt.montant_total is not None else 0,
+                        'utilisateur': f"{prenom_utilisateur or ''} {nom_utilisateur or ''}".strip() or 'Système',
+                        'commentaire': str(mvt.commentaire) if mvt.commentaire else ''
+                    }
+                    
+                    # Calculer le montant total si nécessaire
+                    if entry['montant_total'] == 0 and entry['quantite'] and entry['prix_unitaire']:
+                        entry['montant_total'] = entry['quantite'] * entry['prix_unitaire']
+                    
+                    data.append(entry)
+                    
+                except Exception as e:
+                    current_app.logger.error(f"Erreur lors du formatage d'un mouvement (ID: {getattr(mvt, 'id', 'inconnu')}): {str(e)}")
+                    continue
+            
+            current_app.logger.info(f"{len(data)} mouvements formatés avec succès")
+            
+        except Exception as e:
+            current_app.logger.error(f"Erreur lors de la récupération des données: {str(e)}")
+            return jsonify({
+                'draw': draw,
+                'recordsTotal': 0,
+                'recordsFiltered': 0,
+                'data': [],
+                'error': str(e)
+            }), 500
+        
+        # Préparer la réponse
+        response_data = {
+            'draw': draw,
+            'recordsTotal': total_records,
+            'recordsFiltered': total_records,
+            'data': data
+        }
+        
+        current_app.logger.info(f"Réponse envoyée: {len(data)} mouvements sur {total_records}")
+        return jsonify(response_data)
+        
+    except Exception as e:
+        current_app.logger.error(f"Erreur inattendue dans api_mouvements_stock: {str(e)}", exc_info=True)
+        return jsonify({
+            'draw': request.form.get('draw', 1),
+            'recordsTotal': 0,
+            'recordsFiltered': 0,
+            'data': [],
+            'error': str(e)
+        }), 500
+
+@stock_bp.route('/api/produits', methods=['GET'])
+@stock_bp.route('/gestion-stock/api/produits', methods=['GET'])
+@login_required
+def api_get_produits():
+    """
+    API pour récupérer la liste des produits, avec filtrage par catégorie et zone
+    """
+    try:
+        # Récupérer les paramètres de filtrage
+        categorie_id = request.args.get('categorie_id')
+        
+        # Construire la requête de base
+        query = Produit.query
+        
+        # JOUR 3: Filtrer par zone de l'utilisateur
+        from rbac_stock import filter_produits_by_zone
+        query = filter_produits_by_zone(query, current_user)
+        
+        # Appliquer le filtre de catégorie si spécifié
+        if categorie_id:
+            query = query.filter_by(categorie_id=categorie_id)
+        
+        # Exécuter la requête
+        produits = query.all()
+        
+        # Formater les résultats
+        produits_data = []
+        for produit in produits:
+            produits_data.append({
+                'id': produit.id,
+                'reference': produit.reference,
+                'nom': produit.nom,
+                'description': produit.description,
+                'quantite': float(produit.quantite) if hasattr(produit, 'quantite') else 0,
+                'seuil_alerte': float(produit.seuil_alerte) if hasattr(produit, 'seuil_alerte') else 0,
+                'prix_achat': float(produit.prix_achat) if produit.prix_achat else 0,
+                'code_barres': produit.code_barres or '',
+                'emplacement': produit.emplacement.designation if produit.emplacement else 'Non spécifié',
+                'categorie_id': produit.categorie_id,
+                'categorie_nom': produit.categorie.nom if produit.categorie else ''
+            })
         
         return jsonify({
-            'teams': perf_data.get('equipes', []),
-            'zones': perf_data.get('zones', []),
-            'pilots': perf_data.get('pilots', []),
-            'technicians': perf_data.get('techniciens', []),
-            'metadata': {
-                'timestamp': datetime.now(timezone.utc).isoformat(),
-                'source': 'unified_kpi_engine'
+            'success': True,
+            'produits': produits_data,
+            'total': len(produits_data)
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de la récupération des produits: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Erreur lors de la récupération des produits',
+            'error': str(e)
+        }), 500
+
+@stock_bp.route('/api/produits/<int:produit_id>')
+@stock_bp.route('/gestion-stock/api/produits/<int:produit_id>')
+@login_required
+def api_get_produit(produit_id):
+    """
+    API pour récupérer les détails d'un produit
+    Filtre par zone pour magasinier
+    """
+    try:
+        produit = db.session.get(Produit, produit_id)
+        if not produit:
+            abort(404)
+        
+        # NOUVEAU: Vérifier accès zone magasinier
+        if current_user.role.lower() == 'magasinier':
+            # Produit doit avoir un emplacement dans la zone magasinier
+            if not produit.emplacement or produit.emplacement.zone_id != current_user.zone_id:
+                abort(403, "Accès refusé. Produit en dehors de votre zone")
+        
+        return jsonify({
+            'success': True,
+            'produit': {
+                'id': produit.id,
+                'reference': produit.reference,
+                'designation': produit.nom,  # Using 'nom' instead of 'designation'
+                'description': produit.description,
+                'categorie': produit.categorie.nom if produit.categorie else None,
+                'quantite': float(produit.quantite) if hasattr(produit, 'quantite') else 0.0,
+                'seuil_alerte': float(produit.stock_min) if hasattr(produit, 'stock_min') and produit.stock_min is not None else 0.0,
+                'unite_mesure': produit.unite_mesure if hasattr(produit, 'unite_mesure') else None,
+                'prix_achat': float(produit.prix_achat) if hasattr(produit, 'prix_achat') and produit.prix_achat is not None else None,
+                'prix_vente': float(produit.prix_vente) if hasattr(produit, 'prix_vente') and produit.prix_vente is not None else None,
+                'emplacement': produit.emplacement if hasattr(produit, 'emplacement') else None,
+                'date_creation': produit.date_creation.isoformat() if hasattr(produit, 'date_creation') and produit.date_creation else None,
+                'date_maj': produit.date_maj.isoformat() if hasattr(produit, 'date_maj') and produit.date_maj else None
             }
         })
-
     except Exception as e:
-        logger.error(f"[ERROR] API stats/performance failed: {str(e)}", exc_info=True)
+        current_app.logger.error(f"Error in api_get_produit: {str(e)}")
         return jsonify({
-            'error': 'Erreur lors du calcul des statistiques',
-            'teams': [],
-            'zones': [],
-            'pilots': []
+            'success': False,
+            'message': str(e)
+        }), 500
+
+@stock_bp.route('/api/produits/<int:produit_id>/ajuster-stock', methods=['POST'])
+@login_required
+def api_ajuster_stock(produit_id):
+    """
+    API pour ajuster manuellement le stock d'un produit
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'message': 'Aucune donnée fournie.'
+            }), 400
+            
+        # Récupérer les données de la requête
+        type_ajustement = data.get('type')
+        quantite = float(data.get('quantite', 0))
+        raison = data.get('raison', '').strip()
+        
+        # Validation des données
+        if not type_ajustement or type_ajustement not in ['ajout', 'retrait', 'correction']:
+            return jsonify({
+                'success': False,
+                'message': 'Type d\'ajustement invalide. Doit être \'ajout\', \'retrait\' ou \'correction\''
+            }), 400
+            
+        if quantite <= 0:
+            return jsonify({
+                'success': False,
+                'message': 'La quantité doit être supérieure à zéro.'
+            }), 400
+            
+        if not raison:
+            return jsonify({
+                'success': False,
+                'message': 'Veuillez indiquer une raison pour cet ajustement.'
+            }), 400
+            
+        # Récupérer le produit
+        produit = db.session.get(Produit, produit_id)
+        if not produit:
+            abort(404)
+        
+        # Calculer la nouvelle quantité en fonction du type d'ajustement
+        ancienne_quantite = produit.quantite
+        
+        if type_ajustement == 'ajout':
+            nouvelle_quantite = ancienne_quantite + quantite
+        elif type_ajustement == 'retrait':
+            nouvelle_quantite = max(0, ancienne_quantite - quantite)  # Ne pas aller en dessous de zéro
+        else:  # correction
+            nouvelle_quantite = quantite
+            
+        # Calculer la différence
+        difference = nouvelle_quantite - ancienne_quantite
+        # Déterminer type mouvement pour affecter stock
+        if difference > 0:
+            mouvement_type = 'entree'
+            quantite_mouvement = float(difference)
+        else:
+            mouvement_type = 'sortie'
+            quantite_mouvement = float(abs(difference))
+
+        mouvement = MouvementStock(
+            produit_id=produit.id,
+            type_mouvement=mouvement_type,
+            quantite=quantite_mouvement,
+            prix_unitaire=produit.prix_achat if hasattr(produit, 'prix_achat') else 0,
+            montant_total=quantite_mouvement * (produit.prix_achat if hasattr(produit, 'prix_achat') else 0),
+            utilisateur_id=current_user.id,
+            commentaire=f"Ajustement manuel: {raison} (Ancien stock: {ancienne_quantite}, Nouveau stock: {nouvelle_quantite})",
+            date_mouvement=datetime.now(timezone.utc),
+            reference=f"AJUST-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+            date_reference=datetime.now(timezone.utc).date()
+        )
+        
+        # Enregistrer le mouvement et mettre à jour la date de mise à jour
+        produit.date_maj = datetime.now(timezone.utc)
+        produit.modifie_par = current_user.id
+        db.session.add(mouvement)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Stock ajusté avec succès.',
+            'nouvelle_quantite': nouvelle_quantite,
+            'ancienne_quantite': ancienne_quantite,
+            'difference': difference
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de l'ajustement du stock: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({
+            'success': False,
+            'message': f"Une erreur est survenue lors de l'ajustement du stock: {str(e)}"
+        }), 500
+
+@stock_bp.route('/api/produits/<int:produit_id>/mouvements')
+@stock_bp.route('/gestion-stock/api/produits/<int:produit_id>/mouvements')
+@login_required
+def api_get_mouvements_produit(produit_id):
+    """
+    API pour récupérer l'historique des mouvements d'un produit
+    Filtre par zone pour magasinier
+    """
+    try:
+        # Vérifier que le produit existe
+        produit = db.session.get(Produit, produit_id)
+        if not produit:
+            abort(404)
+        
+        # Zone-based access control for magasinier
+        if current_user.role.lower() == 'magasinier':
+            if not produit.emplacement or produit.emplacement.zone_id != current_user.zone_id:
+                abort(403, 'Accès refusé: produit d\'une autre zone')
+        
+        # Récupérer les 50 derniers mouvements
+        mouvements = MouvementStock.query.filter_by(
+            produit_id=produit_id
+        ).order_by(
+            MouvementStock.date_mouvement.desc()
+        ).limit(50).all()
+        
+        return jsonify({
+            'success': True,
+            'mouvements': [{
+                'id': m.id,
+                'date': m.date_mouvement.isoformat(),
+                'type': m.type_mouvement,
+                'quantite': float(m.quantite),
+                'prix_unitaire': float(m.prix_unitaire) if m.prix_unitaire else None,
+                'montant_total': float(m.montant_total) if m.montant_total else None,
+                'utilisateur': f"{m.utilisateur.prenom} {m.utilisateur.nom}",
+                'commentaire': m.commentaire,
+                'reference': m.reference
+            } for m in mouvements]
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+@stock_bp.route('/api/produits/<int:produit_id>/historique-stock')
+@stock_bp.route('/gestion-stock/api/produits/<int:produit_id>/historique-stock')
+@login_required
+def api_historique_stock(produit_id):
+    """
+    API pour récupérer l'historique du stock d'un produit sur les 30 derniers jours
+    Filtre par zone pour magasinier
+    """
+    try:
+        # Vérifier que le produit existe
+        produit = db.session.get(Produit, produit_id)
+        if not produit:
+            abort(404)
+        
+        # Zone-based access control for magasinier
+        if current_user.role.lower() == 'magasinier':
+            if not produit.emplacement or produit.emplacement.zone_id != current_user.zone_id:
+                abort(403, 'Accès refusé: produit d\'une autre zone')
+        
+        # Date d'il y a 30 jours
+        date_debut = datetime.now() - timedelta(days=30)
+        
+        # Récupérer les mouvements du produit
+        mouvements = db.session.query(
+            func.date(MouvementStock.date_mouvement).label('date'),
+            func.sum(
+                case_sql([
+                    (MouvementStock.type_mouvement == 'entree', MouvementStock.quantite),
+                ], else_=0)
+            ).label('entrees'),
+            func.sum(
+                case_sql([
+                    (MouvementStock.type_mouvement == 'sortie', MouvementStock.quantite),
+                ], else_=0)
+            ).label('sorties')
+        ).filter(
+            MouvementStock.produit_id == produit_id,
+            MouvementStock.date_mouvement >= date_debut
+        ).group_by(
+            func.date(MouvementStock.date_mouvement)
+        ).order_by(
+            func.date(MouvementStock.date_mouvement)
+        ).all()
+        
+        # Créer un dictionnaire des mouvements par date
+        mouvements_par_date = {}
+        for date_mvt, entrees, sorties in mouvements:
+            date_str = date_mvt.strftime('%Y-%m-%d')
+            mouvements_par_date[date_str] = {
+                'entrees': float(entrees or 0),
+                'sorties': float(sorties or 0)
+            }
+        
+        # Générer la série de dates complète
+        dates = [(date_debut + timedelta(days=i)).strftime('%Y-%m-%d') 
+                for i in range(31)]  # 30 jours + aujourd'hui
+        
+        # Calculer le stock pour chaque jour
+        stock_initial = db.session.query(
+            func.sum(
+                case_sql([
+                    (MouvementStock.type_mouvement == 'entree', MouvementStock.quantite),
+                    (MouvementStock.type_mouvement == 'sortie', -MouvementStock.quantite)
+                ], else_=0)
+            )
+        ).filter(
+            MouvementStock.produit_id == produit_id,
+            MouvementStock.date_mouvement < date_debut
+        ).scalar() or 0
+        
+        stock_courant = float(stock_initial)
+        donnees_stock = []
+        
+        for date_str in dates:
+            # Ajouter les mouvements de la journée
+            mouvements_jour = mouvements_par_date.get(date_str, {'entrees': 0, 'sorties': 0})
+            stock_courant += mouvements_jour['entrees'] - mouvements_jour['sorties']
+            
+            donnees_stock.append({
+                'date': date_str,
+                'stock': stock_courant
+            })
+        
+        return jsonify({
+            'success': True,
+            'labels': [d['date'] for d in donnees_stock],
+            'data': [d['stock'] for d in donnees_stock]
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': str(e)
         }), 500
 
 
-@app.route('/validate_interventions')
+
+# ---------------------- New inventory helper endpoints ----------------------
+@stock_bp.route('/api/produits/by-barcode/<string:code_barre>')
 @login_required
-def validate_interventions():
-    if current_user.role not in ['chef_pur', 'chef_pilote', 'chef_zone']:
-        flash('Accès non autorisé.', 'error')
-        return redirect(url_for('dashboard'))
-
-    page = request.args.get('page', 1, type=int)
-    per_page = min(request.args.get('per_page', 25, type=int),
-                   100)  # Limite à 100
-
-    # Filtrer les interventions selon le rôle de l'utilisateur
-    query = Intervention.query.filter_by(statut='termine')
-
-    if current_user.role == 'chef_pilote' and current_user.service:
-        # Filtrer par service via la demande d'intervention
-        query = query.join(DemandeIntervention).filter_by(
-            service=current_user.service)
-    elif current_user.role == 'chef_zone' and current_user.zone:
-        # Filtrer par zone via le technicien
-        query = query.join(User,
-                           Intervention.technicien_id == User.id).filter_by(
-                               zone=current_user.zone)
-
-    interventions = query.order_by(Intervention.date_fin.desc()).paginate(
-        page=page, per_page=per_page, error_out=False)
-
-    return render_template('validate_interventions.html',
-                           interventions=interventions)
-
-
-@app.route('/validate_intervention_action/<int:intervention_id>',
-           methods=['POST'])
-@login_required
-def validate_intervention_action(intervention_id):
-    if current_user.role not in ['chef_pur', 'chef_pilote', 'chef_zone']:
-        return jsonify({'success': False, 'error': 'Accès non autorisé'})
-
-    intervention = db.session.get(Intervention, intervention_id)
-    if not intervention:
-        abort(404)
-
-    # Vérifications d'autorisation selon le rôle
-    if current_user.role == 'chef_pilote' and current_user.service:
-        if not intervention.demande or intervention.demande.service != current_user.service:
-            return jsonify({
-                'success': False,
-                'error': 'Intervention hors de votre service'
-            })
-    elif current_user.role == 'chef_zone' and current_user.zone:
-        if not intervention.technicien_user or intervention.technicien_user.zone != current_user.zone:
-            return jsonify({
-                'success': False,
-                'error': 'Intervention hors de votre zone'
-            })
-
+def api_get_produit_by_barcode(code_barre):
+    """Return product JSON for a given barcode (used by barcode scanner UI)."""
     try:
-        data = request.get_json()
-        action = data.get('action')  # 'validate' ou 'reject'
-        commentaire = data.get('commentaire', '')
+        produit = Produit.query.filter_by(code_barres=code_barre).first()
+        if not produit:
+            return jsonify({'success': False, 'message': 'Produit non trouvé'}), 404
+        return jsonify({'success': True, 'produit': {
+            'id': produit.id,
+            'reference': produit.reference,
+            'nom': produit.nom,
+            'code_barres': produit.code_barres,
+            'quantite': produit.quantite,
+            'emplacement_id': produit.emplacement_id
+        }})
+    except Exception as e:
+        current_app.logger.error(f"Erreur recherche produit par code-barres: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
-        if action == 'validate':
-            intervention.statut = 'valide'
-            intervention.date_validation = datetime.now()
-            intervention.valide_par = current_user.id
-            intervention.commentaire_validation = commentaire
-            # Créer notification de validation pour le technicien
-            create_sms_notification(intervention.technicien_id, intervention.demande_id, 'validation', notify_managers=True)
-            # Log de validation
-            log_activity(
-                user_id=current_user.id,
-                action='validate',
-                module='interventions',
-                entity_id=intervention.id,
-                entity_name=f"Intervention {intervention.demande.nd if intervention.demande else 'N/A'}",
-                details={
-                    'statut': 'valide',
-                    'technicien': f"{intervention.technicien.prenom} {intervention.technicien.nom}" if intervention.technicien else 'N/A',
-                    'demande_nd': intervention.demande.nd if intervention.demande else 'N/A'
-                }
+
+@stock_bp.route('/api/inventaire', methods=['POST'])
+@login_required
+@require_stock_permission('can_adjust_stock')
+def api_inventaire_bulk():
+    """
+    Handle bulk inventory adjustments (JSON payload with list of items).
+    
+    ✅ PHASE 3 TÂCHE 3.2: Vérification de Zone (ÉLEVÉ)
+    Zone filtering:
+    - magasinier: Peut SEULEMENT créer ajustements pour sa zone
+    - chef_zone: Peut SEULEMENT créer ajustements pour sa zone
+    - chef_pur, admin: Peuvent créer pour TOUTES les zones
+
+    Expected payload:
+    {
+        'items': [ {'produit_id': int, 'stock_reel': float, 'emplacement_id': int (optional), 'motif': str (optional)}, ... ],
+        'commentaire': str (optional)
+    }
+    """
+    data = request.get_json() or {}
+    items = data.get('items', [])
+    commentaire = data.get('commentaire', 'Inventaire')
+
+    if not items:
+        return jsonify({'success': False, 'message': 'Aucun item fourni'}), 400
+
+    results = []
+    try:
+        from datetime import datetime
+        from models import EmplacementStock
+        
+        for it in items:
+            pid = it.get('produit_id')
+            if not pid:
+                results.append({'produit_id': None, 'success': False, 'message': 'produit_id manquant'})
+                continue
+            
+            produit = db.session.get(Produit, pid)
+            if not produit:
+                results.append({'produit_id': pid, 'success': False, 'message': 'Produit introuvable'})
+                continue
+            
+            try:
+                stock_reel = float(it.get('stock_reel'))
+            except Exception:
+                results.append({'produit_id': pid, 'success': False, 'message': 'stock_reel invalide'})
+                continue
+
+            emplacement_id = it.get('emplacement_id')
+            
+            # ✅ NOUVEAU: Vérifier zone si magasinier/chef_zone
+            if current_user.role in ['magasinier', 'chef_zone']:
+                if emplacement_id:
+                    # Vérifier que l'emplacement appartient à la zone de l'utilisateur
+                    emplacement = db.session.get(EmplacementStock, emplacement_id)
+                    if not emplacement:
+                        results.append({
+                            'produit_id': pid,
+                            'success': False,
+                            'message': f'Emplacement {emplacement_id} introuvable'
+                        })
+                        continue
+                    
+                    if emplacement.zone_id != current_user.zone_id:
+                        current_app.logger.warning(
+                            f"🔴 Zone access denied: user {current_user.id} (zone={current_user.zone_id}) "
+                            f"tried to adjust inventory for emplacement in zone {emplacement.zone_id}"
+                        )
+                        results.append({
+                            'produit_id': pid,
+                            'success': False,
+                            'message': f'Permission refusée: emplacement dans une autre zone'
+                        })
+                        continue
+                else:
+                    # Si emplacement_id pas fourni, utiliser un emplacement de sa zone
+                    default_emplacement = EmplacementStock.query.filter_by(
+                        zone_id=current_user.zone_id
+                    ).first()
+                    if default_emplacement:
+                        emplacement_id = default_emplacement.id
+                    else:
+                        results.append({
+                            'produit_id': pid,
+                            'success': False,
+                            'message': f'Aucun emplacement disponible dans votre zone'
+                        })
+                        continue
+            
+            motif = it.get('motif') or commentaire
+            stock_calcule = produit.quantite
+            difference = stock_reel - stock_calcule
+
+            if abs(difference) < 1e-9:
+                # Log inventory with zero difference
+                mouvement = MouvementStock(
+                    produit_id=produit.id,
+                    type_mouvement='inventaire',
+                    quantite=0,
+                    quantite_reelle=stock_reel,
+                    ecart=0,
+                    utilisateur_id=current_user.id,
+                    commentaire=f"Inventaire: {motif} (aucun écart)",
+                    date_mouvement=datetime.now(timezone.utc),
+                    emplacement_id=emplacement_id
+                )
+                db.session.add(mouvement)
+                db.session.flush()
+                results.append({'produit_id': pid, 'success': True, 'difference': 0, 'mouvement_id': mouvement.id})
+                continue
+
+            if difference > 0:
+                mouvement_type = 'entree'
+                quantite_mouvement = float(difference)
+            else:
+                mouvement_type = 'sortie'
+                quantite_mouvement = float(abs(difference))
+
+            mouvement = MouvementStock(
+                produit_id=produit.id,
+                type_mouvement=mouvement_type,
+                quantite=quantite_mouvement,
+                quantite_reelle=stock_reel,
+                ecart=difference,
+                utilisateur_id=current_user.id,
+                commentaire=f"Inventaire: {motif} (écart: {difference})",
+                date_mouvement=datetime.now(timezone.utc),
+                emplacement_id=emplacement_id
             )
-        elif action == 'reject':
-            intervention.statut = 'rejete'
-            intervention.date_validation = datetime.now()
-            intervention.valide_par = current_user.id
-            intervention.motif_rejet = commentaire
-            # Remettre la demande en statut à réaffecter
-            if intervention.demande:
-                intervention.demande.statut = 'a_reaffecter'
-            # Créer notification de rejet pour le technicien
-            create_sms_notification(intervention.technicien_id, intervention.demande_id, 'rejet', notify_managers=True)
-            # Log de rejet
-            log_activity(
-                user_id=current_user.id,
-                action='reject',
-                module='interventions',
-                entity_id=intervention.id,
-                entity_name=f"Intervention {intervention.demande.nd if intervention.demande else 'N/A'}",
-                details={
-                    'statut': 'rejete',
-                    'commentaire': commentaire,
-                    'technicien': f"{intervention.technicien.prenom} {intervention.technicien.nom}" if intervention.technicien else 'N/A'
-                }
-            )
-        else:
-            return jsonify({'success': False, 'error': 'Action non reconnue'})
+            db.session.add(mouvement)
+            db.session.flush()
+            results.append({'produit_id': pid, 'success': True, 'difference': difference, 'mouvement_id': mouvement.id})
 
         db.session.commit()
-        return jsonify({
-            'success': True,
-            'message': 'Intervention traitée avec succès'
-        })
-
+        return jsonify({'success': True, 'results': results})
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)})
+        current_app.logger.error(f"Erreur lors de l'enregistrement de l'inventaire: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
-
-# Routes pour la gestion des utilisateurs
-@app.route('/create-user', methods=['GET', 'POST'])
+# Route pour afficher le tableau de bord de gestion des stocks
+@stock_bp.route('/fournisseurs')
 @login_required
-def create_user():
-    if current_user.role != 'chef_pur':
-        flash('Accès non autorisé.', 'error')
-        return redirect(url_for('dashboard'))
+def liste_fournisseurs():
+    fournisseurs = Fournisseur.query.order_by(Fournisseur.raison_sociale).all()
+    return render_template('fournisseurs/liste.html', fournisseurs=fournisseurs)
 
-    form = CreateUserForm()
+@stock_bp.route('/fournisseur/ajouter', methods=['GET', 'POST'])
+@login_required
+@require_stock_role('chef_pur', 'admin', 'gestionnaire_stock')
+def ajouter_fournisseur():
+    """
+    Ajouter un fournisseur
+    Autorisé: chef_pur, admin, gestionnaire_stock
+    """
+    form = FournisseurForm()
     if form.validate_on_submit():
         try:
-            # Debug: Afficher les données du formulaire
-            print(f"DEBUG: Données formulaire - Zone: {form.zone.data}, Type: {type(form.zone.data)}, Rôle: {form.role.data}")
-            print(f"DEBUG: Erreurs de validation: {form.errors}")
-            
-            # Vérifier si l'utilisateur existe déjà
-            existing_user = User.query.filter(
-                (User.username == form.username.data)
-                | (User.email == form.email.data)).first()
-
-            if existing_user:
-                flash(
-                    'Un utilisateur avec ce nom d\'utilisateur ou cette adresse email existe déjà.',
-                    'error')
-                return render_template('create_user.html', form=form)
-
-            # Debug: Afficher toutes les données du formulaire
-            print(f"DEBUG: Form data - {form.data}")
-            print(f"DEBUG: Zone brute: {form.zone.data}, Type: {type(form.zone.data)}")
-            print(f"DEBUG: Zone raw_data: {form.zone.raw_data if hasattr(form.zone, 'raw_data') else 'No raw_data'}")
-            
-            # ========== ZONE ASSIGNMENT FOR ROLE-BASED USERS ==========
-            # Gestion spécifique de l'affectation de zone selon le rôle
-            zone_id = None
-            zone_name = None  # Pour le champ legacy 'zone'
-            if form.role.data in ['chef_zone', 'magasinier', 'technicien']:
-                # Ces rôles nécessitent une zone obligatoire
-                if form.zone.data and form.zone.data != 0 and str(form.zone.data) != '0':
-                    try:
-                        zone_id = int(form.zone.data)
-                        # Vérifier que la zone existe
-                        zone = Zone.query.get(zone_id)
-                        if not zone:
-                            flash(f'La zone sélectionnée (ID: {zone_id}) n\'existe pas.', 'error')
-                            return render_template('create_user.html', form=form)
-                        # Pour les rôles legacy, assigner aussi le nom de la zone
-                        zone_name = zone.nom  # Utiliser le nom de la zone pour le champ legacy
-                        print(f"DEBUG: Zone assignée - ID: {zone_id}, Nom: {zone.nom}, Rôle: {form.role.data}")
-                    except (ValueError, TypeError):
-                        print(f"DEBUG: Erreur conversion zone - Valeur: {form.zone.data}, Type: {type(form.zone.data)}")
-                        flash('Erreur de conversion de la zone. Veuillez réessayer.', 'error')
-                        return render_template('create_user.html', form=form)
-                else:
-                    # La zone est obligatoire pour ces rôles
-                    role_display = {'chef_zone': 'Chef de zone', 'magasinier': 'Magasinier', 'technicien': 'Technicien'}.get(form.role.data, form.role.data)
-                    flash(f'Une zone doit être affectée pour un {role_display}.', 'error')
-                    return render_template('create_user.html', form=form)
-            
-            # Créer le nouvel utilisateur
-            new_user = User(
-                username=form.username.data,
-                email=form.email.data,
-                password_hash=generate_password_hash(form.password.data),
-                role=form.role.data,
-                nom=form.nom.data,
-                prenom=form.prenom.data,
+            fournisseur = Fournisseur(
+                code=form.code.data,
+                raison_sociale=form.raison_sociale.data,
+                contact=form.contact.data,
                 telephone=form.telephone.data,
-                zone=zone_name,  # Champ legacy pour chef_zone et technicien
-                zone_id=zone_id,  # FK vers la table zone
-                commune=form.commune.data if form.commune.data else None,
-                quartier=form.quartier.data if form.quartier.data else None,
-                service=form.service.data if form.service.data else None,
-                technologies=form.technologies.data
-                if form.technologies.data else None)
+                email=form.email.data,
+                adresse=form.adresse.data,
+                actif=form.actif.data,
+                date_creation=datetime.now(timezone.utc),
+                date_maj=datetime.now(timezone.utc)
+            )
+            db.session.add(fournisseur)
+            db.session.commit()
+            flash('Fournisseur ajouté avec succès!', 'success')
+            return redirect(url_for('stock.liste_fournisseurs'))
+        except Exception as e:
+            db.session.rollback()
+            flash('Une erreur est survenue lors de l\'ajout du fournisseur.', 'danger')
+            print(f"Erreur ajout fournisseur: {str(e)}")
+    return render_template('fournisseurs/ajouter.html', form=form, title='Ajouter un fournisseur')
 
-            db.session.add(new_user)
+@stock_bp.route('/fournisseur/modifier/<int:id>', methods=['GET', 'POST'])
+@login_required
+@require_stock_role('chef_pur', 'admin', 'gestionnaire_stock')
+def modifier_fournisseur(id):
+    """
+    Modifier un fournisseur
+    Autorisé: chef_pur, admin, gestionnaire_stock
+    """
+    fournisseur = db.session.get(Fournisseur, id)
+    if not fournisseur:
+        abort(404)
+    form = FournisseurForm(obj=fournisseur)
+    
+    if form.validate_on_submit():
+        try:
+            fournisseur.code = form.code.data
+            fournisseur.raison_sociale = form.raison_sociale.data
+            fournisseur.contact = form.contact.data
+            fournisseur.telephone = form.telephone.data
+            fournisseur.email = form.email.data
+            fournisseur.adresse = form.adresse.data
+            fournisseur.actif = form.actif.data
+            fournisseur.date_maj = datetime.now(timezone.utc)
+            
+            db.session.commit()
+            flash('Fournisseur mis à jour avec succès!', 'success')
+            return redirect(url_for('stock.liste_fournisseurs'))
+        except Exception as e:
+            db.session.rollback()
+            flash('Une erreur est survenue lors de la mise à jour du fournisseur.', 'danger')
+            print(f"Erreur modification fournisseur: {str(e)}")
+    
+    return render_template('fournisseurs/modifier.html', form=form, fournisseur=fournisseur, title='Modifier un fournisseur')
+
+@stock_bp.route('/fournisseur/supprimer/<int:id>', methods=['POST'])
+@login_required
+@require_stock_role('chef_pur', 'admin', 'gestionnaire_stock')
+def supprimer_fournisseur(id):
+    """
+    Supprimer un fournisseur
+    Autorisé: chef_pur, admin, gestionnaire_stock
+    """
+    fournisseur = db.session.get(Fournisseur, id)
+    if not fournisseur:
+        abort(404)
+    try:
+        # Vérifier si le fournisseur est utilisé dans des produits
+        produits_count = Produit.query.filter_by(fournisseur_id=id).count()
+        if produits_count > 0:
+            flash('Impossible de supprimer ce fournisseur car il est associé à des produits.', 'warning')
+        else:
+            db.session.delete(fournisseur)
+            db.session.commit()
+            flash('Fournisseur supprimé avec succès!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('Une erreur est survenue lors de la suppression du fournisseur.', 'danger')
+        print(f"Erreur suppression fournisseur: {str(e)}")
+    
+    return redirect(url_for('stock.liste_fournisseurs'))
+
+@stock_bp.route('/')
+@login_required
+def gestion_stock():
+    """
+    Affiche le tableau de bord de gestion des stocks
+    Route agnostique aux rôles - redirige vers l'interface appropriée
+    
+    - Pour magainiers: redirige vers 'liste_produits_zone' (vue zone uniquement)
+    - Pour autres: redirige vers 'liste_produits' (vue globale, nécessite permission)
+    """
+    # PHASE 2 FIX: Route magainier vers sa vue zone, pas vers globale
+    if current_user.role == 'magasinier':
+        return redirect(url_for('stock.liste_produits_zone'))
+    
+    # Pour les autres rôles: rediriger vers liste globale (avec permission check)
+    # Cette route applique la permission check nécessaire
+    return redirect(url_for('stock.liste_produits'))
+
+@stock_bp.route('/produit/ajouter', methods=['GET', 'POST'])
+@login_required
+@require_stock_permission('can_create_produit')
+def ajouter_produit():
+    """
+    Affiche le formulaire d'ajout d'un nouveau produit
+    Autorisé: chef_pur, gestionnaire_stock, admin
+    """
+    from models import EmplacementStock
+    
+    form = ProduitForm()
+    
+    # Remplir les choix de catégories, fournisseurs et emplacements
+    form.categorie_id.choices = [(c.id, c.nom) for c in Categorie.query.order_by('nom').all()]
+    form.fournisseur_id.choices = [(0, 'Aucun')] + [(f.id, f.raison_sociale) for f in Fournisseur.query.filter_by(actif=True).order_by('raison_sociale').all()]
+    
+    # Remplir les choix d'emplacement
+    emplacements = EmplacementStock.query.filter_by(actif=True).order_by('designation').all()
+    if not emplacements:
+        # Créer des emplacements par défaut si aucun n'existe
+        emplacements = [
+            EmplacementStock(designation='Entrepôt Principal', code='ENTREPOT', actif=True),
+            EmplacementStock(designation='Magasin', code='MAGASIN', actif=True),
+            EmplacementStock(designation='Atelier', code='ATELIER', actif=True)
+        ]
+        db.session.bulk_save_objects(emplacements)
+        db.session.commit()
+    
+    form.emplacement_id.choices = [(0, 'Non spécifié')] + [(e.id, e.designation) for e in emplacements]
+    
+    if form.validate_on_submit():
+        try:
+            # Création du produit avec les données du formulaire
+            produit = Produit(
+                reference=form.reference.data,
+                code_barres=form.code_barres.data if form.code_barres.data else None,
+                nom=form.nom.data,
+                description=form.description.data,
+                categorie_id=form.categorie_id.data,
+                fournisseur_id=form.fournisseur_id.data if form.fournisseur_id.data != 0 else None,
+                emplacement_id=form.emplacement_id.data if form.emplacement_id.data != 0 else None,
+                prix_achat=float(form.prix_achat.data) if form.prix_achat.data else None,
+                prix_vente=float(form.prix_vente.data) if form.prix_vente.data else None,
+                tva=float(form.tva.data) if form.tva.data else 0.0,
+                unite_mesure=form.unite_mesure.data if form.unite_mesure.data else None,
+                stock_min=int(form.stock_min.data) if form.stock_min.data else None,
+                stock_max=int(form.stock_max.data) if form.stock_max.data else None,
+                actif=form.actif.data
+            )
+            
+            db.session.add(produit)
+            db.session.flush()  # Pour obtenir l'ID du produit
+            
+            # Générer un code-barres pour le produit
+            try:
+                barcode_filename = generate_barcode(produit.id, produit.reference)
+                if barcode_filename:
+                    # Mettre à jour le produit avec le nom du fichier du code-barres
+                    produit.code_barres = barcode_filename
+                    db.session.commit()
+            except Exception as e:
+                current_app.logger.error(f"Erreur lors de la génération du code-barres : {str(e)}")
+                db.session.rollback()
+                # Continuer même en cas d'échec de génération du code-barres
+            
+            # Créer un mouvement d'entrée de stock initial si une quantité est spécifiée
+            if form.quantite.data and float(form.quantite.data) > 0:
+                mouvement = MouvementStock(
+                    type_mouvement='entree',
+                    produit_id=produit.id,
+                    quantite=float(form.quantite.data),
+                    prix_unitaire=float(form.prix_achat.data) if form.prix_achat.data else 0.0,
+                    utilisateur_id=current_user.id,
+                    emplacement_id=form.emplacement_id.data if form.emplacement_id.data != 0 else None,
+                    commentaire="Stock initial",
+                    date_mouvement=datetime.now(timezone.utc)
+                )
+                db.session.add(mouvement)
+            
+            db.session.commit()
+            flash('Produit ajouté avec succès!', 'success')
+            return redirect(url_for('stock.liste_produits'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erreur lors de l\'ajout du produit : {str(e)}', 'danger')
+            current_app.logger.error(f'Erreur ajout produit: {str(e)}')
+            current_app.logger.error(traceback.format_exc())
+    
+    # Initialisation des valeurs par défaut pour le formulaire
+    if not form.is_submitted():
+        form.prix_achat.data = None
+        form.prix_vente.data = None
+        form.tva.data = 0.0
+        form.unite_mesure.data = ''
+        form.stock_min.data = None
+        form.stock_max.data = None
+        form.actif.data = True
+        
+    return render_template('ajouter_produit.html', form=form, title='Ajouter un produit')
+
+@stock_bp.route('/produit/modifier/<int:id>', methods=['GET', 'POST'])
+@login_required
+@require_stock_permission('can_modify_produit')
+def modifier_produit(id):
+    """
+    Modifie un produit existant
+    Autorisé: chef_pur, admin
+    """
+    from models import EmplacementStock
+    
+    produit = db.session.get(Produit, id)
+    if not produit:
+        abort(404)
+    form = ProduitForm(obj=produit)
+    
+    # Remplir les choix de catégories, fournisseurs et emplacements
+    form.categorie_id.choices = [(c.id, c.nom) for c in Categorie.query.order_by('nom').all()]
+    form.fournisseur_id.choices = [(0, 'Aucun')] + [(f.id, f.raison_sociale) for f in Fournisseur.query.filter_by(actif=True).order_by('raison_sociale').all()]
+    
+    # Remplir les choix d'emplacement
+    emplacements = EmplacementStock.query.filter_by(actif=True).order_by('designation').all()
+    form.emplacement_id.choices = [(0, 'Non spécifié')] + [(e.id, e.designation) for e in emplacements]
+    
+    if form.validate_on_submit():
+        try:
+            # Mise à jour du produit avec les données du formulaire
+            produit.reference = form.reference.data
+            produit.code_barres = form.code_barres.data if form.code_barres.data else None
+            produit.nom = form.nom.data
+            produit.description = form.description.data
+            produit.categorie_id = form.categorie_id.data
+            produit.fournisseur_id = form.fournisseur_id.data if form.fournisseur_id.data != 0 else None
+            produit.emplacement_id = form.emplacement_id.data if form.emplacement_id.data != 0 else None
+            produit.prix_achat = float(form.prix_achat.data) if form.prix_achat.data else None
+            produit.prix_vente = float(form.prix_vente.data) if form.prix_vente.data else None
+            produit.tva = float(form.tva.data) if form.tva.data else 0.0
+            produit.unite_mesure = form.unite_mesure.data if form.unite_mesure.data else None
+            produit.stock_min = int(form.stock_min.data) if form.stock_min.data else None
+            produit.stock_max = int(form.stock_max.data) if form.stock_max.data else None
+            produit.actif = form.actif.data
+            produit.date_mise_a_jour = datetime.now(timezone.utc)
+            produit.modifie_par = current_user.id
+            
+            db.session.commit()
+            flash('Produit modifié avec succès!', 'success')
+            return redirect(url_for('stock.liste_produits'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erreur lors de la modification du produit : {str(e)}', 'danger')
+            current_app.logger.error(f'Erreur modification produit: {str(e)}')
+            current_app.logger.error(traceback.format_exc())
+    
+    # Pré-remplir le formulaire avec les données actuelles du produit
+    form.reference.data = produit.reference
+    form.code_barres.data = produit.code_barres
+    form.nom.data = produit.nom
+    form.description.data = produit.description
+    form.categorie_id.data = produit.categorie_id
+    form.fournisseur_id.data = produit.fournisseur_id if produit.fournisseur_id else 0
+    form.emplacement_id.data = produit.emplacement_id if produit.emplacement_id else 0
+    form.prix_achat.data = float(produit.prix_achat) if produit.prix_achat is not None else None
+    form.prix_vente.data = float(produit.prix_vente) if produit.prix_vente is not None else None
+    form.tva.data = float(produit.tva) if produit.tva is not None else 0.0
+    form.unite_mesure.data = produit.unite_mesure
+    form.stock_min.data = int(produit.stock_min) if produit.stock_min is not None else None
+    form.stock_max.data = int(produit.stock_max) if produit.stock_max is not None else None
+    form.actif.data = produit.actif
+    
+    return render_template('ajouter_produit.html', form=form, title='Modifier un produit', produit=produit)
+
+@stock_bp.route('/produits-zone')
+@login_required
+def liste_produits_zone():
+    """
+    Affiche la liste des produits pour la zone du magasinier
+    Route pour magasiniers - Vue zone uniquement
+    """
+    from zone_rbac import filter_produit_by_emplacement_zone
+    
+    # Vérifier que l'utilisateur est magasinier avec une zone assignée
+    if current_user.role != 'magasinier':
+        flash('❌ Accès réservé aux magasiniers', 'danger')
+        return redirect(url_for('dashboard'))
+    
+    if not current_user.zone_id:
+        flash('❌ Vous n\'êtes pas assigné à une zone', 'danger')
+        return redirect(url_for('dashboard'))
+    
+    # Récupérer les paramètres de tri
+    sort = request.args.get('sort', 'id')
+    direction = request.args.get('direction', 'asc')
+    
+    # Construire la requête de base filtrée par zone
+    query = Produit.query.options(
+        db.joinedload(Produit.categorie),
+        db.joinedload(Produit.emplacement),
+        db.joinedload(Produit.mouvements)
+    )
+    
+    # Appliquer le filtre zone
+    query = filter_produit_by_emplacement_zone(query)
+    
+    # Appliquer le tri
+    if hasattr(Produit, sort):
+        column = getattr(Produit, sort)
+        if direction == 'desc':
+            column = column.desc()
+        query = query.order_by(column)
+    
+    # Récupérer tous les produits de la zone
+    produits = query.all()
+    
+    # Forcer le chargement de la propriété quantite pour chaque produit
+    for produit in produits:
+        _ = produit.quantite  # Force le chargement de la propriété quantite
+    
+    # Calculer le nombre de produits par emplacement (zone filtrée)
+    from collections import defaultdict
+    emplacements = defaultdict(int)
+    total_produits = len(produits)
+    
+    # Compter les produits par emplacement
+    for produit in produits:
+        if produit.emplacement:
+            emplacement_nom = produit.emplacement.designation if hasattr(produit.emplacement, 'designation') else 'Non spécifié'
+            emplacements[emplacement_nom] += 1
+    
+    # Convertir le dictionnaire en liste de dictionnaires pour le template
+    emplacements_liste = [{'nom': nom, 'nombre': nombre} for nom, nombre in emplacements.items()]
+    
+    # Debug logging
+    current_app.logger.info(f"🏪 Magasinier {current_user.username} (Zone {current_user.zone_id})")
+    current_app.logger.info(f"   Produits trouvés: {total_produits}")
+    current_app.logger.info(f"   Emplacements: {len(emplacements_liste)}")
+    
+    # Fetch pending transfers for this zone
+    from models import EmplacementStock
+    mouvements_en_attente = MouvementStock.query.filter(
+        MouvementStock.type_mouvement == 'entree',
+        MouvementStock.workflow_state == 'EN_ATTENTE',
+        MouvementStock.applique_au_stock == False
+    ).join(EmplacementStock).filter(EmplacementStock.zone_id == current_user.zone_id).all()
+
+    # Fetch pending technician reservations for this zone
+    reservations_en_attente = db.session.query(ReservationPiece).join(
+        Intervention, ReservationPiece.intervention_id == Intervention.id
+    ).join(
+        User, Intervention.technicien_id == User.id
+    ).filter(
+        User.zone_id == current_user.zone_id,
+        ReservationPiece.statut == ReservationPiece.STATUT_EN_ATTENTE
+    ).all()
+    
+    return render_template('produits_zone_magasinier.html', 
+                         produits=produits,
+                         mouvements_en_attente=mouvements_en_attente,
+                         reservations_en_attente=reservations_en_attente,
+                         sort=sort,
+                         direction=direction,
+                         emplacements=emplacements_liste,
+                         total_produits=total_produits,
+                         title='Produits de ma Zone')
+
+@stock_bp.route('/historique-mouvements-zone')
+@login_required
+def historique_mouvements_zone():
+    """
+    Affiche l'historique des mouvements de stock pour la zone du magasinier
+    PHASE 3 FIX: Page dédiée pour magainiers voyant leur historique stock
+    """
+    # Vérifier que l'utilisateur est magasinier avec une zone assignée
+    if current_user.role != 'magasinier':
+        flash('❌ Accès réservé aux magainiers', 'danger')
+        return redirect(url_for('dashboard'))
+    
+    if not current_user.zone_id:
+        flash('❌ Vous n\'êtes pas assigné à une zone', 'danger')
+        return redirect(url_for('dashboard'))
+    
+    from zone_rbac import filter_mouvement_by_zone
+
+    # Récupérer les mouvements de la zone du magasinier (derniers 30 jours)
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+    
+    mouvements_query = db.session.query(MouvementStock).filter(
+        MouvementStock.date_mouvement >= thirty_days_ago
+    )
+    
+    # Appliquer le filtre zone
+    mouvements = filter_mouvement_by_zone(mouvements_query).all()
+    
+    # Trier par date décroissante
+    mouvements = sorted(mouvements, key=lambda m: m.date_mouvement, reverse=True)
+    
+    # Récupérer les statistiques
+    entrees = sum(m.quantite for m in mouvements if m.type_mouvement == 'entree')
+    sorties = sum(m.quantite for m in mouvements if m.type_mouvement == 'sortie')
+    
+    current_app.logger.info(f"🏪 Historique zone - Magasinier {current_user.username} (Zone {current_user.zone_id})")
+    current_app.logger.info(f"   Mouvements trouvés: {len(mouvements)}")
+    current_app.logger.info(f"   Entrées: {entrees}, Sorties: {sorties}")
+    
+    return render_template('historique_mouvements_zone.html',
+                         mouvements=mouvements,
+                         entrees=entrees,
+                         sorties=sorties,
+                         total_mouvements=len(mouvements),
+                         title='Historique des Mouvements - Zone')
+
+@stock_bp.route('/produits')
+@login_required
+@require_stock_permission('can_view_global_stock')
+def liste_produits():
+    """
+    Affiche la liste des produits
+    REQUIRES: can_view_global_stock permission (chef_pur, gestionnaire_stock, direction, admin)
+    """
+    # Récupérer les paramètres de tri
+    sort = request.args.get('sort', 'id')
+    direction = request.args.get('direction', 'asc')
+    
+    # Construire la requête de base avec chargement des relations nécessaires
+    query = Produit.query.options(
+        db.joinedload(Produit.categorie),
+        db.joinedload(Produit.emplacement),
+        db.joinedload(Produit.mouvements)
+    )
+    
+    # Appliquer le tri
+    if hasattr(Produit, sort):
+        column = getattr(Produit, sort)
+        if direction == 'desc':
+            column = column.desc()
+        query = query.order_by(column)
+    
+    # Désactiver la pagination et récupérer tous les produits
+    produits = query.all()
+    
+    # Forcer le chargement de la propriété quantite pour chaque produit
+    for produit in produits:
+        _ = produit.quantite  # Force le chargement de la propriété quantite
+    
+    # Calculer le nombre de produits par emplacement
+    from collections import defaultdict
+    emplacements = defaultdict(int)
+    total_produits = 0
+    
+    # Compter les produits par emplacement
+    for produit in Produit.query.all():
+        if produit.emplacement:
+            emplacement_nom = produit.emplacement.designation if hasattr(produit.emplacement, 'designation') else 'Non spécifié'
+            emplacements[emplacement_nom] += 1
+            total_produits += 1
+    
+    # Convertir le dictionnaire en liste de dictionnaires pour le template
+    emplacements_liste = [{'nom': nom, 'nombre': nombre} for nom, nombre in emplacements.items()]
+    
+    # Debug: Afficher les données des emplacements dans la console
+    current_app.logger.info("=== DEBUG EMPLACEMENTS ===")
+    current_app.logger.info(f"Nombre d'emplacements: {len(emplacements_liste)}")
+    for emp in emplacements_liste:
+        current_app.logger.info(f"- {emp['nom']}: {emp['nombre']} produits")
+    current_app.logger.info(f"Total produits: {total_produits}")
+    current_app.logger.info("=========================")
+    
+    # Récupérer les zones pour le dispatching (filtrage robuste pour MySQL/MariaDB)
+    toutes_zones = Zone.query.all()
+    zones = [z for z in toutes_zones if getattr(z, 'actif', True)]
+    
+    return render_template('dashboard_gestion_stock.html', 
+                         produits=produits,
+                         sort=sort,
+                         direction=direction,
+                         emplacements=emplacements_liste,
+                         total_produits=total_produits,
+                         zones=zones,
+                         title='Liste des produits')
+
+@stock_bp.route('/produit/supprimer/<int:id>', methods=['POST'])
+@login_required
+@require_stock_role('chef_pur', 'admin')
+def supprimer_produit(id):
+    """
+    Supprime définitivement un produit et ses mouvements de stock associés
+    CRITIQUE: Autorisé SEUL à chef_pur et admin (accès très restreint)
+    """
+    produit = db.session.get(Produit, id)
+    if not produit:
+        abort(404)
+    
+    try:
+        # Supprimer d'abord tous les mouvements de stock liés à ce produit
+        MouvementStock.query.filter_by(produit_id=id).delete()
+        
+        # Ensuite supprimer le produit
+        db.session.delete(produit)
+        db.session.commit()
+        
+        flash('Produit et ses mouvements de stock supprimés avec succès!', 'success')
+            
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erreur lors de la suppression du produit : {str(e)}', 'danger')
+        current_app.logger.error(f'Erreur suppression produit: {str(e)}')
+    
+    return redirect(url_for('stock.liste_produits'))
+
+@stock_bp.route('/produit/entree/<int:produit_id>', methods=['GET', 'POST'])
+@login_required
+@require_stock_permission('can_receive_stock')
+def entree_stock(produit_id):
+    """
+    Gère les entrées en stock pour un produit
+    Autorisé: chef_pur, gestionnaire_stock, magasinier, admin
+    """
+    from models import EmplacementStock
+    
+    produit = db.session.get(Produit, produit_id)
+    if not produit:
+        abort(404)
+    form = EntreeStockForm()
+    
+    # Remplir les choix d'emplacement avant la validation
+    # Filter by zone for magasiniers
+    if current_user.role == 'magasinier':
+        emplacements = EmplacementStock.query.filter_by(
+            zone_id=current_user.zone_id,
+            actif=True
+        ).order_by('designation').all()
+    else:
+        emplacements = EmplacementStock.query.filter_by(actif=True).order_by('designation').all()
+    
+    if not emplacements:
+        # Créer des emplacements par défaut si aucun n'existe
+        emplacements = [
+            EmplacementStock(designation='Entrepôt Principal', code='ENTREPOT', actif=True),
+            EmplacementStock(designation='Magasin', code='MAGASIN', actif=True),
+            EmplacementStock(designation='Atelier', code='ATELIER', actif=True)
+        ]
+        db.session.bulk_save_objects(emplacements)
+        db.session.commit()
+    
+    form.emplacement_id.choices = [(e.id, e.designation) for e in emplacements]
+    
+    if form.validate_on_submit():
+        try:
+            # 🔴 NOUVEAU: SÉCURITÉ MAGASINIER - Vérifier que l'emplacement est dans sa zone
+            emplacement_id = form.emplacement_id.data
+            if current_user.role.lower() == 'magasinier':
+                from zone_rbac import validate_emplacement_zone
+                validate_emplacement_zone(emplacement_id)  # Lève abort(403) si zone différente
+            
+            quantite = form.quantite.data
+            prix_unitaire = form.prix_unitaire.data if form.prix_unitaire.data else None
+            commentaire = form.commentaire.data
+            
+            # Mise à jour du prix d'achat si fourni
+            if prix_unitaire is not None and prix_unitaire > 0:
+                produit.prix_achat = prix_unitaire
+                # Mise à jour du prix de vente avec une marge par défaut de 30%
+                if not produit.prix_vente or prix_unitaire * 1.3 > produit.prix_vente:
+                    produit.prix_vente = round(prix_unitaire * 1.3, 2)
+            
+            # 🔴 PRODUCTION CRITICAL: Initialize workflow BEFORE creating mouvement
+            mouvement = MouvementStock(
+                produit_id=produit.id,
+                type_mouvement='entree',
+                quantite=quantite,
+                prix_unitaire=prix_unitaire if prix_unitaire else produit.prix_achat,
+                utilisateur_id=current_user.id,
+                emplacement_id=form.emplacement_id.data,
+                commentaire=commentaire,
+                date_mouvement=datetime.now(timezone.utc),
+                applique_au_stock=False  # ← CRITICAL: Never auto-apply until approved
+            )
+            
+            # ✅ Enforce workflow state initialization
+            mouvement = validate_and_initialize_mouvement_workflow(mouvement, current_user)
+            
+            db.session.add(mouvement)
+            
+            # Mise à jour de la date de mise à jour
+            produit.date_mise_a_jour = datetime.now(timezone.utc)
+            produit.modifie_par = current_user.id
+            
+            # Log audit entry
+            log_stock_entry(
+                produit_id=produit.id,
+                quantity=quantite,
+                actor_id=current_user.id,
+                supplier=form.fournisseur.data if hasattr(form, 'fournisseur') and form.fournisseur.data else None,
+                invoice_num=form.num_facture.data if hasattr(form, 'num_facture') and form.num_facture.data else None
+            )
+            
             db.session.commit()
             
-            # Post-commit actions (logging and email) should not crash the main flow
-            # since the user is already successfully created in the database.
-            try:
-                # Log de création d'utilisateur
+            flash('Entrée en stock enregistrée avec succès!', 'success')
+            # Redirect to zone view for magasiniers, global view for others
+            if current_user.role == 'magasinier':
+                return redirect(url_for('stock.liste_produits_zone'))
+            else:
+                return redirect(url_for('stock.liste_produits'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erreur lors de l\'enregistrement de l\'entrée en stock : {str(e)}', 'danger')
+            current_app.logger.error(f'Erreur entrée stock: {str(e)}')
+    
+    # Pré-remplir le formulaire avec le prix d'achat actuel si disponible
+    if produit.prix_achat:
+        form.prix_unitaire.data = float(produit.prix_achat)
+    
+    # Remplir la liste déroulante des emplacements
+    from models import EmplacementStock
+    form.emplacement_id.choices = [(e.id, e.designation) for e in EmplacementStock.query.filter_by(actif=True).order_by('designation').all()]
+    
+    return render_template('entree_stock.html', 
+                         produit=produit,
+                         form=form,
+                         title=f'Entrée en stock - {produit.nom}')
+
+@stock_bp.route('/produit/sortie/<int:produit_id>', methods=['GET', 'POST'])
+@login_required
+@require_stock_permission('can_dispatch_stock')
+def sortie_stock(produit_id):
+    """
+    Gère les sorties de stock pour un produit
+    Autorisé: chef_pur, gestionnaire_stock, magasinier, admin
+    """
+    from models import EmplacementStock  # Import ici pour éviter les imports circulaires
+    
+    produit = db.session.get(Produit, produit_id)
+    if not produit:
+        abort(404)
+    form = SortieStockForm()
+    
+    # Remplir les choix d'emplacement avant la validation
+    # Filter by zone for magasiniers
+    if current_user.role == 'magasinier':
+        emplacements = EmplacementStock.query.filter_by(
+            zone_id=current_user.zone_id,
+            actif=True
+        ).order_by('designation').all()
+    else:
+        emplacements = EmplacementStock.query.filter_by(actif=True).order_by('designation').all()
+    
+    if not emplacements:
+        # Créer des emplacements par défaut si aucun n'existe
+        emplacements = [
+            EmplacementStock(designation='Entrepôt Principal', code='ENTREPOT', actif=True),
+            EmplacementStock(designation='Magasin', code='MAGASIN', actif=True),
+            EmplacementStock(designation='Atelier', code='ATELIER', actif=True)
+        ]
+        db.session.bulk_save_objects(emplacements)
+        db.session.commit()
+    
+    form.emplacement_id.choices = [(e.id, e.designation) for e in emplacements]
+    
+    if form.validate_on_submit():
+        # Zone-based access control for magasinier
+        if current_user.role.lower() == 'magasinier':
+            from zone_rbac import validate_emplacement_zone
+            validate_emplacement_zone(form.emplacement_id.data)
+        
+        quantite = form.quantite.data
+        prix_vente = form.prix_vente.data
+        motif = form.motif.data
+        commentaire = form.commentaire.data
+        
+        try:
+            # 🔴 PRODUCTION CRITICAL: Validate stock negative prevention
+            # Calculate available stock for this product (entree - sortie)
+            stock_disponible = db.session.query(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (MouvementStock.type_mouvement == 'entree', MouvementStock.quantite),
+                            (MouvementStock.type_mouvement == 'sortie', -MouvementStock.quantite),
+                            else_=0
+                        )
+                    ), 
+                    0
+                )
+            ).filter(MouvementStock.produit_id == produit_id).scalar()
+            
+            # ✅ BLOCKER CHECK: Prevent negative stock creation
+            if quantite <= 0:
+                flash('❌ ERREUR: Quantité invalide. Doit être > 0', 'danger')
+                return render_template('sortie_stock.html', produit=produit, form=form, 
+                                     title=f'Sortie de stock - {produit.nom}')
+            
+            # ✅ BLOCKER CHECK: Prevent stock from going negative
+            if quantite > stock_disponible:
+                flash(f'❌ ERREUR STOCK: Insufficient stock. Available: {stock_disponible} {produit.unite_mesure}. Requested: {quantite}', 'danger')
+                # Log this attempted violation for audit
+                current_app.logger.warning(
+                    f'SECURITY: User {current_user.id} attempted to create sortie exceeding available stock '
+                    f'(produit_id={produit_id}, available={stock_disponible}, requested={quantite})'
+                )
+                return render_template('sortie_stock.html', produit=produit, form=form, 
+                                     title=f'Sortie de stock - {produit.nom}')
+            else:
+                # Mise à jour du prix de vente si fourni et différent du prix actuel
+                if prix_vente is not None and prix_vente > 0 and prix_vente != produit.prix_vente:
+                    produit.prix_vente = prix_vente
+                
+                # 🔴 PRODUCTION CRITICAL: Enforce workflow on sortie
+                # Construire le commentaire avec le motif
+                commentaire_complet = f"[{motif.upper()}]"
+                if commentaire:
+                    commentaire_complet += f" - {commentaire}"
+                
+                mouvement = MouvementStock(
+                    produit_id=produit.id,
+                    type_mouvement='sortie',
+                    quantite=quantite,
+                    prix_unitaire=prix_vente if prix_vente else produit.prix_vente,
+                    utilisateur_id=current_user.id,
+                    emplacement_id=form.emplacement_id.data,
+                    commentaire=commentaire_complet,
+                    date_mouvement=datetime.now(timezone.utc),
+                    applique_au_stock=False  # ← CRITICAL: Never auto-apply
+                )
+                
+                # ✅ Enforce workflow state initialization
+                mouvement = validate_and_initialize_mouvement_workflow(mouvement, current_user)
+                
+                db.session.add(mouvement)
+                
+                # Mise à jour de la date de mise à jour du produit
+                produit.date_mise_a_jour = datetime.now(timezone.utc)
+                if hasattr(produit, 'modifie_par'):
+                    produit.modifie_par = current_user.id
+                
+                # Log audit removal
+                log_stock_removal(
+                    produit_id=produit.id,
+                    quantity=quantite,
+                    actor_id=current_user.id,
+                    reason=commentaire_complet
+                )
+                
+                db.session.commit()
+                
+                flash(f'✅ Sortie créée - En attente approbation manager', 'warning')
+                # Redirect to zone view for magasiniers, global view for others
+                if current_user.role == 'magasinier':
+                    return redirect(url_for('stock.liste_produits_zone'))
+                else:
+                    return redirect(url_for('stock.liste_produits'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erreur lors de l\'enregistrement de la sortie de stock : {str(e)}', 'danger')
+            current_app.logger.error(f'Erreur sortie stock: {str(e)}')
+    
+    # Pré-remplir le formulaire avec le prix de vente actuel si disponible
+    if produit.prix_vente:
+        form.prix_vente.data = float(produit.prix_vente)
+    
+    # Remplir la liste déroulante des emplacements
+    from models import EmplacementStock
+    form.emplacement_id.choices = [(e.id, e.designation) for e in EmplacementStock.query.filter_by(actif=True).order_by('designation').all()]
+    
+    return render_template('sortie_stock.html', 
+                         produit=produit,
+                         form=form,
+                         title=f'Sortie de stock - {produit.nom}')
+
+
+@stock_bp.route('/produit/ajuster/<int:produit_id>', methods=['POST'])
+@login_required
+def ajuster_stock(produit_id):
+    """
+    Gère l'ajustement manuel du stock pour un produit (inventaire ponctuel)
+    """
+    from flask import jsonify
+    from datetime import datetime
+    
+    produit = db.session.get(Produit, produit_id)
+    if not produit:
+        abort(404)
+    data = request.get_json()
+    
+    if not data or 'stock_reel' not in data or 'motif' not in data:
+        return jsonify({'success': False, 'message': 'Données manquantes'}), 400
+    
+    try:
+        stock_reel = float(data['stock_reel'])
+        motif = data['motif']
+        emplacement_id = data.get('emplacement_id')
+        
+        # JOUR 3: Vérifier zone autorisée pour magasinier
+        if current_user.role in ['magasinier', 'chef_zone']:
+            if emplacement_id:
+                emplacement = db.session.get(EmplacementStock, emplacement_id)
+                if not emplacement or emplacement.zone_id != current_user.zone_id:
+                    return jsonify({'error': 'Permission refusée: emplacement d\'une autre zone'}), 403
+            else:
+                # Utiliser l'emplacement par défaut de la zone
+                emplacement_id = db.session.query(EmplacementStock.id).filter_by(
+                    zone_id=current_user.zone_id
+                ).first()
+                if not emplacement_id:
+                    return jsonify({'error': 'Aucun emplacement disponible dans votre zone'}), 400
+                emplacement_id = emplacement_id[0]
+        
+        # Calculer la différence entre le stock réel et le stock calculé
+        stock_calcule = produit.quantite
+        difference = stock_reel - stock_calcule
+        
+        # Si pas de différence, enregistrer un mouvement d'inventaire avec ecart 0
+        if abs(difference) < 1e-9:
+            mouvement = MouvementStock(
+                produit_id=produit.id,
+                type_mouvement='inventaire',
+                quantite=0,
+                quantite_reelle=stock_reel,
+                ecart=0,
+                utilisateur_id=current_user.id,
+                commentaire=f"Inventaire - {motif} (Aucun écart)",
+                date_mouvement=datetime.now(timezone.utc),
+                emplacement_id=emplacement_id
+            )
+            db.session.add(mouvement)
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'Inventaire enregistré (aucun écart)', 'nouvelle_quantite': stock_reel})
+        
+        # Déterminer le type de mouvement pour appliquer la différence
+        if difference > 0:
+            mouvement_type = 'entree'
+            quantite_mouvement = float(difference)
+        else:
+            mouvement_type = 'sortie'
+            quantite_mouvement = float(abs(difference))
+        
+        # Créer le mouvement d'inventaire (enregistré comme entrée/sortie pour affecter le stock)
+        mouvement = MouvementStock(
+            produit_id=produit.id,
+            type_mouvement=mouvement_type,
+            quantite=quantite_mouvement,
+            quantite_reelle=stock_reel,
+            ecart=difference,
+            utilisateur_id=current_user.id,
+            commentaire=f"Inventaire - {motif} (écart: {difference})",
+            date_mouvement=datetime.now(timezone.utc),
+            emplacement_id=emplacement_id
+        )
+
+        db.session.add(mouvement)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Stock ajusté avec succès',
+            'nouvelle_quantite': stock_reel,
+            'difference': difference
+        })
+        
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Valeur de stock invalide'}), 400
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Erreur ajustement stock: {str(e)}')
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# ============================================================
+# EXPORT ENDPOINTS
+# ============================================================
+
+@stock_bp.route('/api/export/mouvements', methods=['GET'])
+@login_required
+def api_export_mouvements():
+    """
+    Export stock movements as CSV or PDF
+    
+    ✅ PHASE 3 TÂCHE 3.2 : Filtrage Zone appliqué (CRITIQUE)
+    Zone filtering:
+    - magasinier: Exporte SEULEMENT mouvements de sa zone
+    - chef_zone: Exporte SEULEMENT mouvements de sa zone  
+    - chef_pur, admin: Exporte TOUS les mouvements
+    
+    Query Parameters:
+    - format: 'csv' or 'pdf' (default: csv)
+    - date_debut: YYYY-MM-DD
+    - date_fin: YYYY-MM-DD
+    - type_mouvement: entree, sortie, adjustment
+    - produit_id: Filter by product
+    """
+    try:
+        # Get query parameters
+        export_format = request.args.get('format', 'csv').lower()
+        date_debut = request.args.get('date_debut')
+        date_fin = request.args.get('date_fin')
+        type_mouvement = request.args.get('type_mouvement')
+        produit_id = request.args.get('produit_id', type=int)
+        
+        # Validate format
+        if export_format not in ['csv', 'pdf']:
+            return jsonify({'error': 'Invalid format. Use csv or pdf'}), 400
+        
+        # Build base query
+        query = MouvementStock.query
+        
+        # ✅ NOUVEAU: Filtrer par zone pour magasinier/chef_zone
+        from middleware import apply_zone_filter
+        from models import EmplacementStock
+        
+        # Joindre avec EmplacementStock pour accéder à la zone
+        if current_user.role in ['magasinier', 'chef_zone']:
+            query = query.join(
+                EmplacementStock,
+                MouvementStock.emplacement_id == EmplacementStock.id
+            ).filter(EmplacementStock.zone_id == current_user.zone_id)
+            current_app.logger.info(
+                f"✅ Export mouvements filtré par zone_id={current_user.zone_id} "
+                f"pour {current_user.role} {current_user.id}"
+            )
+        
+        # Apply type filter
+        if type_mouvement:
+            query = query.filter(MouvementStock.type_mouvement == type_mouvement)
+        
+        # Apply product filter
+        if produit_id:
+            query = query.filter(MouvementStock.produit_id == produit_id)
+        
+        mouvements = query.order_by(MouvementStock.date_mouvement.desc()).all()
+        
+        # Apply date filters
+        if date_debut or date_fin:
+            mouvements = apply_date_filter(
+                mouvements,
+                'date_mouvement',
+                date_debut,
+                date_fin
+            )
+        
+        # Log export
+        current_app.logger.info(
+            f"Export mouvements: {len(mouvements)} records, "
+            f"user={current_user.id}, format={export_format}, "
+            f"role={current_user.role}"
+        )
+        
+        # Prepare data for export
+        export_data = []
+        for m in mouvements:
+            utilisateur = db.session.get(User, m.utilisateur_id)
+            
+            export_data.append({
+                'ID': m.id,
+                'Date': format_datetime(m.date_mouvement),
+                'Produit': m.produit.designation if m.produit else '-',
+                'Catégorie': m.produit.categorie.nom if m.produit and m.produit.categorie else '-',
+                'Type': m.type_mouvement.upper(),
+                'Quantité': str(m.quantite),
+                'Prix Unitaire': f"{m.prix_unitaire:,.2f}" if m.prix_unitaire else '-',
+                'Total': f"{(m.quantite * m.prix_unitaire):,.2f}" if m.prix_unitaire else '-',
+                'Utilisateur': f"{utilisateur.nom} {utilisateur.prenom}" if utilisateur else '-',
+                'Commentaire': m.commentaire or '-'
+            })
+        
+        # Generate CSV or PDF
+        if export_format == 'csv':
+            headers = [
+                'ID', 'Date', 'Produit', 'Catégorie', 'Type', 'Quantité',
+                'Prix Unitaire', 'Total', 'Utilisateur', 'Commentaire'
+            ]
+            csv_data, filename = generate_csv(export_data, headers)
+            
+            return send_file(
+                BytesIO(csv_data),
+                mimetype='text/csv',
+                as_attachment=True,
+                download_name=filename
+            )
+        
+        else:  # PDF format
+            from reportlab.lib.units import inch
+            
+            # Create PDF report
+            report = PDFReport(
+                'RAPPORT DE MOUVEMENTS DE STOCK',
+                filename=f"mouvements_stock_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                landscape_mode=True
+            )
+            
+            # Add title and metadata
+            report.add_title('RAPPORT DE MOUVEMENTS DE STOCK')
+            
+            metadata = {
+                'Date de rapport': datetime.now().strftime('%d/%m/%Y %H:%M'),
+                'Total mouvements': str(len(export_data))
+            }
+            if date_debut or date_fin:
+                date_range = f"{date_debut or '...'} à {date_fin or '...'}"
+                metadata['Période'] = date_range
+            if type_mouvement:
+                metadata['Type'] = type_mouvement.upper()
+            if produit_id:
+                produit = db.session.get(Produit, produit_id)
+                if produit:
+                    metadata['Produit'] = produit.designation
+            
+            report.add_metadata(metadata)
+            
+            # Add summary statistics
+            report.add_heading('Résumé Statistiques')
+            entrees = sum(1 for d in export_data if d['Type'] == 'ENTREE')
+            sorties = sum(1 for d in export_data if d['Type'] == 'SORTIE')
+            
+            total_entrees = sum(float(d['Total'].replace(',', '').split()[0]) for d in export_data if d['Type'] == 'ENTREE' and d['Total'] != '-') if export_data else 0
+            total_sorties = sum(float(d['Total'].replace(',', '').split()[0]) for d in export_data if d['Type'] == 'SORTIE' and d['Total'] != '-') if export_data else 0
+            
+            stats_text = f"<b>Total Mouvements:</b> {len(export_data)} | <b>Entrées:</b> {entrees} | <b>Sorties:</b> {sorties} | <b>Montant Entrées:</b> {total_entrees:,.2f} DZD | <b>Montant Sorties:</b> {total_sorties:,.2f} DZD"
+            report.add_paragraph(stats_text, 'SmallText')
+            report.add_spacer(0.1)
+            
+            # Add table
+            if export_data:
+                table_data = []
+                for d in export_data:
+                    table_data.append([
+                        str(d['ID']),
+                        d['Date'][:10],
+                        d['Produit'][:20],
+                        d['Type'],
+                        d['Quantité'],
+                        d['Prix Unitaire'],
+                        d['Total'],
+                        d['Utilisateur'][:20]
+                    ])
+                
+                report.add_table(
+                    table_data,
+                    headers=['ID', 'Date', 'Produit', 'Type', 'Qty', 'Prix Unit.', 'Total', 'Utilisateur'],
+                    col_widths=[0.5*inch, 0.9*inch, 1.2*inch, 0.7*inch, 0.6*inch, 0.9*inch, 1*inch, 1.2*inch]
+                )
+            else:
+                report.add_paragraph("Aucune donnée à afficher.", 'Normal')
+            
+            # Build PDF and return
+            pdf_bytes = report.build()
+            
+            return send_file(
+                BytesIO(pdf_bytes),
+                mimetype='application/pdf',
+                as_attachment=True,
+                download_name=report.filename
+            )
+    
+    except Exception as e:
+        current_app.logger.error(f"Error exporting stock movements: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# PAGE D'APPROBATION DES MOUVEMENTS
+# ============================================================================
+
+@stock_bp.route('/approver-mouvements')
+@login_required
+@require_stock_role('chef_pur', 'gestionnaire_stock', 'admin')
+def page_approver_mouvements():
+    """
+    Page HTML pour approuver/rejeter les mouvements en attente
+    Accessible uniquement aux managers/admin
+    """
+    return render_template('approver_mouvements.html', title='Approbation des Mouvements')
+
+
+@stock_bp.route('/inventaire', methods=['GET', 'POST'])
+@login_required
+@require_stock_permission('can_receive_stock')
+def inventaire_physique():
+    """
+    Page HTML pour gérer l'inventaire physique
+    - Upload fichier Excel/CSV
+    - Scanner code-barres
+    - Comparer vs stock système
+    """
+    return render_template('inventaire.html', title='Inventaire Physique')
+
+
+@stock_bp.route('/api/inventaire/compare', methods=['POST'])
+@login_required
+@require_stock_permission('can_receive_stock')
+def api_compare_inventaire():
+    """
+    Compare l'inventaire physique avec le stock système
+    
+    Endpoint: POST /gestion-stock/api/inventaire/compare
+    
+    Payload:
+        {
+            "articles": {
+                "REF-001": {"nom": "Routeur", "quantite_physique": 10},
+                "REF-002": {"nom": "Switch", "quantite_physique": 5},
+                ...
+            }
+        }
+    
+    Réponse:
+        {
+            "comparaison": [
+                {
+                    "reference": "REF-001",
+                    "nom": "Routeur",
+                    "quantite_bd": 10,
+                    "quantite_physique": 10,
+                    "ecart": 0,
+                    "statut": "✅"
+                },
+                ...
+            ],
+            "resume": {
+                "total_articles": 2,
+                "articles_corrects": 1,
+                "articles_differents": 1,
+                "ecart_total": 3
+            }
+        }
+    """
+    try:
+        data = request.get_json() or {}
+        articles_physiques = data.get('articles', {})
+        
+        if not articles_physiques:
+            return jsonify({'error': 'Aucun article à comparer'}), 400
+        
+        comparaison = []
+        stats = {
+            'total_articles': len(articles_physiques),
+            'articles_corrects': 0,
+            'articles_differents': 0,
+            'ecart_total': 0,
+            'montant_ecart': 0
+        }
+        
+        # Comparer chaque article
+        for ref, info_physique in articles_physiques.items():
+            # Chercher le produit par référence
+            produit = Produit.query.filter_by(reference=ref).first()
+            
+            if not produit:
+                # Produit non trouvé
+                comparaison.append({
+                    'reference': ref,
+                    'nom': info_physique.get('nom', 'Produit inconnu'),
+                    'quantite_bd': 0,
+                    'quantite_physique': info_physique.get('quantite_physique', 0),
+                    'ecart': info_physique.get('quantite_physique', 0),
+                    'statut': '❌',  # DANGER: Produit inexistant en BD
+                    'type': 'produit_inexistant'
+                })
+                stats['articles_differents'] += 1
+                ecart = info_physique.get('quantite_physique', 0)
+                stats['ecart_total'] += abs(ecart)
+                continue
+            
+            # Récupérer la quantité en stock
+            quantite_bd = produit.quantite
+            quantite_physique = info_physique.get('quantite_physique', 0)
+            ecart = quantite_physique - quantite_bd
+            
+            # Déterminer le statut
+            if ecart == 0:
+                statut = '✅'
+                stats['articles_corrects'] += 1
+            elif abs(ecart) <= 2:  # Tolérance 2 units
+                statut = '⚠️'
+                stats['articles_differents'] += 1
+            else:
+                statut = '❌'
+                stats['articles_differents'] += 1
+            
+            stats['ecart_total'] += abs(ecart)
+            
+            montant_ecart = (abs(ecart) * produit.prix_achat) if produit.prix_achat else 0
+            stats['montant_ecart'] += montant_ecart
+            
+            comparaison.append({
+                'reference': ref,
+                'nom': produit.nom,
+                'quantite_bd': int(quantite_bd),
+                'quantite_physique': int(quantite_physique),
+                'ecart': int(ecart),
+                'statut': statut,
+                'prix_unitaire': float(produit.prix_achat or 0),
+                'montant_ecart': montant_ecart,
+                'produit_id': produit.id
+            })
+        
+        # Ordonner par écart décroissant
+        comparaison.sort(key=lambda x: abs(x['ecart']), reverse=True)
+        
+        current_app.logger.info(
+            f"Inventaire comparé par {current_user.username}: "
+            f"{len(comparaison)} articles, {stats['articles_differents']} différences"
+        )
+        
+        return jsonify({
+            'comparaison': comparaison,
+            'resume': stats
+        }), 200
+    
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de la comparaison d'inventaire: {str(e)}")
+        return jsonify({'error': f'Erreur: {str(e)}'}), 500
+
+# ============================================================================
+# WORKFLOW VALIDATION ENDPOINTS
+# ============================================================================
+
+@stock_bp.route('/api/mouvements/approuver/<int:mouvement_id>', methods=['POST'])
+@login_required
+@require_stock_role('chef_pur', 'gestionnaire_stock')
+def approuver_mouvement(mouvement_id):
+    """
+    Approuve un mouvement de stock et le rend prêt pour exécution
+    
+    Endpoint: POST /gestion-stock/api/mouvements/approuver/123
+    Payload:
+        {
+            "motif_approbation": "Approuvé après vérification" (optionnel)
+        }
+    
+    Réponse:
+        {
+            "success": true,
+            "message": "Mouvement approuvé avec succès",
+            "mouvement": {...}
+        }
+    """
+    from workflow_stock import WorkflowState
+    from rbac_stock import filter_mouvements_by_zone
+    
+    try:
+        mouvement = db.session.get(MouvementStock, mouvement_id)
+        if not mouvement:
+            return jsonify({'error': 'Mouvement non trouvé'}), 404
+        
+        # JOUR 3: Vérifier zone autorisée pour magasinier
+        if current_user.role.lower() == 'magasinier':
+            # Magasinier ne peut approuver que mouvements de sa zone
+            if not mouvement.emplacement_id:
+                return jsonify({'error': 'Mouvement sans emplacement: impossible à approuver'}), 400
+            
+            emplacement = db.session.get(EmplacementStock, mouvement.emplacement_id)
+            if not emplacement or emplacement.zone_id != current_user.zone_id:
+                return jsonify({'error': 'Permission refusée: mouvement d\'une autre zone'}), 403
+        
+        # Vérifier que l'utilisateur a les droits d'approbation
+        if mouvement.type_mouvement == 'entree' and not has_stock_permission(current_user, 'can_receive_stock'):
+            return jsonify({'error': 'Permission refusée pour approuver une entrée'}), 403
+        
+        if mouvement.type_mouvement == 'sortie' and not has_stock_permission(current_user, 'can_dispatch_stock'):
+            return jsonify({'error': 'Permission refusée pour approuver une sortie'}), 403
+        
+        if mouvement.type_mouvement == 'ajustement' and not has_stock_permission(current_user, 'can_adjust_stock'):
+            return jsonify({'error': 'Permission refusée pour approuver un ajustement'}), 403
+        
+        # Vérifier l'état actuel
+        current_state = mouvement.workflow_state
+        if current_state not in ['EN_ATTENTE', 'EN_ATTENTE_DOCS']:
+            return jsonify({'error': f'Mouvement en état {current_state}, impossible à approuver'}), 400
+        
+        # Mettre à jour le mouvement
+        mouvement.workflow_state = WorkflowState.APPROUVE.value
+        mouvement.date_approbation = datetime.utcnow()
+        mouvement.approuve_par_id = current_user.id
+        
+        # Log de l'approbation
+        current_app.logger.info(
+            f"Mouvement {mouvement_id} approuvé par {current_user.username} "
+            f"({mouvement.type_mouvement} - {mouvement.produit_relation.nom} x{mouvement.quantite})"
+        )
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Mouvement approuvé avec succès',
+            'mouvement_id': mouvement.id,
+            'workflow_state': mouvement.workflow_state,
+            'approuve_par': current_user.username,
+            'date_approbation': mouvement.date_approbation.isoformat() if mouvement.date_approbation else None
+        }), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de l'approbation du mouvement: {str(e)}")
+        return jsonify({'error': f'Erreur: {str(e)}'}), 500
+
+
+@stock_bp.route('/api/mouvements/rejeter/<int:mouvement_id>', methods=['POST'])
+@login_required
+@require_stock_role('chef_pur', 'gestionnaire_stock')
+def rejeter_mouvement(mouvement_id):
+    """
+    Rejette un mouvement de stock (pas d'application au stock)
+    
+    Endpoint: POST /gestion-stock/api/mouvements/rejeter/123
+    Payload:
+        {
+            "motif_rejet": "Stock inexistant" (obligatoire)
+        }
+    
+    Réponse:
+        {
+            "success": true,
+            "message": "Mouvement rejeté",
+            "mouvement": {...}
+        }
+    """
+    from workflow_stock import WorkflowState
+    
+    try:
+        data = request.get_json()
+        motif_rejet = data.get('motif_rejet', '').strip()
+        
+        if not motif_rejet:
+            return jsonify({'error': 'Motif du rejet obligatoire'}), 400
+        
+        mouvement = db.session.get(MouvementStock, mouvement_id)
+        if not mouvement:
+            return jsonify({'error': 'Mouvement non trouvé'}), 404
+        
+        # Zone-based access control for magasinier
+        if current_user.role.lower() == 'magasinier':
+            if not mouvement.emplacement_id:
+                return jsonify({'error': 'Mouvement sans emplacement: impossible à rejeter'}), 400
+            emplacement = db.session.get(EmplacementStock, mouvement.emplacement_id)
+            if not emplacement or emplacement.zone_id != current_user.zone_id:
+                return jsonify({'error': 'Permission refusée: mouvement d\'une autre zone'}), 403
+        
+        # Vérifier l'état actuel
+        current_state = mouvement.workflow_state
+        if current_state not in ['EN_ATTENTE', 'EN_ATTENTE_DOCS', 'APPROUVE']:
+            return jsonify({'error': f'Mouvement en état {current_state}, impossible à rejeter'}), 400
+        
+        # Mettre à jour le mouvement
+        mouvement.workflow_state = WorkflowState.REJETE.value
+        mouvement.motif_rejet = motif_rejet
+        mouvement.approuve_par_id = current_user.id
+        
+        # Log du rejet
+        current_app.logger.info(
+            f"Mouvement {mouvement_id} rejeté par {current_user.username}: {motif_rejet}"
+        )
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Mouvement rejeté',
+            'mouvement_id': mouvement.id,
+            'workflow_state': mouvement.workflow_state,
+            'motif_rejet': motif_rejet
+        }), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors du rejet du mouvement: {str(e)}")
+        return jsonify({'error': f'Erreur: {str(e)}'}), 500
+
+
+@stock_bp.route('/api/mouvements/appliquer-stock/<int:mouvement_id>', methods=['POST'])
+@login_required
+@require_stock_role('chef_pur', 'admin')
+def appliquer_stock_mouvement(mouvement_id):
+    """
+    Applique un mouvement APPROUVÉ au stock
+    
+    ⚠️ CRITIQUE: Ne peut être appelé que si workflow_state = 'APPROUVE'
+    
+    Endpoint: POST /gestion-stock/api/mouvements/appliquer-stock/123
+    
+    Réponse:
+        {
+            "success": true,
+            "message": "Stock appliqué avec succès",
+            "mouvement": {...}
+        }
+    """
+    from workflow_stock import WorkflowState
+    
+    try:
+        mouvement = db.session.get(MouvementStock, mouvement_id)
+        if not mouvement:
+            return jsonify({'error': 'Mouvement non trouvé'}), 404
+        
+        # JOUR 3: Vérifier zone autorisée pour magasinier
+        if current_user.role.lower() == 'magasinier':
+            if not mouvement.emplacement_id:
+                return jsonify({'error': 'Mouvement sans emplacement: impossible à appliquer'}), 400
+            
+            emplacement = db.session.get(EmplacementStock, mouvement.emplacement_id)
+            if not emplacement or emplacement.zone_id != current_user.zone_id:
+                return jsonify({'error': 'Permission refusée: mouvement d\'une autre zone'}), 403
+        
+        # ⚠️ SÉCURITÉ CRITIQUE: Vérifier que le mouvement est APPROUVÉ
+        if mouvement.workflow_state != WorkflowState.APPROUVE.value:
+            return jsonify({
+                'error': f'Mouvement doit être approuvé. État actuel: {mouvement.workflow_state}',
+                'workflow_state': mouvement.workflow_state
+            }), 400
+        
+        # Vérifier que le stock n'a pas déjà été appliqué
+        if mouvement.applique_au_stock:
+            return jsonify({'error': 'Le stock a déjà été appliqué pour ce mouvement'}), 400
+        
+        # Vérifier la disponibilité pour les sorties
+        if mouvement.type_mouvement == 'sortie':
+            stock_disponible = db.session.query(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (MouvementStock.type_mouvement.in_(['entree', 'inventaire', 'retour']), 
+                             MouvementStock.quantite),
+                            (MouvementStock.type_mouvement.in_(['sortie', 'ajustement']), 
+                             -MouvementStock.quantite),
+                            else_=0
+                        )
+                    ), 
+                    0
+                )
+            ).filter(
+                MouvementStock.produit_id == mouvement.produit_id,
+                MouvementStock.applique_au_stock == True
+            ).scalar()
+            
+            if mouvement.quantite > stock_disponible:
+                return jsonify({
+                    'error': f'Stock insuffisant. Disponible: {stock_disponible}, Demandé: {mouvement.quantite}',
+                    'stock_disponible': stock_disponible,
+                    'quantite_demandee': mouvement.quantite
+                }), 400
+        
+        # Appliquer le stock
+        mouvement.applique_au_stock = True
+        mouvement.workflow_state = WorkflowState.EXECUTE.value
+        mouvement.date_execution = datetime.utcnow()
+        
+        # Log de l'application
+        current_app.logger.info(
+            f"Stock appliqué pour mouvement {mouvement_id}: "
+            f"{mouvement.type_mouvement} {mouvement.produit_relation.nom} x{mouvement.quantite} "
+            f"par {current_user.username}"
+        )
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Stock appliqué avec succès',
+            'mouvement_id': mouvement.id,
+            'workflow_state': mouvement.workflow_state,
+            'applique_au_stock': mouvement.applique_au_stock,
+            'date_execution': mouvement.date_execution.isoformat() if mouvement.date_execution else None
+        }), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de l'application du stock: {str(e)}")
+        return jsonify({'error': f'Erreur: {str(e)}'}), 500
+
+
+@stock_bp.route('/api/mouvements/en-attente', methods=['GET'])
+@login_required
+def lister_mouvements_en_attente():
+    """
+    Liste tous les mouvements en attente d'approbation
+    
+    Endpoint: GET /gestion-stock/api/mouvements/en-attente
+    
+    Query params:
+        - type: 'entree', 'sortie', 'ajustement', etc. (optionnel)
+        - limit: 50 (optionnel)
+    
+    Réponse:
+        {
+            "mouvements": [
+                {
+                    "id": 123,
+                    "type_mouvement": "entree",
+                    "produit": "Routeur TP-Link",
+                    "quantite": 50,
+                    "workflow_state": "EN_ATTENTE",
+                    "date_mouvement": "2026-01-26T10:30:00",
+                    "cree_par": "john.doe",
+                    "montant": 2500.00
+                },
+                ...
+            ],
+            "total": 3,
+            "stats": {
+                "entree": 1,
+                "sortie": 2,
+                "en_attente": 3,
+                "montant_total": 5500.00
+            }
+        }
+    """
+    from workflow_stock import WorkflowState
+    from rbac_stock import filter_mouvements_by_zone
+    
+    try:
+        # Récupérer les paramètres de filtre
+        type_filtre = request.args.get('type', '').strip()
+        limit = int(request.args.get('limit', 50))
+        
+        # Query de base: mouvements non approuvés
+        query = MouvementStock.query.filter(
+            MouvementStock.workflow_state.in_([
+                WorkflowState.EN_ATTENTE.value,
+                WorkflowState.EN_ATTENTE_DOCS.value
+            ]),
+            MouvementStock.applique_au_stock == False
+        )
+        
+        # JOUR 3: Filtrer par zone de l'utilisateur
+        query = filter_mouvements_by_zone(query, current_user)
+        
+        # Filtrer par type si spécifié
+        if type_filtre and type_filtre in ['entree', 'sortie', 'ajustement', 'inventaire', 'retour']:
+            query = query.filter_by(type_mouvement=type_filtre)
+        
+        # Ordonner par date (plus récents d'abord)
+        mouvements = query.order_by(desc(MouvementStock.date_mouvement)).limit(limit).all()
+        
+        # Construire la réponse
+        mouvements_data = []
+        stats = {'entree': 0, 'sortie': 0, 'ajustement': 0, 'inventaire': 0, 'retour': 0, 
+                 'en_attente': len(mouvements), 'montant_total': 0}
+        
+        for m in mouvements:
+            stats[m.type_mouvement] += 1
+            montant = (m.quantite * m.prix_unitaire) if m.prix_unitaire else 0
+            stats['montant_total'] += montant
+            
+            mouvements_data.append({
+                'id': m.id,
+                'type_mouvement': m.type_mouvement,
+                'produit': m.produit_relation.nom,
+                'quantite': m.quantite,
+                'prix_unitaire': m.prix_unitaire,
+                'montant': montant,
+                'workflow_state': m.workflow_state,
+                'date_mouvement': m.date_mouvement.isoformat(),
+                'cree_par': m.utilisateur.username,
+                'reference': m.reference,
+                'commentaire': m.commentaire
+            })
+        
+        return jsonify({
+            'mouvements': mouvements_data,
+            'total': len(mouvements),
+            'stats': stats
+        }), 200
+    
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de la récupération des mouvements: {str(e)}")
+        return jsonify({'error': f'Erreur: {str(e)}'}), 500
+
+
+@stock_bp.route('/api/mouvements/entrees-mois')
+@login_required
+def api_entrees_mois():
+    """
+    API pour récupérer les entrées du mois courant
+    """
+    try:
+        from datetime import datetime, date
+        
+        # Récupérer le mois courant
+        today = date.today()
+        debut_mois = date(today.year, today.month, 1)
+        
+        # Déterminer le dernier jour du mois
+        if today.month == 12:
+            fin_mois = date(today.year + 1, 1, 1)
+        else:
+            fin_mois = date(today.year, today.month + 1, 1)
+        
+        # Query les mouvements d'entrée du mois courant
+        query = db.select(MouvementStock).filter(
+            MouvementStock.type_mouvement == 'entree',
+            MouvementStock.date_mouvement >= datetime.combine(debut_mois, datetime.min.time()),
+            MouvementStock.date_mouvement < datetime.combine(fin_mois, datetime.min.time())
+        )
+        
+        # JOUR 3: Filtrer par zone pour magasinier/chef_zone
+        if current_user.role in ['magasinier', 'chef_zone']:
+            query = query.join(
+                EmplacementStock,
+                MouvementStock.emplacement_id == EmplacementStock.id
+            ).filter(
+                EmplacementStock.zone_id == current_user.zone_id
+            )
+        
+        entrees = db.session.execute(
+            query.order_by(MouvementStock.date_mouvement.desc())
+        ).scalars().all()
+        
+        entrees_data = []
+        for e in entrees:
+            entrees_data.append({
+                'id': e.id,
+                'date': e.date_mouvement.strftime('%Y-%m-%d'),
+                'date_mouvement': e.date_mouvement.strftime('%Y-%m-%d %H:%M'),
+                'nom_produit': e.produit_relation.nom if e.produit_relation else 'N/A',
+                'reference_produit': e.produit_relation.reference if e.produit_relation else 'N/A',
+                'quantite': float(e.quantite) if e.quantite is not None else 0,
+                'prix_unitaire': float(e.prix_unitaire) if e.prix_unitaire is not None else 0,
+                'fournisseur': e.fournisseur.raison_sociale if e.fournisseur else 'N/A',
+                'utilisateur': e.utilisateur.username if e.utilisateur else 'N/A',
+                'reference': e.reference,
+                'commentaire': e.commentaire
+            })
+        
+        return jsonify({
+            'success': True,
+            'data': entrees_data,
+            'total': len(entrees_data)
+        }), 200
+    
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de la récupération des entrées du mois: {str(e)}")
+        return jsonify({'error': f'Erreur: {str(e)}'}), 500
+
+
+@stock_bp.route('/api/mouvements/sorties-mois')
+@login_required
+def api_sorties_mois():
+    """
+    API pour récupérer les sorties du mois courant
+    """
+    try:
+        from datetime import datetime, date
+        
+        # Récupérer le mois courant
+        today = date.today()
+        debut_mois = date(today.year, today.month, 1)
+        
+        # Déterminer le dernier jour du mois
+        if today.month == 12:
+            fin_mois = date(today.year + 1, 1, 1)
+        else:
+            fin_mois = date(today.year, today.month + 1, 1)
+        
+        # Query les mouvements de sortie du mois courant
+        query = db.select(MouvementStock).filter(
+            MouvementStock.type_mouvement == 'sortie',
+            MouvementStock.date_mouvement >= datetime.combine(debut_mois, datetime.min.time()),
+            MouvementStock.date_mouvement < datetime.combine(fin_mois, datetime.min.time())
+        )
+        
+        # JOUR 3: Filtrer par zone pour magasinier/chef_zone
+        if current_user.role in ['magasinier', 'chef_zone']:
+            query = query.join(
+                EmplacementStock,
+                MouvementStock.emplacement_id == EmplacementStock.id
+            ).filter(
+                EmplacementStock.zone_id == current_user.zone_id
+            )
+        
+        sorties = db.session.execute(
+            query.order_by(MouvementStock.date_mouvement.desc())
+        ).scalars().all()
+        
+        sorties_data = []
+        for s in sorties:
+            sorties_data.append({
+                'id': s.id,
+                'date': s.date_mouvement.strftime('%Y-%m-%d'),
+                'date_mouvement': s.date_mouvement.strftime('%Y-%m-%d %H:%M'),
+                'nom_produit': s.produit_relation.nom if s.produit_relation else 'N/A',
+                'reference_produit': s.produit_relation.reference if s.produit_relation else 'N/A',
+                'quantite': float(s.quantite) if s.quantite is not None else 0,
+                'prix_unitaire': float(s.prix_unitaire) if s.prix_unitaire is not None else 0,
+                'motif': s.commentaire if s.commentaire else 'N/A',
+                'utilisateur': s.utilisateur.username if s.utilisateur else 'N/A',
+                'reference': s.reference,
+                'commentaire': s.commentaire
+            })
+        
+        return jsonify({
+            'success': True,
+            'data': sorties_data,
+            'total': len(sorties_data)
+        }), 200
+    
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de la récupération des sorties du mois: {str(e)}")
+        return jsonify({'error': f'Erreur: {str(e)}'}), 500
+
+
+# ============================================================================
+# 📦 SUPPLIER BULK IMPORT ENDPOINTS
+# ============================================================================
+
+@stock_bp.route('/import-supplier', methods=['POST'])
+@login_required
+@require_stock_permission('can_dispatch_stock')
+def api_import_supplier():
+    """
+    Bulk import stock from external suppliers via CSV
+    
+    Supports:
+    - Generic CSV format (supplier-agnostic)
+    - 5000+ rows efficiently
+    - Partial success handling
+    - Audit logging on all imports
+    - Workflow enforcement (imports require approval)
+    
+    CSV Format:
+    - product_reference: Product reference (required, must exist)
+    - quantity: Number of units (required, > 0)
+    - serial_number: Serial or batch number (optional)
+    - emplacement_code: Storage location (optional, default=ENTREPOT)
+    - unit_price: Unit cost (optional)
+    - note: Import comment (optional)
+    
+    Request:
+    - POST with multipart/form-data
+    - Field 'file': CSV file upload
+    
+    Response:
+    {
+        'success': bool,
+        'phase': 'parsing|validation|import|complete|unexpected_error',
+        'summary': {
+            'total_requested': int,
+            'successfully_inserted': int,
+            'failed_rows': int,
+            'total_quantity_imported': int
+        },
+        'validation': {
+            'total_rows': int,
+            'valid_rows': int,
+            'error_rows': int,
+            'warning_rows': int,
+            'errors_by_type': {error_type: count}
+        },
+        'errors': [error_messages],
+        'processing_time_seconds': float
+    }
+    """
+    try:
+        # Validate request
+        if 'file' not in request.files:
+            return jsonify({
+                'success': False,
+                'error': 'No file provided',
+                'phase': 'validation'
+            }), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({
+                'success': False,
+                'error': 'Empty filename',
+                'phase': 'validation'
+            }), 400
+        
+        if not file.filename.endswith('.csv'):
+            return jsonify({
+                'success': False,
+                'error': 'File must be CSV format (.csv)',
+                'phase': 'validation'
+            }), 400
+        
+        # Read file content
+        try:
+            file_content = file.read()
+            if isinstance(file_content, bytes):
+                file_content = file_content.decode('utf-8')
+        except UnicodeDecodeError:
+            return jsonify({
+                'success': False,
+                'error': 'CSV file must be UTF-8 encoded',
+                'phase': 'parsing'
+            }), 400
+        
+        current_app.logger.info(
+            f'📦 Starting supplier import: user={current_user.id}, '
+            f'file={file.filename}, size={len(file_content)} bytes'
+        )
+        
+        # Process import
+        result = process_supplier_import(file_content, current_user)
+        
+        # Determine HTTP status
+        status_code = 200 if result['success'] else 400 if result['phase'] in ['parsing', 'validation'] else 500
+        
+        # Log result
+        if result['success']:
+            current_app.logger.info(
+                f'✅ Import successful: {result["summary"]["successfully_inserted"]} '
+                f'rows inserted, {result["summary"]["total_quantity_imported"]} units, '
+                f'{result["processing_time_seconds"]:.2f}s'
+            )
+        else:
+            current_app.logger.warning(
+                f'⚠️ Import failed at phase "{result["phase"]}: {result["errors"]}'
+            )
+        
+        return jsonify(result), status_code
+    
+    except Exception as e:
+        error_msg = f'Unexpected error in import endpoint: {str(e)}'
+        current_app.logger.error(error_msg)
+        return jsonify({
+            'success': False,
+            'error': error_msg,
+            'phase': 'unexpected_error'
+        }), 500
+
+
+@stock_bp.route('/import-sonatel', methods=['POST'])
+@login_required
+@require_stock_permission('can_dispatch_stock')
+def api_import_sonatel():
+    """
+    Import stock from Sonatel Excel via Excel parsing logic.
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'Aucun fichier fourni'}), 400
+        
+        file = request.files['file']
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            return jsonify({'success': False, 'error': 'Format invalide (Excel attendu)'}), 400
+            
+        file_content = file.read()
+        result = process_sonatel_import(file_content, current_user)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in Sonatel import: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@stock_bp.route('/stock/transfert/initier', methods=['POST'])
+@login_required
+@require_stock_permission('can_dispatch_stock')
+def initier_transfert():
+    """
+    Initiate a transfer from Dakar to another zone.
+    """
+    try:
+        data = request.get_json()
+        produit_id = data.get('produit_id')
+        quantite = float(data.get('quantite', 0))
+        target_zone_id = data.get('target_zone_id')
+        
+        if quantite <= 0:
+            return jsonify({'success': False, 'error': 'Quantité invalide'}), 400
+            
+        # 1. Source: Dakar Central
+        source_warehouse = db.session.query(EmplacementStock).filter_by(code='ENTREPOT').first()
+        if not source_warehouse:
+            return jsonify({'success': False, 'error': 'Entrepôt central non trouvé'}), 500
+            
+        # 2. Check stock in Dakar
+        valid, current_stock, msg = prevent_negative_stock_on_creation(produit_id, quantite)
+        if not valid:
+            return jsonify({'success': False, 'error': msg}), 400
+            
+        # 3. Create Sortie from Dakar (EN_TRANSIT)
+        mouvement_sortie = MouvementStock(
+            type_mouvement='sortie',
+            reference=f'TRANS-{datetime.now().strftime("%y%m%d%H%M")}',
+            produit_id=produit_id,
+            quantite=quantite,
+            utilisateur_id=current_user.id,
+            emplacement_id=source_warehouse.id,
+            commentaire=f"Transfert vers zone ID {target_zone_id}",
+            workflow_state='APPROUVE', # GS can approve their own transfers if they have roles
+            applique_au_stock=True # Deduct immediately from Dakar
+        )
+        db.session.add(mouvement_sortie)
+        db.session.flush()
+        
+        # 4. Find target warehouse for the zone
+        # a. Try by direct zone_id link
+        target_warehouse = db.session.query(EmplacementStock).filter_by(zone_id=target_zone_id, actif=True).first()
+        
+        if not target_warehouse:
+            # Get zone name for fallback lookup
+            target_zone = db.session.query(Zone).get(target_zone_id)
+            if target_zone:
+                # b. Try by designation matching zone name (e.g. "Zone 2 - Mbour" contains "Mbour")
+                target_warehouse = db.session.query(EmplacementStock).filter(
+                    EmplacementStock.designation.ilike(f"%{target_zone.nom}%"),
+                    EmplacementStock.actif == True
+                ).first()
+                
+                if not target_warehouse:
+                    # c. Last resort: Try by code (ZONE1, ZONE2...)
+                    zone_code = f"ZONE{target_zone_id}"
+                    target_warehouse = db.session.query(EmplacementStock).filter_by(code=zone_code, actif=True).first()
+            
+            # AUTO-LINK: Si on trouve l'emplacement par nom/code mais qu'il n'est pas lié à la zone, on le lie
+            if target_warehouse and target_warehouse.zone_id is None:
+                current_app.logger.info(f"🔗 Auto-linking warehouse {target_warehouse.code} to zone ID {target_zone_id}")
+                target_warehouse.zone_id = target_zone_id
+                db.session.flush()
+            
+        # 5. Create Pending Entree for Target
+        mouvement_entree = MouvementStock(
+            type_mouvement='entree',
+            reference=mouvement_sortie.reference,
+            produit_id=produit_id,
+            quantite=quantite,
+            utilisateur_id=current_user.id,
+            emplacement_id=target_warehouse.id if target_warehouse else None,
+            commentaire=f"Réception transfert de Dakar (Ref: {mouvement_sortie.reference})",
+            workflow_state='EN_ATTENTE', # Requires magasinier action
+            applique_au_stock=False
+        )
+        db.session.add(mouvement_entree)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Transfert initié'})
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error initiating transfer: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@stock_bp.route('/stock/transfert/recevoir/<int:mouvement_id>', methods=['POST'])
+@login_required
+@require_stock_permission('can_receive_stock')
+def recevoir_transfert(mouvement_id):
+    """
+    Magasinier confirms reception of a transfer.
+    Supports partial reception, rejection, and comments.
+    Unreceived quantities are returned to source (Dakar Central).
+    """
+    from workflow_stock import WorkflowState
+    try:
+        data = request.get_json() or {}
+        action = data.get('action', 'confirmer')  # 'confirmer' or 'rejeter'
+        quantite_recue = float(data.get('quantite_recue', 0))
+        commentaire_magasinier = data.get('commentaire', '').strip()
+
+        mouvement = db.session.get(MouvementStock, mouvement_id)
+        if not mouvement or mouvement.type_mouvement != 'entree':
+            return jsonify({'success': False, 'error': 'Mouvement introuvable'}), 404
+            
+        # Security: must be in same zone
+        emplacement = db.session.get(EmplacementStock, mouvement.emplacement_id)
+        if current_user.role == 'magasinier' and (not emplacement or emplacement.zone_id != current_user.zone_id):
+            return jsonify({'success': False, 'error': 'Accès refusé: zone incorrecte'}), 403
+            
+        if mouvement.workflow_state != 'EN_ATTENTE':
+            return jsonify({'success': False, 'error': 'Déjà traité'}), 400
+
+        quantite_attendue = mouvement.quantite
+        
+        # Source warehouse for return (Dakar Central)
+        dakar_warehouse = db.session.query(EmplacementStock).filter_by(code='ENTREPOT').first()
+
+        if action == 'rejeter':
+            # 1. Reject the entry movement
+            mouvement.workflow_state = WorkflowState.REJETE.value
+            mouvement.motif_rejet = commentaire_magasinier or "Transfert rejeté par le magasinier"
+            mouvement.commentaire = f"{mouvement.commentaire}\n[REJET] : {commentaire_magasinier}"
+            
+            # 2. Return FULL quantity to Dakar Central
+            if dakar_warehouse:
+                retour = MouvementStock(
+                    type_mouvement='entree', # Entree back to Dakar
+                    reference=f"RET-{mouvement.reference}",
+                    produit_id=mouvement.produit_id,
+                    quantite=quantite_attendue,
+                    utilisateur_id=current_user.id,
+                    emplacement_id=dakar_warehouse.id,
+                    commentaire=f"RETOUR (Rejet) : {mouvement.reference} - {commentaire_magasinier}",
+                    workflow_state=WorkflowState.EXECUTE.value,
+                    applique_au_stock=True
+                )
+                db.session.add(retour)
+                
+            msg = "Transfert rejeté et stock retourné au central"
+            
+        else: # action == 'confirmer'
+            if quantite_recue > quantite_attendue:
+                return jsonify({'success': False, 'error': 'La quantité reçue ne peut pas dépasser la quantité attendue'}), 400
+            
+            # 1. Update movement with received quantity
+            diff = quantite_attendue - quantite_recue
+            mouvement.quantite = quantite_recue
+            mouvement.workflow_state = WorkflowState.EXECUTE.value
+            mouvement.applique_au_stock = True
+            mouvement.date_execution = datetime.now(timezone.utc)
+            mouvement.approuve_par_id = current_user.id
+            mouvement.commentaire = f"{mouvement.commentaire}\n[RÉCEIPTION] : Reçu {quantite_recue}/{quantite_attendue}. {commentaire_magasinier}"
+            
+            # 2. If partial, return the difference to Dakar Central
+            if diff > 0 and dakar_warehouse:
+                retour = MouvementStock(
+                    type_mouvement='entree', # Entree back to Dakar
+                    reference=f"RET-{mouvement.reference}",
+                    produit_id=mouvement.produit_id,
+                    quantite=diff,
+                    utilisateur_id=current_user.id,
+                    emplacement_id=dakar_warehouse.id,
+                    commentaire=f"RETOUR (Partiel) : {diff} unités retournées de la réf {mouvement.reference} - {commentaire_magasinier}",
+                    workflow_state=WorkflowState.EXECUTE.value,
+                    applique_au_stock=True
+                )
+                db.session.add(retour)
+                msg = f"Réception de {quantite_recue} confirmée. {diff} unités retournées au central."
+            else:
+                msg = "Réception confirmée avec succès."
+
+        db.session.commit()
+        return jsonify({'success': True, 'message': msg})
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error receiving transfer: {e}")
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@stock_bp.route('/import-template', methods=['GET'])
+@login_required
+def get_import_template():
+    """
+    Download supplier import CSV template
+    
+    Returns CSV file with example headers and sample data
+    """
+    try:
+        template_content = """product_reference,quantity,serial_number,emplacement_code,unit_price,note
+ONT-GPON-V5,10,SN-2024-001-010,ENTREPOT,45000,Initial stock
+OLT-FIBER-X2,5,,MAGASIN,250000,
+SPLITTER-1X8,20,BATCH-2024-001,ENTREPOT,5000,Batch import
+MODEM-DOCSIS,100,,ENTREPOT,35000,Bulk order
+"""
+        
+        csv_bytes = template_content.encode('utf-8-sig')
+        filename = f'supplier_import_template_{datetime.now().strftime("%Y%m%d")}.csv'
+        
+        return send_file(
+            BytesIO(csv_bytes),
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=filename
+        )
+    
+    except Exception as e:
+        current_app.logger.error(f'Error generating template: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+
+@stock_bp.route('/import/doc', methods=['GET'])
+@login_required
+def get_import_documentation():
+    """
+    Get supplier import documentation
+    
+    Returns HTML documentation with format details and examples
+    """
+    try:
+        documentation = """
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5>📦 Supplier Bulk Import Documentation</h5>
+            </div>
+            <div class="card-body">
+                <h6>CSV Format</h6>
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Column</th>
+                            <th>Required</th>
+                            <th>Type</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>product_reference</code></td>
+                            <td>✓ Yes</td>
+                            <td>String</td>
+                            <td>Product reference code (must exist in system)</td>
+                        </tr>
+                        <tr>
+                            <td><code>quantity</code></td>
+                            <td>✓ Yes</td>
+                            <td>Integer</td>
+                            <td>Number of units to import (must be > 0)</td>
+                        </tr>
+                        <tr>
+                            <td><code>serial_number</code></td>
+                            <td>Optional</td>
+                            <td>String</td>
+                            <td>Serial or batch identifier (unique or base for range)</td>
+                        </tr>
+                        <tr>
+                            <td><code>emplacement_code</code></td>
+                            <td>Optional</td>
+                            <td>String</td>
+                            <td>Storage location code (default: ENTREPOT)</td>
+                        </tr>
+                        <tr>
+                            <td><code>unit_price</code></td>
+                            <td>Optional</td>
+                            <td>Decimal</td>
+                            <td>Unit cost for inventory tracking</td>
+                        </tr>
+                        <tr>
+                            <td><code>note</code></td>
+                            <td>Optional</td>
+                            <td>String</td>
+                            <td>Import comment or note</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h6 class="mt-3">Features</h6>
+                <ul>
+                    <li>✅ Generic CSV format (supplier-agnostic)</li>
+                    <li>✅ Supports 5000+ rows efficiently</li>
+                    <li>✅ Row-level validation with detailed error reporting</li>
+                    <li>✅ Partial success handling (failed rows don't block valid rows)</li>
+                    <li>✅ Duplicate serial number prevention</li>
+                    <li>✅ Automatic serial number generation (if pattern provided)</li>
+                    <li>✅ Transaction-safe bulk insert</li>
+                    <li>✅ Complete audit logging</li>
+                    <li>✅ Workflow enforcement (all imports require manager approval)</li>
+                </ul>
+                
+                <h6 class="mt-3">Processing Flow</h6>
+                <ol>
+                    <li><strong>Parsing:</strong> CSV format validation</li>
+                    <li><strong>Validation:</strong> Row-level data validation (product exists, serials unique, etc.)</li>
+                    <li><strong>Import:</strong> Batch insert with transaction safety</li>
+                    <li><strong>Workflow:</strong> Imports automatically enter EN_ATTENTE state (require approval)</li>
+                </ol>
+                
+                <h6 class="mt-3">Example</h6>
+                <pre>product_reference,quantity,serial_number,emplacement_code,unit_price,note
+ONT-GPON-V5,10,SN-2024-001-010,ENTREPOT,45000,Initial stock
+OLT-FIBER-X2,5,,MAGASIN,250000,
+SPLITTER-1X8,20,BATCH-2024-001,ENTREPOT,5000,Batch import</pre>
+            </div>
+        </div>
+        """
+        
+        return jsonify({
+            'success': True,
+            'documentation': documentation
+        })
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# 🔴 PHASE 2 FIX: Stock Movement Approval Routes for Magasinier
+# ============================================================================
+
+@stock_bp.route('/approve-movement/<int:mouvement_id>', methods=['GET', 'POST'])
+@login_required
+@require_stock_permission('can_approve_stock_movement')
+def approve_stock_movement(mouvement_id):
+    """
+    Approve a stock movement (for chief_pur or magasinier of same zone).
+    
+    Magasinier can only approve their own movements (EN_ATTENTE -> APPROUVE).
+    Chief_pur can approve any movement.
+    
+    Transition workflow: EN_ATTENTE -> APPROUVE -> EXECUTE -> VALIDE
+    """
+    try:
+        mouvement = MouvementStock.query.get_or_404(mouvement_id)
+        
+        # RBAC: Magasinier can only approve own zone movements
+        if current_user.role == 'magasinier':
+            # Verify magasinier zone matches movement zone
+            if not mouvement.emplacement or mouvement.emplacement.zone_id != current_user.zone_id:
+                flash('❌ Vous ne pouvez approuver que les mouvements de votre zone.', 'danger')
+                return redirect(url_for('stock.liste_mouvements'))
+        
+        if request.method == 'POST':
+            # Transition EN_ATTENTE -> APPROUVE
+            if mouvement.workflow_state != 'EN_ATTENTE':
+                flash(f'⚠️ Ce mouvement ne peut pas être approuvé (état: {mouvement.workflow_state})', 'warning')
+            else:
+                mouvement.workflow_state = 'APPROUVE'
+                mouvement.approuve_par_id = current_user.id
+                mouvement.date_approbation = datetime.now(timezone.utc)
+                
+                db.session.commit()
+                
                 log_activity(
                     user_id=current_user.id,
-                    action='create',
-                    module='users',
-                    entity_id=new_user.id,
-                    entity_name=f"{new_user.prenom} {new_user.nom}",
+                    action='approve_stock_movement',
+                    module='stock',
+                    entity_name=f"Mouvement #{mouvement.id}",
                     details={
-                        'username': new_user.username,
-                        'role': new_user.role,
-                        'zone_id': new_user.zone_id
+                        'mouvement_id': mouvement.id,
+                        'mouvement_type': mouvement.type_mouvement,
+                        'produit': mouvement.produit.designation if mouvement.produit else 'Unknown',
+                        'quantite': mouvement.quantite,
+                        'emplacement_zone': mouvement.emplacement.zone.nom if mouvement.emplacement and mouvement.emplacement.zone else 'Unknown'
                     }
                 )
                 
-                if new_user.email:
-                    subject = "Bienvenue sur Sofatelcom"
-                    body = f"""Bonjour {new_user.nom},
-
-            Votre compte Sofatelcom a été créé.
-
-            Identifiant : {new_user.username}
-            Mot de passe : passer (à réinitialiser)
-
-            Connectez-vous sur : https://sofatelcom.louvrier.sn/login
-
-            Merci,
-            L'équipe Sofatelcom
-            """
-                    send_email(subject, [new_user.email], body=body)
-            except Exception as post_e:
-                current_app.logger.error(f"Post-creation background task failed for user {new_user.username}: {str(post_e)}")
-                # We don't flash an error here to not confuse the user, 
-                # but we could add a subtle info flash if email failing is important.
-            
-            flash(f"Utilisateur {new_user.username} créé avec succès !", 'success')
-            return redirect(url_for('manage_users'))
-
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.exception('Erreur lors de la création d\'utilisateur')
-            
-            # Provide user-friendly error messages
-            error_msg = str(e).lower()
-            if 'unique constraint' in error_msg or 'duplicate' in error_msg:
-                user_msg = 'Un utilisateur avec ce nom d\'utilisateur ou cette adresse email existe déjà.'
-            elif 'field' in error_msg or 'column' in error_msg:
-                user_msg = 'Erreur de configuration de la base de données. Contactez l\'administrateur.'
-            else:
-                user_msg = 'Une erreur est survenue lors de la création de l\'utilisateur. Réessayez ou contactez l\'administrateur.'
-            
-            flash(user_msg, 'error')
-
-    else:
-        # Debug: Afficher les erreurs si le formulaire n'est pas valide
-        print(f"DEBUG: Formulaire non valide - Erreurs: {form.errors}")
-        if request.method == 'POST':
-            print(f"DEBUG: POST data - {request.form}")
-
-    return render_template('create_user.html', form=form)
-
-
-@app.route('/manage-users')
-@app.route('/manage_users')
-@login_required
-def manage_users():
-    if current_user.role != 'chef_pur':
-        flash('Accès non autorisé.', 'error')
-        return redirect(url_for('dashboard'))
-
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 25, type=int)
-    search = request.args.get('search', '').strip()
-    role = request.args.get('role', '')
-    status = request.args.get('status', '')
-
-    query = User.query
-
-    if search:
-        search_filter = f"%{search}%"
-        query = query.filter(
-            db.or_(
-                User.username.ilike(search_filter),
-                User.email.ilike(search_filter),
-                User.nom.ilike(search_filter),
-                User.prenom.ilike(search_filter),
-                User.telephone.ilike(search_filter)
-            )
+                flash(f'✅ Mouvement #{mouvement.id} approuvé avec succès!', 'success')
+                return redirect(url_for('stock.liste_mouvements'))
+        
+        return render_template(
+            'approve_movement.html',
+            mouvement=mouvement,
+            zone_name=mouvement.emplacement.zone.nom if mouvement.emplacement and mouvement.emplacement.zone else 'Unknown'
         )
-    
-    if role:
-        query = query.filter(User.role == role)
-    
-    if status:
-        query = query.filter(User.actif == (status == 'actif'))
-
-    users = query.order_by(User.date_creation.desc()).paginate(
-        page=page, per_page=per_page, error_out=False
-    )
-    return render_template('manage_users.html', users=users, search=search, current_role=role, current_status=status)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error approving movement: {e}")
+        flash(f'❌ Erreur lors de l\'approbation: {str(e)}', 'danger')
+        return redirect(url_for('stock.liste_mouvements'))
 
 
-@app.route('/edit-user/<int:user_id>', methods=['GET', 'POST'])
-@app.route('/edit_user/<int:user_id>', methods=['GET', 'POST'])
+@stock_bp.route('/list-pending-approvals')
 @login_required
-def edit_user(user_id):
-    if current_user.role != 'chef_pur':
-        flash('Accès non autorisé.', 'error')
+@require_stock_permission('can_approve_stock_movement')
+def liste_approbations_en_attente():
+    """
+    List pending stock movement approvals.
+    
+    Magasinier sees: Pending movements in their zone
+    Chief_pur sees: All pending movements
+    """
+    try:
+        # Filter by workflow state EN_ATTENTE
+        query = MouvementStock.query.filter_by(workflow_state='EN_ATTENTE')
+        
+        # Magasinier: only their zone
+        if current_user.role == 'magasinier':
+            from models import EmplacementStock
+            zone_emplacements = db.session.query(EmplacementStock.id).filter_by(
+                zone_id=current_user.zone_id
+            ).subquery()
+            query = query.filter(MouvementStock.emplacement_id.in_(
+                db.session.query(EmplacementStock.id).filter_by(zone_id=current_user.zone_id)
+            ))
+        
+        mouvements = query.order_by(MouvementStock.date_creation.desc()).all()
+        
+        return render_template(
+            'list_pending_approvals.html',
+            mouvements=mouvements,
+            user_role=current_user.role
+        )
+        
+    except Exception as e:
+        current_app.logger.error(f"Error listing approvals: {e}")
+        flash(f'❌ Erreur: {str(e)}', 'danger')
+        return redirect(url_for('stock.dashboard'))
+
+# ============================================================================
+# 🔴 MAGASINIER: Gestion des Réservations Techniciens
+# ============================================================================
+
+@stock_bp.route('/reservations/attente')
+@login_required
+def liste_reservations_attente():
+    """
+    Affiche la liste des réservations en attente pour la zone du magasinier
+    """
+    if current_user.role.lower() != 'magasinier':
+        flash('Accès réservé aux magasiniers.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    if not current_user.zone_id:
+        flash('Vous n\'êtes pas assigné à une zone.', 'error')
         return redirect(url_for('dashboard'))
 
-    user = db.session.get(User, user_id)
-    if not user:
-        abort(404)
-    form = EditUserForm(obj=user)
+    # Récupérer les réservations en attente dont le technicien est dans la même zone
+    reservations = db.session.query(ReservationPiece).join(
+        Intervention, ReservationPiece.intervention_id == Intervention.id
+    ).join(
+        User, Intervention.technicien_id == User.id
+    ).filter(
+        User.zone_id == current_user.zone_id,
+        ReservationPiece.statut == ReservationPiece.STATUT_EN_ATTENTE
+    ).all()
     
-    # 🔴 PHASE 2 FIX: Pré-remplir le champ zone à partir de zone_id (car obj=user utilise le champ legacy zone string)
-    if request.method == 'GET' and user.zone_id:
-        form.zone.data = user.zone_id
+    return render_template('reservations_zone_magasinier.html', reservations=reservations)
 
-    if form.validate_on_submit():
-        try:
-            user.username = form.username.data
-            user.email = form.email.data
-            user.role = form.role.data
-            user.nom = form.nom.data
-            user.prenom = form.prenom.data
-            user.telephone = form.telephone.data
-            user.zone_id = int(form.zone.data) if form.zone.data and int(form.zone.data) != 0 else None
-            
-            # 🔴 PHASE 2 FIX: Synchroniser le champ legacy zone (string) pour compatibilité
-            if user.zone_id:
-                zone_obj = db.session.get(Zone, user.zone_id)
-                user.zone = zone_obj.nom if zone_obj else None
-            else:
-                user.zone = None
-
-            user.commune = form.commune.data if form.commune.data else None
-            user.quartier = form.quartier.data if form.quartier.data else None
-            user.service = form.service.data if form.service.data else None
-            user.technologies = form.technologies.data if form.technologies.data else None
-            user.actif = True if form.actif.data else False
-            if form.new_password.data:
-                user.password_hash = generate_password_hash(form.new_password.data)
+@stock_bp.route('/reservation/valider/<int:reservation_id>', methods=['POST'])
+@login_required
+def valider_reservation(reservation_id):
+    """
+    Valide une réservation de pièce par un magasinier
+    """
+    if current_user.role.lower() != 'magasinier':
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    reservation = db.session.get(ReservationPiece, reservation_id)
+    if not reservation:
+        return jsonify({'success': False, 'message': 'Réservation introuvable'}), 404
+    
+    # Vérifier que le technicien est dans la zone du magasinier
+    if reservation.intervention.technicien.zone_id != current_user.zone_id:
+        return jsonify({'success': False, 'message': 'Cette réservation ne concerne pas votre zone'}), 403
+    
+    success, message = reservation.valider(current_user.id)
+    
+    if success:
+        # Automatiquement marquer comme utilisée pour sortir du stock ? 
+        # Ou attendre que le tech vienne chercher ? 
+        # Dans le workflow Sonatel, le magasinier valide la SORTIE.
+        # Donc on marque comme utilisée immédiatement pour décrémenter le stock.
+        success_use, message_use = reservation.marquer_comme_utilisee()
+        if not success_use:
+            # Si on ne peut pas marquer comme utilisé (stock insuffisant au moment T), on rollback la validation
+            reservation.statut = ReservationPiece.STATUT_EN_ATTENTE
             db.session.commit()
-            flash('Utilisateur mis à jour avec succès!', 'success')
-            return redirect(url_for('manage_users'))
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.exception('Erreur lors de la mise à jour d\'utilisateur')
+            return jsonify({'success': False, 'message': f"Validation impossible: {message_use}"})
             
-            # Provide user-friendly error messages
-            error_msg = str(e).lower()
-            if 'unique constraint' in error_msg or 'duplicate' in error_msg:
-                user_msg = 'Ce nom d\'utilisateur ou cette adresse email est déjà utilisé.'
-            elif 'field' in error_msg or 'column' in error_msg:
-                user_msg = 'Erreur de configuration de la base de données. Contactez l\'administrateur.'
-            else:
-                user_msg = 'Une erreur est survenue lors de la mise à jour. Réessayez ou contactez l\'administrateur.'
-            
-            flash(user_msg, 'error')
+        return jsonify({'success': True, 'message': 'Réservation validée et stock mis à jour'})
+    else:
+        return jsonify({'success': False, 'message': message})
 
-    return render_template('edit_user.html', user=user, form=form)
-
-
-@app.route('/delete-user/<int:user_id>', methods=['POST'])
+@stock_bp.route('/reservation/rejeter/<int:reservation_id>', methods=['POST'])
 @login_required
-def delete_user(user_id):
-    if current_user.role != 'chef_pur':
-        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
-
-    if user_id == current_user.id:
-        return jsonify({'success': False, 'error': 'Vous ne pouvez pas supprimer votre propre compte'}), 400
-
-    user = db.session.get(User, user_id)
-    if not user:
-        return jsonify({'success': False, 'error': 'Utilisateur non trouvé'}), 404
-
-    # Import des modèles nécessaires pour le nettoyage
-    from models import (Intervention, DemandeIntervention, FichierImport, Equipe, 
-                        MembreEquipe, ActivityLog, AuditLog, NotificationSMS, 
-                        InterventionHistory, LeaveRequest, NoteRH, Survey, FicheTechnique)
-
-    try:
-        user_name = f"{user.prenom} {user.nom}"
-        
-        # 1. Nettoyage des interventions où l'utilisateur est technicien
-        # Comme Intervention.technicien_id est nullable=False, on doit supprimer l'intervention
-        # mais on préserve la demande en la remettant à l'état 'nouveau'
-        interventions_as_tech = Intervention.query.filter_by(technicien_id=user_id).all()
-        for interv in interventions_as_tech:
-            if interv.demande:
-                interv.demande.technicien_id = None
-                interv.demande.statut = 'nouveau'
-                interv.demande.date_affectation = None
-            
-            # Supprimer les surveys et fiches techniques liés à cette intervention
-            Survey.query.filter_by(intervention_id=interv.id).delete()
-            FicheTechnique.query.filter_by(intervention_id=interv.id).delete()
-            db.session.delete(interv)
-
-        # 2. Nettoyage des interventions où l'utilisateur est valideur
-        Intervention.query.filter_by(valide_par=user_id).update({Intervention.valide_par: None})
-
-        # 3. Nettoyage des demandes d'intervention (technicien direct, sans intervention créée)
-        DemandeIntervention.query.filter_by(technicien_id=user_id).update({
-            DemandeIntervention.technicien_id: None,
-            DemandeIntervention.statut: 'nouveau'
-        })
-
-        # 4. Transfert des équipes dont il est le chef au Chef PUR actuel
-        Equipe.query.filter_by(chef_zone_id=user_id).update({Equipe.chef_zone_id: current_user.id})
-
-        # 5. Transfert des imports qu'il a réalisés au Chef PUR actuel
-        FichierImport.query.filter_by(importe_par=user_id).update({FichierImport.importe_par: current_user.id})
-
-        # 6. Suppression des participations aux équipes (MembreEquipe)
-        MembreEquipe.query.filter_by(technicien_id=user_id).delete()
-
-        # 7. Suppression des logs et historiques
-        ActivityLog.query.filter_by(user_id=user_id).delete()
-        AuditLog.query.filter_by(actor_id=user_id).delete()
-        InterventionHistory.query.filter_by(user_id=user_id).delete()
-        NotificationSMS.query.filter_by(technicien_id=user_id).delete()
-
-        # 8. Suppression des demandes RH (Conge, etc.) et réservations
-        from models import ReservationPiece
-        ReservationPiece.query.filter_by(utilisateur_id=user_id).update({ReservationPiece.utilisateur_id: current_user.id})
-        ReservationPiece.query.filter_by(valide_par_id=user_id).update({ReservationPiece.valide_par_id: current_user.id})
-
-        LeaveRequest.query.filter_by(technicien_id=user_id).delete()
-        LeaveRequest.query.filter_by(manager_id=user_id).delete()
-        NoteRH.query.filter_by(author_id=user_id).update({NoteRH.author_id: current_user.id})
-
-        # 9. Enfin, suppression de l'utilisateur
-        db.session.delete(user)
-        db.session.commit()
-
-        log_activity(
-            user_id=current_user.id, 
-            action='delete', 
-            module='users', 
-            entity_id=user_id, 
-            entity_name=user_name,
-            details={'deleted_permanently': True}
-        )
-        
-        return jsonify({
-            'success': True, 
-            'message': f'L\'utilisateur "{user_name}" et toutes ses dépendances ont été supprimés avec succès.'
-        })
-
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.exception(f'Erreur lors de la suppression complète de l\'utilisateur {user_id}')
-        return jsonify({
-            'success': False, 
-            'error': f'Erreur lors de la suppression : {str(e)}'
-        }), 500
-
-
-
-# Team APIs moved to routes/teams.py (blueprint 'teams')
-# See routes/teams.py for implementation and registration via register_blueprints(app)
-
-
-@app.route('/toggle-user-status/<int:user_id>', methods=['POST'])
-@login_required
-def toggle_user_status(user_id):
-    if current_user.role != 'chef_pur':
-        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
-
-    if user_id == current_user.id:
-        return jsonify({
-            'success':
-            False,
-            'error':
-            'Vous ne pouvez pas désactiver votre propre compte'
-        }), 400
-
-    try:
-        user = db.session.get(User, user_id)
-        if not user:
-            abort(404)
-        data = request.get_json() or {}
-        actif = data.get('actif')
-
-        if actif is None:
-            return jsonify({'success': False, 'error': 'Statut manquant'}), 400
-
-        user.actif = bool(actif)
-        db.session.commit()
-
-        status_text = "activé" if user.actif else "désactivé"
-        log_activity(
-            user_id=current_user.id,
-            action='toggle_status',
-            module='users',
-            entity_id=user.id,
-            entity_name=f"{user.prenom} {user.nom}",
-            details={
-                'status': status_text,
-                'username': user.username,
-                'role': user.role
-            }
-        )
-        return jsonify({
-            'success': True,
-            'message': f'Utilisateur {status_text} avec succès'
-        })
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/intervention/confirm-reception', methods=['POST'])
-@login_required
-def confirm_reception():
+def rejeter_reservation(reservation_id):
+    """
+    Rejette une réservation de pièce par un magasinier
+    """
+    if current_user.role.lower() != 'magasinier':
+        return jsonify({'success': False, 'message': 'Accès non autorisé'}), 403
+    
+    reservation = db.session.get(ReservationPiece, reservation_id)
+    if not reservation:
+        return jsonify({'success': False, 'message': 'Réservation introuvable'}), 404
+    
+    # Vérifier que le technicien est dans la zone du magasinier
+    if reservation.intervention.technicien.zone_id != current_user.zone_id:
+        return jsonify({'success': False, 'message': 'Cette réservation ne concerne pas votre zone'}), 403
+    
     data = request.get_json()
-    intervention_id = data.get('intervention_id')
-    intervention = db.session.get(Intervention, intervention_id)
-    if intervention:
-        intervention.accuse_reception = True
-        db.session.commit()
-        return jsonify({'success': True})
-    return jsonify({'success': False, 'message': 'Intervention introuvable'})
-
-
-@app.route('/intervention/<int:intervention_id>/reserver-pieces', methods=['GET'])
-@login_required
-def reserver_pieces(intervention_id):
-    # Vérifier que l'intervention existe et appartient à l'utilisateur
-    intervention = db.session.get(Intervention, intervention_id)
-    if not intervention:
-        abort(404)
-    if intervention.technicien_id != current_user.id:
-        flash('Accès non autorisé à cette intervention.', 'error')
-        return redirect(url_for('dashboard'))
+    motif = data.get('motif', 'Rejeté par le magasinier')
     
-    # Vérifier que l'accusé de réception a été effectué
-    if not intervention.accuse_reception:
-        flash('Veuillez d\'abord confirmer la réception de l\'intervention.', 'warning')
-        return redirect(url_for('intervention_form', demande_id=intervention.demande_id))
+    success, message = reservation.annuler(motif=motif, rejeter=True)
     
-    # Récupérer les pièces disponibles en stock
-    # Utilisation d'une sous-requête pour calculer la quantité disponible
-    from sqlalchemy import func, case, select, and_
-    from models import MouvementStock
-    
-    # Sous-requête pour calculer la quantité disponible par produit
-    quantite_sq = select(
-        MouvementStock.produit_id,
-        func.sum(
-            case(
-                (MouvementStock.type_mouvement == 'entree', MouvementStock.quantite),
-                else_=-MouvementStock.quantite
-            )
-        ).label('quantite_totale')
-    ).group_by(MouvementStock.produit_id).subquery()
-    
-    # Requête principale pour récupérer les produits avec une quantité > 0
-    pieces_disponibles = db.session.query(Produit).join(
-        quantite_sq,
-        and_(
-            Produit.id == quantite_sq.c.produit_id,
-            quantite_sq.c.quantite_totale > 0
-        )
-    ).all()
-    
-    # Récupérer les réservations existantes pour cette intervention
-    reservations = ReservationPiece.query.filter_by(intervention_id=intervention_id).all()
-    
-    return render_template('reserver_pieces.html',
-                         intervention=intervention,
-                         pieces=pieces_disponibles,
-                         reservations=reservations)
-
-
-@app.route('/intervention/<int:intervention_id>/save-reservation', methods=['POST'])
-@login_required
-def save_reservation(intervention_id):
-    # Vérifier que l'intervention existe et appartient à l'utilisateur
-    intervention = db.session.get(Intervention, intervention_id)
-    if not intervention:
-        abort(404)
-    if intervention.technicien_id != current_user.id:
-        flash('Accès non autorisé à cette intervention.', 'error')
-        return redirect(url_for('dashboard'))
-    
-    # Vérifier que l'accusé de réception a été effectué
-    if not intervention.accuse_reception:
-        flash('Veuillez d\'abord confirmer la réception de l\'intervention.', 'warning')
-        return redirect(url_for('intervention_form', demande_id=intervention.demande_id))
-    
-    try:
-        # Récupérer les données du formulaire
-        commentaire = request.form.get('commentaire', '')
-        
-        # Parcourir les champs du formulaire pour trouver les pièces sélectionnées
-        for key, value in request.form.items():
-            if key.startswith('piece_') and value.isdigit():
-                piece_id = int(key.replace('piece_', ''))
-                quantite = float(value)
-                
-                # Vérifier que la pièce existe et qu'il y a suffisamment de stock
-                piece = db.session.get(Produit, piece_id)
-                if not piece:
-                    flash(f'Pièce avec l\'ID {piece_id} introuvable.', 'error')
-                    continue
-                    
-                if piece.quantite < quantite:
-                    flash(f'Stock insuffisant pour la pièce {piece.nom}. Quantité disponible: {piece.quantite}', 'error')
-                    continue
-                
-                # Vérifier si une réservation existe déjà pour cette pièce et cette intervention
-                reservation = ReservationPiece.query.filter_by(
-                    intervention_id=intervention_id,
-                    produit_id=piece_id
-                ).first()
-                
-                if reservation:
-                    # Mettre à jour la réservation existante
-                    reservation.quantite = quantite
-                    reservation.commentaire = commentaire
-                    reservation.date_maj = datetime.now(timezone.utc)
-                else:
-                    # Créer une nouvelle réservation
-                    reservation = ReservationPiece(
-                        intervention_id=intervention_id,
-                        produit_id=piece_id,
-                        quantite=quantite,
-                        commentaire=commentaire,
-                        statut=ReservationPiece.STATUT_EN_ATTENTE,
-                        utilisateur_id=current_user.id
-                    )
-                    db.session.add(reservation)
-                
-                # Mettre à jour le stock (à confirmer plus tard par un responsable)
-                # piece.quantite -= quantite
-                
-        # Enregistrer les modifications
-        db.session.commit()
-        
-        flash('Réservation enregistrée avec succès. En attente de validation.', 'success')
-        return redirect(url_for('legacy.reserver_pieces', intervention_id=intervention_id))
-        
-    except Exception as e:
-        db.session.rollback()
-        app.logger.error(f'Erreur lors de l\'enregistrement de la réservation: {str(e)}')
-        flash('Une erreur est survenue lors de l\'enregistrement de la réservation.', 'error')
-        return redirect(url_for('legacy.reserver_pieces', intervention_id=intervention_id))
-
-
-def generate_reset_token(user, expires_sec=3600):
-    s = URLSafeTimedSerializer(app.config['SECRET_KEY'])
-    return s.dumps(user.email, salt='password-reset-salt')
-
-
-def verify_reset_token(token, expires_sec=3600):
-    s = URLSafeTimedSerializer(app.config['SECRET_KEY'])
-    try:
-        email = s.loads(token, salt='password-reset-salt', max_age=expires_sec)
-    except Exception:
-        return None
-    return User.query.filter_by(email=email).first()
-
-
-@app.route('/reset-password', methods=['GET', 'POST'])
-def reset_password_request():
-    form = ResetPasswordRequestForm()
-    if form.validate_on_submit():
-        user = User.query.filter_by(email=form.email.data).first()
-        if user:
-            token = generate_reset_token(user)
-            reset_url = url_for('reset_password', token=token, _external=True)
-            # Envoie l'email
-            try:
-                send_email(
-                    "Réinitialisation de mot de passe", [user.email],
-                    body=f"Pour réinitialiser votre mot de passe, cliquez ici : {reset_url}"
-                )
-            except Exception as e:
-                current_app.logger.error(f"Failed to send reset password email to {user.email}: {str(e)}")
-                # On ne lève pas d'exception pour garder la sécurité par obscurité : 
-                # l'utilisateur voit le même message qu'il ait reçu l'email ou non.
-        flash('Si cet email existe, un lien de réinitialisation a été envoyé.',
-              'info')
-        return redirect(url_for('login'))
-    return render_template('reset_password_request.html', form=form)
-
-
-@app.route('/reset-password/<token>', methods=['GET', 'POST'])
-def reset_password(token):
-    user = verify_reset_token(token)
-    if not user:
-        flash('Lien invalide ou expiré.', 'danger')
-        return redirect(url_for('reset_password_request'))
-    form = ResetPasswordForm()
-    if form.validate_on_submit():
-        user.password_hash = generate_password_hash(form.password.data)
-        db.session.commit()
-        flash('Mot de passe réinitialisé avec succès.', 'success')
-        return redirect(url_for('login'))
-    return render_template('reset_password.html', form=form)
-
-@app.route('/api/fiche-technique/<int:intervention_id>')
-@login_required
-def api_fiche_technique_details(intervention_id):
-    # Vérifier les permissions (même logique que pour l'intervention)
-    intervention = db.session.get(Intervention, intervention_id)
-    if not intervention:
-        abort(404)
-    
-    if current_user.role == 'technicien' and intervention.technicien_id != current_user.id:
-        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
-    elif current_user.role == 'chef_pilote':
-        if intervention.demande and intervention.demande.service != current_user.service:
-            return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
-    elif current_user.role == 'chef_zone':
-        technicien = db.session.get(User, intervention.technicien_id)
-        if not technicien or technicien.zone != current_user.zone:
-            return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
-
-    fiche_technique = FicheTechnique.query.filter_by(intervention_id=intervention_id).first()
-    
-    if not fiche_technique:
-        return jsonify({'success': False, 'error': 'Fiche technique non trouvée'}), 404
-
-    fiche_data = {
-        # Informations générales
-        'nom_raison_sociale': fiche_technique.nom_raison_sociale,
-        'contact': fiche_technique.contact,
-        'represente_par': fiche_technique.represente_par,
-        'date_installation': fiche_technique.date_installation.strftime('%Y-%m-%d') if fiche_technique.date_installation else None,
-        'tel1': fiche_technique.tel1,
-        'tel2': fiche_technique.tel2,
-        'adresse_demandee': fiche_technique.adresse_demandee,
-        'etage': fiche_technique.etage,
-        'gps_lat': fiche_technique.gps_lat,
-        'gps_long': fiche_technique.gps_long,
-        'type_logement_avec_bpi': fiche_technique.type_logement_avec_bpi,
-        'type_logement_sans_bpi': fiche_technique.type_logement_sans_bpi,
-        'h_arrivee': fiche_technique.h_arrivee.strftime('%H:%M') if fiche_technique.h_arrivee else None,
-        'h_depart': fiche_technique.h_depart.strftime('%H:%M') if fiche_technique.h_depart else None,
-        
-        # Informations techniques
-        'n_ligne': fiche_technique.n_ligne,
-        'n_demande': fiche_technique.n_demande,
-        'technicien_structure': fiche_technique.technicien_structure,
-        'pilote_structure': fiche_technique.pilote_structure,
-        'offre': fiche_technique.offre,
-        'debit': fiche_technique.debit,
-        'type_mc': fiche_technique.type_mc,
-        'type_na': fiche_technique.type_na,
-        'type_transfert': fiche_technique.type_transfert,
-        'type_autre': fiche_technique.type_autre,
-        'backoffice_structure': fiche_technique.backoffice_structure,
-        
-        # Matériels
-        'type_ont': fiche_technique.type_ont,
-        'nature_ont': fiche_technique.nature_ont,
-        'numero_serie_ont': fiche_technique.numero_serie_ont,
-        'type_decodeur': fiche_technique.type_decodeur,
-        'nature_decodeur': fiche_technique.nature_decodeur,
-        'numero_serie_decodeur': fiche_technique.numero_serie_decodeur,
-        'disque_dur': fiche_technique.disque_dur,
-        'telephone': fiche_technique.telephone,
-        'recepteur_wifi': fiche_technique.recepteur_wifi,
-        'cpl': fiche_technique.cpl,
-        'carte_vaccess': fiche_technique.carte_vaccess,
-        
-        # Accessoires
-        'type_cable_lc': fiche_technique.type_cable_lc,
-        'type_cable_bti': fiche_technique.type_cable_bti,
-        'type_cable_pto_one': fiche_technique.type_cable_pto_one,
-        'kit_pto': fiche_technique.kit_pto,
-        'piton': fiche_technique.piton,
-        'arobase': fiche_technique.arobase,
-        'malico': fiche_technique.malico,
-        'ds6': fiche_technique.ds6,
-        'autre_accessoire': fiche_technique.autre_accessoire,
-        
-        # Tests de services
-        'appel_sortant_ok': fiche_technique.appel_sortant_ok,
-        'appel_sortant_nok': fiche_technique.appel_sortant_nok,
-        'appel_entrant_ok': fiche_technique.appel_entrant_ok,
-        'appel_entrant_nok': fiche_technique.appel_entrant_nok,
-        'tvo_mono_ok': fiche_technique.tvo_mono_ok,
-        'tvo_mono_nok': fiche_technique.tvo_mono_nok,
-        'tvo_multi_ok': fiche_technique.tvo_multi_ok,
-        'tvo_multi_nok': fiche_technique.tvo_multi_nok,
-        'enregistreur_dd_ok': fiche_technique.enregistreur_dd_ok,
-        'enregistreur_dd_nok': fiche_technique.enregistreur_dd_nok,
-        
-        # Tests de débits
-        'par_cable_salon': fiche_technique.par_cable_salon,
-        'par_cable_chambres': fiche_technique.par_cable_chambres,
-        'par_cable_bureau': fiche_technique.par_cable_bureau,
-        'par_cable_autres': fiche_technique.par_cable_autres,
-        'par_cable_vitesse_wifi': fiche_technique.par_cable_vitesse_wifi,
-        'par_cable_mesure_mbps': fiche_technique.par_cable_mesure_mbps,
-        'par_wifi_salon': fiche_technique.par_wifi_salon,
-        'par_wifi_chambres': fiche_technique.par_wifi_chambres,
-        'par_wifi_bureau': fiche_technique.par_wifi_bureau,
-        'par_wifi_autres': fiche_technique.par_wifi_autres,
-        'par_wifi_vitesse_wifi': fiche_technique.par_wifi_vitesse_wifi,
-        'par_wifi_mesure_mbps': fiche_technique.par_wifi_mesure_mbps,
-        
-        # Etiquetages et Nettoyage
-        'etiquetage_colliers_serres': fiche_technique.etiquetage_colliers_serres,
-        'etiquetage_pbo_normalise': fiche_technique.etiquetage_pbo_normalise,
-        'nettoyage_depose': fiche_technique.nettoyage_depose,
-        'nettoyage_tutorat': fiche_technique.nettoyage_tutorat,
-        
-        # Rattachement
-        'rattachement_nro': fiche_technique.rattachement_nro,
-        'rattachement_type': fiche_technique.rattachement_type,
-        'rattachement_num_carte': fiche_technique.rattachement_num_carte,
-        'rattachement_num_port': fiche_technique.rattachement_num_port,
-        'rattachement_plaque': fiche_technique.rattachement_plaque,
-        'rattachement_bpi_pbo': fiche_technique.rattachement_bpi_pbo,
-        'rattachement_coupleur': fiche_technique.rattachement_coupleur,
-        'rattachement_fibre': fiche_technique.rattachement_fibre,
-        'rattachement_ref_dbm': fiche_technique.rattachement_ref_dbm,
-        'rattachement_mesure_dbm': fiche_technique.rattachement_mesure_dbm,
-        
-        # Commentaires
-        'commentaires': fiche_technique.commentaires,
-        'photos_list': json.loads(fiche_technique.photos) if fiche_technique.photos and fiche_technique.photos.strip() else [],
-        # Signatures et satisfaction client
-        'signature_equipe': fiche_technique.signature_equipe,
-        'signature_client': fiche_technique.signature_client,
-        'client_tres_satisfait': fiche_technique.client_tres_satisfait,
-        'client_satisfait': fiche_technique.client_satisfait,
-        'client_pas_satisfait': fiche_technique.client_pas_satisfait,
-        
-        # Métadonnées
-        'date_creation': fiche_technique.date_creation.strftime('%Y-%m-%d %H:%M:%S') if fiche_technique.date_creation else None,
-        'updated_at': fiche_technique.updated_at.strftime('%Y-%m-%d %H:%M:%S') if fiche_technique.updated_at else None,
-        
-        # Relations
-        'technicien_id': fiche_technique.technicien_id,
-        'intervention_id': fiche_technique.intervention_id
-    }
-
-    return jsonify({
-        'success': True,
-        'fiche_technique': fiche_data,
-        'intervention': {
-            'id': intervention.id,
-            'valide_par': intervention.valide_par,
-            'fichier_technique_accessible': intervention.fichier_technique_accessible,
-            'demande': {
-                'nd': intervention.demande.nd if intervention.demande else 'N/A',
-                'nom_client': intervention.demande.nom_client if intervention.demande else 'N/A',
-                'prenom_client': intervention.demande.prenom_client if intervention.demande else 'N/A',
-                'service': intervention.demande.service if intervention.demande else 'N/A',
-                'type_techno': intervention.demande.type_techno if intervention.demande else 'N/A',
-                'libelle_commune': intervention.demande.libelle_commune if intervention.demande else 'N/A'
-            } if intervention.demande else None,
-            'valideur': {
-                'id': intervention.valideur.id if intervention.valideur else None,
-                'nom': intervention.valideur.nom if intervention.valideur else None,
-                'prenom': intervention.valideur.prenom if intervention.valideur else None
-            } if intervention.valideur else None,
-            'technicien': {
-                'nom': intervention.technicien.nom if intervention.technicien else 'N/A',
-                'prenom': intervention.technicien.prenom if intervention.technicien else 'N/A'
-            } if intervention.technicien else None
-        }
-    })
-
-@app.route('/import-demandes/delete/<int:import_id>', methods=['POST'])
-@login_required
-def delete_import(import_id):
-    """
-    ✅ HARD DELETE : Suppression complète de l'import et de ses demandes
-    - Vérifie présence interventions liées
-    - Supprime physiquement l'import et les demandes associées
-    - Gère proprement les erreurs FK
-    """
-    if current_user.role not in ['chef_pur', 'chef_pilote', 'chef_zone']:
-        flash('❌ Accès non autorisé.', 'error')
-        return redirect(url_for('dashboard'))
-    
-    fichier_import = db.session.get(FichierImport, import_id)
-    if not fichier_import:
-        abort(404)
-    
-    # Vérification modifiée : chef_pur peut tout supprimer, les autres seulement leurs propres imports
-    if current_user.role != 'chef_pur' and fichier_import.importe_par != current_user.id:
-        flash('❌ Vous ne pouvez pas supprimer cet import.', 'error')
-        return redirect(url_for('import_demandes'))
-    
-    try:
-        # ✅ SOLUTION 1: Vérifier avant suppression
-        demandes = DemandeIntervention.query.filter_by(fichier_importe_id=import_id).all()
-        demande_ids = [demande.id for demande in demandes]
-        
-        # 🔴 CRITIQUE: Vérifier les interventions liées
-        interventions_count = 0
-        if demande_ids:
-            interventions_count = Intervention.query.filter(
-                Intervention.demande_id.in_(demande_ids)
-            ).count()
-        
-        # Si interventions existent → refuser suppression
-        if interventions_count > 0:
-            flash(
-                f'❌ Impossible de supprimer: {interventions_count} intervention(s) '
-                f'liée(s) à cet import. Supprimez d\'abord les interventions associées.',
-                'error'
-            )
-            current_app.logger.warning(
-                f"Tentative suppression import {import_id} avec {interventions_count} interventions liées"
-            )
-            return redirect(url_for('import_demandes'))
-        
-        # ✅ HARD DELETE : Suppression complète de la base
-        # Supprimer d'abord toutes les notifications SMS liées à ces demandes
-        if demande_ids:
-            NotificationSMS.query.filter(NotificationSMS.demande_id.in_(demande_ids)).delete(
-                synchronize_session=False
-            )
-            
-            # Supprimer les demandes liées (bulk delete pour performance)
-            DemandeIntervention.query.filter(DemandeIntervention.fichier_importe_id == import_id).delete(
-                synchronize_session=False
-            )
-        
-        # Supprimer l'import lui-même
-        db.session.delete(fichier_import)
-        
-        db.session.commit()
-        
-        # 📝 Logger l'action
-        log_activity(
-            current_user.id, 
-            'delete_import', 
-            'demandes', 
-            import_id, 
-            f'Import supprimé définitivement: {fichier_import.nom_fichier}', 
-            {
-                'filename': fichier_import.nom_fichier,
-                'import_date': fichier_import.date_import.isoformat() if fichier_import.date_import else None,
-                'deleted_by': current_user.username,
-                'records_deleted': len(demandes),
-                'imported_by': db.session.get(User, fichier_import.importe_par).username if fichier_import.importe_par else None,
-                'hard_delete': True,
-                'timestamp': datetime.utcnow().isoformat()
-            }
-        )
-
-        # 💬 Message adapté
-        if current_user.role == 'chef_pur' and fichier_import.importe_par != current_user.id:
-            importeur = db.session.get(User, fichier_import.importe_par)
-            nom_importeur = importeur.nom if importeur else "Utilisateur inconnu"
-            flash(
-                f"✅ Import '{fichier_import.nom_fichier}' (de {nom_importeur}) "
-                f"et {len(demandes)} demandes associées supprimés avec succès.",
-                'success'
-            )
-        else:
-            flash(
-                f"✅ Import '{fichier_import.nom_fichier}' "
-                f"et {len(demandes)} demandes associées supprimés avec succès.",
-                'success'
-            )
-        
-        current_app.logger.info(
-            f"✅ Import {import_id} supprimé définitivement avec {len(demandes)} demandes"
-        )
-    
-    except IntegrityError as e:
-        """Gère les erreurs de contrainte FK"""
-        db.session.rollback()
-        current_app.logger.error(
-            f"❌ Erreur FK lors suppression import {import_id}: {str(e)}"
-        )
-        flash(
-            '❌ Erreur: Impossible de supprimer cet import (données liées). '
-            'Contactez l\'administrateur si le problème persiste.',
-            'error'
-        )
-    
-    except Exception as e:
-        """Gère les autres erreurs"""
-        db.session.rollback()
-        current_app.logger.error(
-            f"❌ Erreur suppression import {import_id}: {str(e)}\n{traceback.format_exc()}"
-        )
-        flash(
-            f'❌ Erreur système: Impossible de supprimer l\'import. '
-            f'Details: {str(e)}',
-            'error'
-        )
-    
-    return redirect(url_for('import_demandes'))
-
-
-@app.route('/api/demandes/preview')
-@login_required
-def demandes_preview():
-    ids_param = request.args.get('ids')
-    if not ids_param:
-        return {'items': []}
-    ids_list = [int(i) for i in ids_param.split(',') if i.isdigit()]
-    demandes = DemandeIntervention.query.filter(DemandeIntervention.id.in_(ids_list)).all()
-    items = [{
-        'id': d.id,
-        'numero_demande': d.nd,
-        'age': d.age,
-        'priorite': d.priorite_traitement,
-        'offre': d.offre,
-        'nom_client': d.nom_client,
-        'prenom_client': d.prenom_client,
-        'type_techno': d.type_techno,
-        'commune': d.libelle_commune,
-        'service_demande': d.service,
-        'zone': d.zone,
-        'date_creation': d.date_creation.isoformat() if d.date_creation else None,
-        'statut': d.statut
-    } for d in demandes]
-    return {'items': items}    
-
-@app.route('/api/survey/<int:intervention_id>')
-@login_required
-def api_survey_details(intervention_id):
-    # Vérifier les permissions (même logique que pour l'intervention)
-    intervention = db.session.get(Intervention, intervention_id)
-    if not intervention:
-        abort(404)
-    
-    if current_user.role == 'technicien' and intervention.technicien_id != current_user.id:
-        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
-    elif current_user.role == 'chef_pilote':
-        if intervention.demande and intervention.demande.service != current_user.service:
-            return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
-    elif current_user.role == 'chef_zone':
-        technicien = db.session.get(User, intervention.technicien_id)
-        if not technicien or technicien.zone != current_user.zone:
-            return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
-
-    survey = Survey.query.filter_by(intervention_id=intervention_id).first()
-    
-    if not survey:
-        return jsonify({'success': False, 'error': 'Fiche survey non trouvée'}), 404
-
-    survey_data = {
-        # Informations générales
-        'date_survey': survey.date_survey.strftime('%Y-%m-%d') if survey.date_survey else None,
-        'nom_raison_sociale': survey.nom_raison_sociale,
-        'contact': survey.contact,
-        'tel1': survey.tel1,
-        'tel2': survey.tel2,
-        'represente_par': survey.represente_par,
-        'adresse_demande': survey.adresse_demande,
-        'etage': survey.etage,
-        'h_debut': survey.h_debut if survey.h_debut else None,
-        'h_fin': survey.h_fin if survey.h_fin else None,
-        'gps_lat': survey.gps_lat,
-        'gps_long': survey.gps_long,
-        
-        # Informations techniques
-        'n_ligne': survey.n_ligne,
-        'n_demande': survey.n_demande,
-        'service_demande': survey.service_demande,
-        'technicien_structure': survey.technicien_structure,
-        'backoffice_structure': survey.backoffice_structure,
-        'offre': survey.offre,
-        'debit': survey.debit,
-        'type_mi': survey.type_mi,
-        'type_na': survey.type_na,
-        'type_transfer': survey.type_transfer,
-        'type_autre': survey.type_autre,
-        
-        # État du client et localisation
-        'etat_client': survey.etat_client,
-        'nature_local': survey.nature_local,
-        'type_logement': survey.type_logement,
-        
-        # Réseaux Fibre
-        'fibre_dispo': survey.fibre_dispo,
-        'gpon_olt': survey.gpon_olt,
-        'splitter': survey.splitter,
-        'distance_fibre': survey.distance_fibre,
-        'etat_fibre': survey.etat_fibre,
-        
-        # Réseaux Cuivre
-        'cuivre_dispo': survey.cuivre_dispo,
-        'sr': survey.sr,
-        'pc': survey.pc,
-        'distance_cuivre': survey.distance_cuivre,
-        'etat_cuivre': survey.etat_cuivre,
-        
-        # Données réseaux détaillées
-        'nro': survey.nro,
-        'type_reseau': survey.type_reseau,
-        'plaque': survey.plaque,
-        'bpi': survey.bpi,
-        'pbo': survey.pbo,
-        'coupleur': survey.coupleur,
-        'fibre': survey.fibre,
-        
-        # Mesures WiFi
-        'niveau_wifi_salon': survey.niveau_wifi_salon,
-        'niveau_wifi_chambre1': survey.niveau_wifi_chambre1,
-        'niveau_wifi_bureau1': survey.niveau_wifi_bureau1,
-        'niveau_wifi_autres_pieces': survey.niveau_wifi_autres_pieces,
-        
-        # Accessoires recommandés - Répéteur WiFi
-        'repeteur_wifi_oui': survey.repeteur_wifi_oui,
-        'repeteur_wifi_non': survey.repeteur_wifi_non,
-        'repeteur_wifi_quantite': survey.repeteur_wifi_quantite,
-        'repeteur_wifi_emplacement': survey.repeteur_wifi_emplacement,
-        
-        # Accessoires recommandés - CPL
-        'cpl_oui': survey.cpl_oui,
-        'cpl_non': survey.cpl_non,
-        'cpl_quantite': survey.cpl_quantite,
-        'cpl_emplacement': survey.cpl_emplacement,
-        
-        # Accessoires recommandés - Câble local
-        'cable_local_type': survey.cable_local_type,
-        'cable_local_longueur': survey.cable_local_longueur,
-        'cable_local_connecteurs': survey.cable_local_connecteurs,
-        
-        # Accessoires recommandés - Goulottes
-        'goulottes_oui': survey.goulottes_oui,
-        'goulottes_non': survey.goulottes_non,
-        'goulottes_quantite': survey.goulottes_quantite,
-        'goulottes_nombre_x2m': survey.goulottes_nombre_x2m,
-        
-        # Conclusion
-        'conclusion': survey.conclusion,
-        'observation_tech': survey.observation_tech,
-        'observation_client': survey.observation_client,
-        'survey_ok': survey.survey_ok,
-        'survey_nok': survey.survey_nok,
-        'motif': survey.motif,
-        
-        # Satisfaction client
-        'client_tres_satisfait': survey.client_tres_satisfait,
-        'client_satisfait': survey.client_satisfait,
-        'client_pas_satisfait': survey.client_pas_satisfait,
-        'commentaires': survey.commentaires,
-        
-        # Photos et signatures
-        'photos_list': json.loads(survey.photos) if survey.photos and survey.photos.strip() else [],
-        'signature_equipe': survey.signature_equipe,
-        'signature_client': survey.signature_client,
-        
-        # Métadonnées
-        'created_at': survey.created_at.strftime('%Y-%m-%d %H:%M:%S') if survey.created_at else None,
-        'updated_at': survey.updated_at.strftime('%Y-%m-%d %H:%M:%S') if survey.updated_at else None,
-        
-        # Relations
-        'intervention_id': survey.intervention_id
-    }
-
-    return jsonify({
-        'success': True,
-        'survey': survey_data,
-        'intervention': {
-            'id': intervention.id,
-            'valide_par': intervention.valide_par,
-            'fichier_technique_accessible': intervention.fichier_technique_accessible,
-            'demande': {
-                'nd': intervention.demande.nd if intervention.demande else 'N/A',
-                'nom_client': intervention.demande.nom_client if intervention.demande else 'N/A',
-                'prenom_client': intervention.demande.prenom_client if intervention.demande else 'N/A',
-                'service': intervention.demande.service if intervention.demande else 'N/A',
-                'type_techno': intervention.demande.type_techno if intervention.demande else 'N/A',
-                'libelle_commune': intervention.demande.libelle_commune if intervention.demande else 'N/A',
-                'libelle_quartier': intervention.demande.libelle_quartier if intervention.demande else 'N/A',
-                'tel_client': intervention.demande.contact_client if intervention.demande else 'N/A'
-            } if intervention.demande else None,
-            'valideur': {
-                'id': intervention.valideur.id if intervention.valideur else None,
-                'nom': intervention.valideur.nom if intervention.valideur else None,
-                'prenom': intervention.valideur.prenom if intervention.valideur else None
-            } if intervention.valideur else None,
-            'technicien': {
-                'id': intervention.technicien.id if intervention.technicien else None,
-                'nom': intervention.technicien.nom if intervention.technicien else 'N/A',
-                'prenom': intervention.technicien.prenom if intervention.technicien else 'N/A',
-                'zone': intervention.technicien.zone if intervention.technicien else 'N/A'
-            } if intervention.technicien else None
-        }
-    })
-
-@app.route('/api/notifications')
-@login_required
-def get_notifications():
-    """API pour récupérer les notifications de l'utilisateur connecté"""
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 20, type=int)
-
-    # Récupérer les notifications non lues en premier, puis les lues
-    notifications = NotificationSMS.query.filter_by(
-        technicien_id=current_user.id
-    ).order_by(
-        NotificationSMS.envoye.asc(),  # Non lues d'abord (envoye=False)
-        NotificationSMS.date_creation.desc()
-    ).paginate(page=page, per_page=per_page, error_out=False)
-
-    notifications_data = []
-    for notif in notifications.items:
-        notifications_data.append({
-            'id': notif.id,
-            'message': notif.message,
-            'type_notification': notif.type_notification,
-            'envoye': notif.envoye,
-            'date_creation': notif.date_creation.strftime('%d/%m/%Y %H:%M'),
-            'demande_id': notif.demande_id,
-            'demande_nd': notif.demande.nd if notif.demande else None
-        })
-
-    return jsonify({
-        'success': True,
-        'notifications': notifications_data,
-        'total': notifications.total,
-        'pages': notifications.pages,
-        'current_page': notifications.page
-    })
-
-
-@app.route('/api/notifications/<int:notification_id>/mark-read', methods=['POST'])
-@login_required
-def mark_notification_read(notification_id):
-    """Marquer une notification comme lue"""
-    notification = db.session.get(NotificationSMS, notification_id)
-    if not notification:
-        abort(404)
-
-    # Vérifier que la notification appartient à l'utilisateur
-    if notification.technicien_id != current_user.id:
-        return jsonify({'success': False, 'error': 'Accès non autorisé'}), 403
-
-    notification.envoye = True
-    db.session.commit()
-
-    return jsonify({'success': True})
-
-
-@app.route('/api/notifications/mark-all-read', methods=['POST'])
-@login_required
-def mark_all_notifications_read():
-    """Marquer toutes les notifications comme lues"""
-    NotificationSMS.query.filter_by(
-        technicien_id=current_user.id,
-        envoye=False
-    ).update({'envoye': True})
-
-    db.session.commit()
-
-    return jsonify({'success': True})
-
-
-@app.route('/connection-history')
-@login_required
-def connection_history():
-    if current_user.role != 'chef_pur':
-        flash('Accès non autorisé', 'error')
-        return redirect(url_for('dashboard'))
-        
-    page = request.args.get('page', 1, type=int)
-    per_page = 10
-    
-    logs = ActivityLog.query.join(User).order_by(
-        ActivityLog.timestamp.desc()
-    ).paginate(page=page, per_page=per_page)
-    
-    return render_template('connection_history.html', logs=logs) 
-
-def check_interventions_delayed():
-    """Vérifie les interventions en retard toutes les heures"""
-    demandes = DemandeIntervention.query.filter(
-        DemandeIntervention.statut == 'affecte',
-        DemandeIntervention.date_affectation <= datetime.now(timezone.utc) - timedelta(hours=2)
-    ).all()
-    
-    for demande in demandes:
-        # Vérifier si un rappel n'a pas déjà été envoyé récemment
-        recent_notification = NotificationSMS.query.filter(
-            NotificationSMS.technicien_id == demande.technicien_id,
-            NotificationSMS.demande_id == demande.id,
-            NotificationSMS.type_notification == 'rappel',
-            NotificationSMS.date_creation >= datetime.now(timezone.utc) - timedelta(hours=1)
-        ).first()
-        
-        if not recent_notification:
-            create_sms_notification(demande.technicien_id, demande.id, 'rappel')
-
-def check_interventions_deadline():
-    """Vérifie les échéances des interventions"""
-    demandes = DemandeIntervention.query.filter(
-        DemandeIntervention.date_echeance == date.today(),
-        DemandeIntervention.statut.in_(['affecte', 'en_cours'])
-    ).all()
-    
-    for demande in demandes:
-        # Vérifier si une notification d'échéance n'a pas déjà été envoyée aujourd'hui
-        today_notification = NotificationSMS.query.filter(
-            NotificationSMS.technicien_id == demande.technicien_id,
-            NotificationSMS.demande_id == demande.id,
-            NotificationSMS.type_notification == 'echeance',
-            NotificationSMS.date_creation >= datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        ).first()
-        
-        if not today_notification:
-            create_sms_notification(demande.technicien_id, demande.id, 'echeance')  
-
-@app.route('/cloturer-demande', methods=['POST'])
-@login_required
-def cloturer_demande():
-    if current_user.role not in ['chef_pur', 'chef_pilote']:
-        return jsonify({'success': False, 'error': 'Accès non autorisé'})
-    
-    try:
-        data = request.get_json()
-        demande_id = data.get('demande_id')
-        commentaire = data.get('commentaire', '').strip()
-        
-        if not demande_id or not commentaire:
-            return jsonify({'success': False, 'error': 'Données manquantes'})
-        
-        demande = db.session.get(DemandeIntervention, demande_id)
-        if not demande or demande.statut not in ['nouveau', 'a_reaffecter']:
-            return jsonify({'success': False, 'error': 'Demande non valide'})
-        
-        # Vérification des permissions selon le service
-        if current_user.role == 'chef_pilote' and current_user.service != 'SAV,Production':
-            if demande.service != current_user.service:
-                return jsonify({'success': False, 'error': 'Service non autorisé'})
-        
-        demande.statut = 'cloture'
-        demande.commentaire_interv = commentaire
-        demande.date_completion = datetime.now(timezone.utc)
-        
-        db.session.commit()
-        
-        log_activity(
-            user_id=current_user.id,
-            action='cloture',
-            module='demandes',
-            entity_id=demande.id,
-            entity_name=f"Demande {demande.nd}",
-            details={'commentaire': commentaire}
-        )
-        
-        return jsonify({'success': True, 'message': 'Demande clôturée avec succès'})
-    
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)})
-
-@app.route('/reporter-demande', methods=['POST'])
-@login_required
-def reporter_demande():
-    if current_user.role not in ['chef_pur', 'chef_pilote']:
-        return jsonify({'success': False, 'error': 'Accès non autorisé'})
-    
-    try:
-        data = request.get_json()
-        demande_id = data.get('demande_id')
-        commentaire = data.get('commentaire', '').strip()
-        date_report = data.get('date_report')
-        
-        if not demande_id or not commentaire:
-            return jsonify({'success': False, 'error': 'Données manquantes'})
-        
-        demande = db.session.get(DemandeIntervention, demande_id)
-        if not demande or demande.statut not in ['nouveau', 'a_reaffecter']:
-            return jsonify({'success': False, 'error': 'Demande non valide'})
-        
-        # Vérification des permissions selon le service
-        if current_user.role == 'chef_pilote' and current_user.service != 'SAV,Production':
-            if demande.service != current_user.service:
-                return jsonify({'success': False, 'error': 'Service non autorisé'})
-        
-        demande.statut = 'reporte'
-        demande.commentaire_interv = commentaire
-        if date_report:
-            demande.date_echeance = datetime.strptime(date_report, '%Y-%m-%d').date()
-        
-        db.session.commit()
-        
-        log_activity(
-            user_id=current_user.id,
-            action='report',
-            module='demandes',
-            entity_id=demande.id,
-            entity_name=f"Demande {demande.nd}",
-            details={'commentaire': commentaire, 'date_report': date_report}
-        )
-        
-        return jsonify({'success': True, 'message': 'Demande reportée avec succès'})
-    
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)})
+    if success:
+        return jsonify({'success': True, 'message': 'Réservation rejetée'})
+    else:
+        return jsonify({'success': False, 'message': message})
