@@ -414,7 +414,7 @@ def affecter_demande():
 
 
 def auto_dispatch_logic(demande_ids=None):
-    """Logique de dispatching automatique des demandes aux équipes disponibles."""
+    """Logique de dispatching automatique basée sur la colonne 'equipe' de l'import et les équipes publiées."""
     today = date.today()
     
     # 1. Récupérer les demandes à dispatcher
@@ -439,12 +439,30 @@ def auto_dispatch_logic(demande_ids=None):
     ).all()
     
     if not equipes:
-        print(f"DEBUG: Aucune équipe publiée pour aujourd'hui ({today})")
+        print(f"DEBUG: Aucune équipe publiée")
         return 0
+
+    # 3. Préparer le mapping des techniciens par nom pour le dispatch direct
+    # On crée un dictionnaire : "prenomnom" ou "nomprenom" -> (User, Equipe)
+    tech_by_name = {}
+    for eq in equipes:
+        for m in eq.membres:
+            if m.technicien_id:
+                # Normalisation : minuscule, sans espaces
+                p = (m.prenom or '').lower().strip()
+                n = (m.nom or '').lower().strip()
+                key1 = "".join(f"{p}{n}".split())
+                key2 = "".join(f"{n}{p}".split())
+                
+                # On récupère l'objet User une seule fois
+                u = User.query.get(m.technicien_id)
+                if u:
+                    if key1: tech_by_name[key1] = (u, eq)
+                    if key2: tech_by_name[key2] = (u, eq)
 
     assigned_count = 0
     
-    # helper pour la zone — identique à la logique du dispatching
+    # Helper pour la zone
     def normalize_zone_local(zone):
         z = (zone or '').upper()
         if any(x in z for x in ['MBOUR', 'KAOLACK', 'FATICK']):
@@ -453,12 +471,55 @@ def auto_dispatch_logic(demande_ids=None):
             if 'FATICK' in z: return 'FATICK'
         return 'DAKAR'
 
-    for equipe in equipes:
-        # Trouver le technicien de l'équipe
-        membre_tech = next((m for m in equipe.membres if m.type_membre == 'technicien'), None)
+    # PASSE 1 : Dispatching par nom (Colonne 'equipe' du fichier importé)
+    for demande in demandes:
+        if not demande.equipe:
+            continue
+            
+        # Chercher une correspondance exacte dans notre mapping
+        search_target = "".join(demande.equipe.lower().split())
         
-        # S'il n'y a pas de membre marqué 'technicien', on prend le premier membre si l'équipe n'en a qu'un
-        # (Cas où l'utilisateur a créé l'équipe sans spécifier explicitement les rôles internes)
+        # On essaie aussi le match partiel si l'import contient plus de texte (ex: "Equipe John Doe")
+        matched_tech_data = None
+        if search_target in tech_by_name:
+            matched_tech_data = tech_by_name[search_target]
+        else:
+            # Matcher plus souple (si le nom du technicien est contenu dans la chaîne 'equipe')
+            for name_key, data in tech_by_name.items():
+                if name_key in search_target or search_target in name_key:
+                    matched_tech_data = data
+                    break
+        
+        if matched_tech_data:
+            technicien, equipe = matched_tech_data
+            
+            # Vérifier quand même la zone et techno pour éviter les erreurs grossières d'import
+            # (Optionnel : l'utilisateur veut forcer selon le fichier, on peut être plus souple)
+            try:
+                demande.technicien_id = technicien.id
+                demande.statut = 'affecte'
+                demande.date_affectation = datetime.now(timezone.utc)
+                
+                intervention = Intervention(
+                    demande_id=demande.id,
+                    technicien_id=technicien.id,
+                    equipe_id=equipe.id,
+                    date_debut=datetime.now(timezone.utc),
+                    statut='en_cours'
+                )
+                db.session.add(intervention)
+                assigned_count += 1
+                demande.statut = 'assigned_internal' # Marqueur temporaire
+                print(f"DEBUG Fixe: Demande {demande.nd} -> Tech {technicien.username} (via colonne Equipe)")
+            except Exception as e:
+                db.session.rollback()
+                print(f"Erreur dispatch fixe {demande.id}: {e}")
+
+    # PASSE 2 : Dispatching automatique classique pour les demandes restantes
+    # (celles qui n'avaient pas de nom d'équipe ou dont le nom n'a pas été trouvé)
+    for equipe in equipes:
+        # Trouver le technicien principal
+        membre_tech = next((m for m in equipe.membres if m.type_membre == 'technicien'), None)
         if not membre_tech and len(equipe.membres) == 1:
             membre_tech = equipe.membres[0]
             
@@ -469,47 +530,30 @@ def auto_dispatch_logic(demande_ids=None):
         if not technicien:
             continue
 
-        # Vérifier si le technicien est déjà occupé avec une intervention active (affecté, en cours, etc.)
-        # Important: Un technicien ne peut avoir qu'une intervention active à la fois dans ce mode
-        interv_active = Intervention.query.filter(
-            Intervention.technicien_id == technicien.id,
-            Intervention.statut.in_(['en_cours', 'affecte', 'nouveau'])
-        ).first()
+        # Note: Suppression de la restriction "interv_active" car l'utilisateur veut plusieurs interventions
         
-        if interv_active:
-            print(f"DEBUG: Technicien {technicien.username} déjà occupé par l'intervention {interv_active.id}")
-            continue
-            
-        # Normaliser la zone de l'équipe
         team_norm_zone = normalize_zone_local(equipe.zone)
         
-        # Trouver une demande compatible pour cette équipe
         for demande in demandes:
             if demande.statut not in ['nouveau', 'a_reaffecter']:
                 continue
                 
-            # Vérifier zone (doivent être dans la même zone normalisée)
-            demand_norm_zone = normalize_zone_local(demande.zone)
-            if team_norm_zone != demand_norm_zone:
+            if normalize_zone_local(demande.zone) != team_norm_zone:
                 continue
                 
-            # Vérifier service (SAV ou Production - Supporte les équipes mixtes comme "SAV,Production")
-            team_services = [s.strip().upper() for s in (equipe.service or '').split(',')]
-            demand_service = (demande.service or '').strip().upper()
-            if demand_service not in team_services:
-                continue
-                
-            # Vérifier technologies
             if not is_technicien_compatible(technicien, demande):
                 continue
+            
+            # Vérifier service
+            team_services = [s.strip().upper() for s in (equipe.service or '').split(',')]
+            if (demande.service or '').strip().upper() not in team_services:
+                continue
                 
-            # Tout correspond ! On affecte.
             try:
                 demande.technicien_id = technicien.id
                 demande.statut = 'affecte'
                 demande.date_affectation = datetime.now(timezone.utc)
                 
-                # Créer l'intervention
                 intervention = Intervention(
                     demande_id=demande.id,
                     technicien_id=technicien.id,
@@ -518,21 +562,16 @@ def auto_dispatch_logic(demande_ids=None):
                     statut='en_cours'
                 )
                 db.session.add(intervention)
-                
                 assigned_count += 1
-                # Demande marquée comme traitée pour cette boucle
-                demande.statut = 'assigned_internal' 
+                demande.statut = 'assigned_internal'
                 
-                print(f"DEBUG: Affectation automatique: Demande {demande.nd} -> Equipe {equipe.nom_equipe}")
-                
-                # Une seule demande par équipe à la fois
+                # On limite quand même le dispatching auto-générique à une demande par boucle
+                # pour garder une distribution équitable entre les équipes
                 break 
-                
             except Exception as e:
-                print(f"Erreur lors du dispatch auto de la demande {demande.id}: {e}")
                 db.session.rollback()
 
-    # Nettoyage du statut temporaire et commit final
+    # Finalisation
     for d in demandes:
         if getattr(d, 'statut', '') == 'assigned_internal':
             d.statut = 'affecte'
