@@ -626,15 +626,39 @@ function attachRefreshListener() {
 // 6. TEAMS MANAGEMENT
 // ============================================================================
 
+// Selection state
+let selectedTeamIds = new Set();
+let currentSelectionTeams = [];
+let currentSelectionAction = '';
+
 /**
  * Show team publication selection modal
  */
 function showPublicationSelection() {
+    selectedTeamIds.clear();
     fetch('/api/all-teams')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
+                currentSelectionTeams = data.teams;
                 showTeamsSelectionModal(data.teams, 'publish');
+            } else {
+                alert('Erreur lors du chargement: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Erreur: ' + error.message);
+        });
+}
+
+function showUnpublishSelection() {
+    selectedTeamIds.clear();
+    fetch('/api/all-teams')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentSelectionTeams = data.teams;
+                showTeamsSelectionModal(data.teams, 'unpublish');
             } else {
                 alert('Erreur lors du chargement: ' + data.error);
             }
@@ -648,81 +672,39 @@ function showPublicationSelection() {
  * Show teams selection modal
  */
 function showTeamsSelectionModal(teams, action = 'publish') {
+    currentSelectionAction = action;
+    
     let modalHtml = `
     <div class="modal fade" id="teamsSelectionModal" tabindex="-1">
         <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">
+                        <i data-feather="${action === 'publish' ? 'send' : 'eye-off'}" class="me-2"></i>
                         ${action === 'publish' ? 'Sélectionner les équipes à publier' : 'Sélectionner les équipes à dépublier'}
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    <div class="row mb-3 align-items-end">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">Rechercher une équipe</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white"><i data-feather="search" style="width: 16px;"></i></span>
+                                <input type="text" id="teamSearchInput" class="form-control" placeholder="Nom, zone, technologie ou service..." >
+                            </div>
+                        </div>
+                    </div>
     `;
 
     if (teams.length === 0) {
         modalHtml += '<p class="text-muted">Aucune équipe créée.</p>';
     } else {
-        const filteredTeams = action === 'publish'
-            ? teams.filter(team => !team.publie)
-            : teams.filter(team => team.publie);
-
-        if (filteredTeams.length === 0) {
-            const message = action === 'publish'
-                ? 'Toutes les équipes sont déjà publiées.'
-                : 'Aucune équipe n\'est actuellement publiée.';
-            modalHtml += `<p class="text-info">${message}</p>`;
-        } else {
-            modalHtml += `
-            <div class="mb-3">
-                <button type="button" class="btn btn-sm btn-outline-primary select-all-btn" data-select="true">
-                    <i data-feather="check-square"></i> Tout sélectionner
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary ms-2 select-all-btn" data-select="false">
-                    <i data-feather="square"></i> Tout désélectionner
-                </button>
+        modalHtml += `
+            <div id="selection-teams-container">
+                ${renderSelectionTable(teams, action)}
             </div>
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead class="table-light">
-                        <tr>
-                            <th width="40">
-                                <input type="checkbox" id="selectAllCheckbox" class="master-checkbox">
-                            </th>
-                            <th>Équipe</th>
-                            <th>Zone</th>
-                            <th>Service</th>
-                            <th>Technologies</th>
-                            <th>Membres</th>
-                            <th>Statut</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-
-            filteredTeams.forEach(team => {
-                const statusBadge = team.publie
-                    ? '<span class="badge bg-success">Disponible</span>'
-                    : '<span class="badge bg-secondary">Non disponible</span>';
-
-                modalHtml += `
-                <tr>
-                    <td>
-                        <input type="checkbox" class="team-checkbox" value="${team.id}" data-team-name="${team.nom_equipe}">
-                    </td>
-                    <td><strong>${team.nom_equipe}</strong></td>
-                    <td>${team.zone}</td>
-                    <td><span class="badge bg-primary">${team.service}</span></td>
-                    <td><span class="badge bg-secondary">${team.technologies}</span></td>
-                    <td>${team.nb_membres}</td>
-                    <td>${statusBadge}</td>
-                </tr>
-            `;
-            });
-
-            modalHtml += '</tbody></table></div>';
-        }
+        `;
     }
 
     modalHtml += `
@@ -774,6 +756,84 @@ function showTeamsSelectionModal(teams, action = 'publish') {
     }
 }
 
+function renderSelectionTable(teams, action) {
+    const filteredTeams = action === 'publish'
+        ? teams.filter(team => !team.publie)
+        : teams.filter(team => team.publie);
+
+    if (filteredTeams.length === 0) {
+        return `<p class="text-info">${action === 'publish' ? 'Aucune équipe à publier.' : 'Aucune équipe à dépublier.'}</p>`;
+    }
+
+    let html = `
+    <div class="mb-3 d-flex justify-content-between align-items-center">
+        <div>
+            <button type="button" class="btn btn-sm btn-outline-primary select-all-btn" data-select="true">
+                <i data-feather="check-square"></i> Tout sélectionner
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary ms-2 select-all-btn" data-select="false">
+                <i data-feather="square"></i> Tout désélectionner
+            </button>
+        </div>
+        <div class="text-muted small">
+            ${selectedTeamIds.size} équipe(s) sélectionnée(s)
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th width="40"><input type="checkbox" id="selectAllCheckbox" class="master-checkbox"></th>
+                    <th>Équipe</th>
+                    <th>Zone</th>
+                    <th>Service</th>
+                    <th>Technologies</th>
+                    <th>Membres</th>
+                    <th>Statut</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    filteredTeams.forEach(team => {
+        const statusBadge = team.publie ? '<span class="badge bg-success">Disponible</span>' : '<span class="badge bg-secondary">Brouillon</span>';
+        const isChecked = selectedTeamIds.has(team.id);
+        html += `
+        <tr>
+            <td><input type="checkbox" class="team-checkbox" value="${team.id}" ${isChecked ? 'checked' : ''}></td>
+            <td><strong>${team.nom_equipe}</strong></td>
+            <td><span class="badge bg-info">${team.zone}</span></td>
+            <td><span class="badge bg-primary">${team.service}</span></td>
+            <td><small class="badge bg-secondary">${team.technologies}</small></td>
+            <td class="text-center">${team.nb_membres}</td>
+            <td>${statusBadge}</td>
+        </tr>`;
+    });
+
+    html += '</tbody></table></div>';
+    return html;
+}
+
+function filterSelectionTeams() {
+    const input = document.getElementById('teamSearchInput');
+    if (!input) return;
+    const query = input.value.toLowerCase();
+    
+    const filtered = currentSelectionTeams.filter(t => 
+        t.nom_equipe.toLowerCase().includes(query) || 
+        t.zone.toLowerCase().includes(query) ||
+        t.technologies.toLowerCase().includes(query) ||
+        t.service.toLowerCase().includes(query)
+    );
+
+    const container = document.getElementById('selection-teams-container');
+    if (container) {
+        container.innerHTML = renderSelectionTable(filtered, currentSelectionAction);
+        attachTeamsSelectionListeners();
+        if (typeof feather !== 'undefined') feather.replace();
+    }
+}
+
 /**
  * Attach team selection event listeners
  */
@@ -782,20 +842,34 @@ function attachTeamsSelectionListeners() {
     const teamCheckboxes = document.querySelectorAll('.team-checkbox');
     const selectAllBtns = document.querySelectorAll('.select-all-btn');
     const publishActionBtn = document.getElementById('publishActionBtn');
+    const searchInput = document.getElementById('teamSearchInput');
+
+    if (searchInput && !searchInput.dataset.listenerAttached) {
+        searchInput.addEventListener('keyup', filterSelectionTeams);
+        searchInput.dataset.listenerAttached = 'true';
+    }
 
     if (masterCheckbox) {
         masterCheckbox.addEventListener('change', function() {
             teamCheckboxes.forEach(checkbox => {
                 checkbox.checked = this.checked;
+                updateSelectedTeam(parseInt(checkbox.value), this.checked);
             });
         });
     }
+
+    teamCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            updateSelectedTeam(parseInt(this.value), this.checked);
+        });
+    });
 
     selectAllBtns.forEach(btn => {
         btn.addEventListener('click', function() {
             const shouldSelect = this.getAttribute('data-select') === 'true';
             teamCheckboxes.forEach(checkbox => {
                 checkbox.checked = shouldSelect;
+                updateSelectedTeam(parseInt(checkbox.value), shouldSelect);
             });
             if (masterCheckbox) {
                 masterCheckbox.checked = shouldSelect;
@@ -803,11 +877,55 @@ function attachTeamsSelectionListeners() {
         });
     });
 
-    if (publishActionBtn) {
+    if (publishActionBtn && !publishActionBtn.dataset.listenerAttached) {
         publishActionBtn.addEventListener('click', function() {
             const action = this.getAttribute('data-action');
-            performTeamAction(action);
+            if (action === 'publish') {
+                publishSelectedTeams();
+            } else {
+                unpublishSelectedTeams();
+            }
         });
+        publishActionBtn.dataset.listenerAttached = 'true';
+    }
+}
+
+function updateSelectedTeam(id, isChecked) {
+    if (isChecked) {
+        selectedTeamIds.add(id);
+    } else {
+        selectedTeamIds.delete(id);
+    }
+    // Update counter display if exists
+    const counterEl = document.querySelector('.text-muted.small');
+    if (counterEl) {
+        counterEl.textContent = `${selectedTeamIds.size} équipe(s) sélectionnée(s)`;
+    }
+}
+
+function publishSelectedTeams() {
+    const selectedTeams = Array.from(selectedTeamIds);
+    if (selectedTeams.length === 0) {
+        alert('Veuillez sélectionner au moins une équipe à publier.');
+        return;
+    }
+    if (confirm(`Confirmer la publication de ${selectedTeams.length} équipe(s) ?`)) {
+        performBulkTeamAction('publish', selectedTeams);
+        const modal = bootstrap.Modal.getInstance(document.getElementById('teamsSelectionModal'));
+        if (modal) modal.hide();
+    }
+}
+
+function unpublishSelectedTeams() {
+    const selectedTeams = Array.from(selectedTeamIds);
+    if (selectedTeams.length === 0) {
+        alert('Veuillez sélectionner au moins une équipe à dépublier.');
+        return;
+    }
+    if (confirm(`Confirmer la dépublication de ${selectedTeams.length} équipe(s) ?`)) {
+        performBulkTeamAction('unpublish', selectedTeams);
+        const modal = bootstrap.Modal.getInstance(document.getElementById('teamsSelectionModal'));
+        if (modal) modal.hide();
     }
 }
 

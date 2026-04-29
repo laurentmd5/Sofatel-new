@@ -828,9 +828,11 @@ function getStatusColor(status) {
     let sortNameOrder = 'asc';
     let currentManagementTeams = [];
     let sortManagementOrder = 'asc';
+    let selectedTeamIds = new Set(); // Global state for persistence
 
     // Fonctions de publication des équipes
     function showPublicationSelection() {
+        selectedTeamIds.clear(); // Reset selection for new session
         fetch('/api/all-teams')
             .then(response => response.json())
             .then(data => {
@@ -846,6 +848,7 @@ function getStatusColor(status) {
     }
 
     function showUnpublishSelection() {
+        selectedTeamIds.clear(); // Reset selection for new session
         fetch('/api/all-teams')
             .then(response => response.json())
             .then(data => {
@@ -974,9 +977,10 @@ function getStatusColor(status) {
 
         filteredTeams.forEach(team => {
             const statusBadge = team.publie ? '<span class="badge bg-success">Disponible</span>' : '<span class="badge bg-secondary">Non disponible</span>';
+            const isChecked = selectedTeamIds.has(team.id);
             html += `
             <tr>
-                <td><input type="checkbox" class="team-checkbox" value="${team.id}" data-team-name="${team.nom_equipe}"></td>
+                <td><input type="checkbox" class="team-checkbox" value="${team.id}" data-team-name="${team.nom_equipe}" ${isChecked ? 'checked' : ''} onchange="updateSelectedTeam(${team.id}, this.checked)"></td>
                 <td><strong>${team.nom_equipe}</strong></td>
                 <td><span class="badge bg-info">${team.zone}</span></td>
                 <td><span class="badge bg-primary">${team.service}</span></td>
@@ -988,6 +992,14 @@ function getStatusColor(status) {
 
         html += '</tbody></table></div>';
         return html;
+    }
+
+    function updateSelectedTeam(id, isChecked) {
+        if (isChecked) {
+            selectedTeamIds.add(id);
+        } else {
+            selectedTeamIds.delete(id);
+        }
     }
 
     function renderSelectionActionButton(teams, action) {
@@ -1039,9 +1051,10 @@ function getStatusColor(status) {
 
         checkboxes.forEach(checkbox => {
             checkbox.checked = select;
+            updateSelectedTeam(parseInt(checkbox.value), select);
         });
 
-        selectAllCheckbox.checked = select;
+        if (selectAllCheckbox) selectAllCheckbox.checked = select;
     }
 
     function toggleAllTeams(masterCheckbox) {
@@ -1053,8 +1066,7 @@ function getStatusColor(status) {
     }
 
     function publishSelectedTeams() {
-        const selectedCheckboxes = document.querySelectorAll('.team-checkbox:checked');
-        const selectedTeams = Array.from(selectedCheckboxes).map(cb => parseInt(cb.value));
+        const selectedTeams = Array.from(selectedTeamIds);
 
         if (selectedTeams.length === 0) {
             alert('Veuillez sélectionner au moins une équipe à publier.');
