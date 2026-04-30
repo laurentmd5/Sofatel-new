@@ -42,6 +42,25 @@ def process_excel_file(filepath, service, importe_par):
         df.columns = [str(col).strip().upper().replace('\xa0', '').replace('\u200b', '') for col in df.columns]
         df = df.dropna(how='all')
         
+        # 1. Préparer le mapping des équipes pour le dispatch automatique
+        equipe_map = {}
+        try:
+            all_equipes = db.session.query(Equipe, MembreEquipe).join(
+                MembreEquipe, MembreEquipe.equipe_id == Equipe.id
+            ).filter(
+                Equipe.actif == True,
+                MembreEquipe.type_membre == 'technicien'
+            ).all()
+            
+            for eq, mem in all_equipes:
+                if eq.nom_equipe:
+                    equipe_map[eq.nom_equipe.strip().upper()] = {
+                        'tech_id': mem.technicien_id,
+                        'equipe_id': eq.id
+                    }
+        except Exception as e:
+            print(f"Erreur lors de la préparation du mapping des équipes: {e}")
+        
         # Vérifier le type de fichier
         file_type = determine_file_type(set(df.columns))
         
@@ -208,6 +227,27 @@ def process_excel_file(filepath, service, importe_par):
                 )
                 
                 db.session.add(demande)
+                
+                # 2. Dispatch automatique si le nom de l'équipe correspond
+                equipe_name_raw = safe_str(row.get('equipe'))
+                equipe_name = equipe_name_raw.upper()
+                if equipe_name in equipe_map:
+                    target = equipe_map[equipe_name]
+                    demande.technicien_id = target['tech_id']
+                    demande.statut = 'affecte'
+                    demande.date_affectation = datetime.now()
+                    
+                    # Créer l'intervention associée
+                    intervention = Intervention(
+                        demande=demande,
+                        technicien_id=target['tech_id'],
+                        equipe_id=target['equipe_id'],
+                        date_debut=datetime.now(),
+                        statut='en_cours'
+                    )
+                    db.session.add(intervention)
+                    print(f"Dispatch auto: Demande {demande.nd} affectée à l'équipe {equipe_name_raw}")
+                
                 nb_lignes += 1
                 
             except Exception as e:
@@ -241,6 +281,25 @@ def process_excel_file_production(filepath, service, importe_par, fichier_import
         # Mettre à jour le service du fichier d'import
         fichier_import.service = service
         db.session.commit()
+        
+        # 1. Préparer le mapping des équipes pour le dispatch automatique
+        equipe_map = {}
+        try:
+            all_equipes = db.session.query(Equipe, MembreEquipe).join(
+                MembreEquipe, MembreEquipe.equipe_id == Equipe.id
+            ).filter(
+                Equipe.actif == True,
+                MembreEquipe.type_membre == 'technicien'
+            ).all()
+            
+            for eq, mem in all_equipes:
+                if eq.nom_equipe:
+                    equipe_map[eq.nom_equipe.strip().upper()] = {
+                        'tech_id': mem.technicien_id,
+                        'equipe_id': eq.id
+                    }
+        except Exception as e:
+            print(f"Erreur lors de la préparation du mapping des équipes (Prod): {e}")
         
         # Mapping des colonnes spécifiques à la production
         expected_columns = {
@@ -355,6 +414,27 @@ def process_excel_file_production(filepath, service, importe_par, fichier_import
                 )
                 
                 db.session.add(demande)
+                
+                # 2. Dispatch automatique si le nom de l'équipe correspond
+                equipe_name_raw = safe_str(row.get('equipe'))
+                equipe_name = equipe_name_raw.upper()
+                if equipe_name in equipe_map:
+                    target = equipe_map[equipe_name]
+                    demande.technicien_id = target['tech_id']
+                    demande.statut = 'affecte'
+                    demande.date_affectation = datetime.now()
+                    
+                    # Créer l'intervention associée
+                    intervention = Intervention(
+                        demande=demande,
+                        technicien_id=target['tech_id'],
+                        equipe_id=target['equipe_id'],
+                        date_debut=datetime.now(),
+                        statut='en_cours'
+                    )
+                    db.session.add(intervention)
+                    print(f"Dispatch auto (Prod): Demande {demande.nd} affectée à l'équipe {equipe_name_raw}")
+                
                 nb_lignes += 1
                 
             except Exception as e:
