@@ -53,7 +53,7 @@ def process_excel_file(filepath, service, importe_par):
             ).all()
             
             for eq, mem in all_equipes:
-                if eq.nom_equipe:
+                if eq.nom_equipe and mem.technicien_id:
                     equipe_map[eq.nom_equipe.strip().upper()] = {
                         'tech_id': mem.technicien_id,
                         'equipe_id': eq.id
@@ -293,7 +293,7 @@ def process_excel_file_production(filepath, service, importe_par, fichier_import
             ).all()
             
             for eq, mem in all_equipes:
-                if eq.nom_equipe:
+                if eq.nom_equipe and mem.technicien_id:
                     equipe_map[eq.nom_equipe.strip().upper()] = {
                         'tech_id': mem.technicien_id,
                         'equipe_id': eq.id

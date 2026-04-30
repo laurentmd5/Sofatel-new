@@ -640,6 +640,22 @@ def dispatching_automatique():
         return jsonify({'success': False, 'error': 'Accès non autorisé'})
 
     try:
+        # 1. Préparer le mapping des équipes pour le dispatch automatique
+        equipe_map = {}
+        all_equipes = db.session.query(Equipe, MembreEquipe).join(
+            MembreEquipe, MembreEquipe.equipe_id == Equipe.id
+        ).filter(
+            Equipe.actif == True,
+            MembreEquipe.type_membre == 'technicien'
+        ).all()
+        
+        for eq, mem in all_equipes:
+            if eq.nom_equipe and mem.technicien_id:
+                equipe_map[eq.nom_equipe.strip().upper()] = {
+                    'tech_id': mem.technicien_id,
+                    'equipe_id': eq.id
+                }
+
         # Récupérer les demandes non affectées
         query = DemandeIntervention.query.filter_by(statut='nouveau')
         if current_user.role == 'chef_pilote' and current_user.service:
@@ -649,29 +665,56 @@ def dispatching_automatique():
         affectations = 0
 
         for demande in demandes:
-            # Trouver le meilleur technicien selon les critères
-            technicien = find_best_technicien(demande)
-            if technicien:
-                demande.technicien_id = technicien.id
+            technicien_id = None
+            equipe_id = None
+            
+            # Priorité 1: Si la demande a un nom d'équipe qui matche une équipe existante
+            equipe_name = (demande.equipe or '').strip().upper()
+            if equipe_name in equipe_map:
+                target = equipe_map[equipe_name]
+                technicien_id = target['tech_id']
+                equipe_id = target['equipe_id']
+                print(f"Auto-dispatch (Team Match): Demande {demande.nd} -> Equipe {equipe_name}")
+            
+            # Priorité 2: Sinon utiliser l'algo de dispatch classique
+            if not technicien_id:
+                technicien = find_best_technicien(demande)
+                if technicien:
+                    technicien_id = technicien.id
+                    # On cherche si ce tech appartient à une équipe pour lier l'intervention
+                    membre = MembreEquipe.query.filter_by(technicien_id=technicien_id, type_membre='technicien').first()
+                    if membre:
+                        equipe_id = membre.equipe_id
+
+            if technicien_id:
+                demande.technicien_id = technicien_id
                 demande.statut = 'affecte'
                 demande.date_affectation = datetime.now(timezone.utc)
 
+                # Créer l'enregistrement d'intervention (CRUCIAL pour l'affichage tech)
+                intervention = Intervention(
+                    demande_id=demande.id,
+                    technicien_id=technicien_id,
+                    equipe_id=equipe_id,
+                    date_debut=datetime.now(timezone.utc),
+                    statut='en_cours'
+                )
+                db.session.add(intervention)
+
                 # Créer notification SMS
-                create_sms_notification(technicien.id, demande.id,
-                                        'affectation')
+                create_sms_notification(technicien_id, demande.id, 'affectation')
                 affectations += 1
 
         db.session.commit()
 
         return jsonify({
-            'success':
-            True,
-            'message':
-            f'{affectations} demandes affectées automatiquement'
+            'success': True,
+            'message': f'{affectations} demandes affectées automatiquement'
         })
 
     except Exception as e:
         db.session.rollback()
+        print(f"Erreur dispatch auto: {str(e)}")
         return jsonify({'success': False, 'error': str(e)})
 
 
