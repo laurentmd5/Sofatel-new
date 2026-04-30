@@ -715,7 +715,7 @@ function getEquipeIdFromUrl() {
 // Notifications
 function showNotification(message, type = 'info') {
     const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert - ${type === 'error' ? 'danger' : type} alert - dismissible fade show position - fixed`;
+    alertDiv.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
     alertDiv.style.top = '10px';
     alertDiv.style.right = '10px';
     alertDiv.style.zIndex = '9999';
@@ -755,7 +755,7 @@ function toggleEquipeStatus(equipeId, actif) {
     if (!confirm(`Êtes - vous sûr de vouloir ${action} cette équipe ? `)) {
         return;
     }
-    fetch(`/ toggle - equipe - status / ${equipeId} `, {
+    fetch(`/toggle-equipe-status/${equipeId}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

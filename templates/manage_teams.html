@@ -217,7 +217,7 @@
                         <tbody id="membresTableBody">
                             {% if equipe.membres %}
                             {% for membre in equipe.membres %}
-                            <tr id="membre-{{ membre.id }}">
+                            <tr id="membre-{{ membre.id }}" data-membre-id="{{ membre.id }}">
                                 <td>{{ membre.nom }}</td>
                                 <td>{{ membre.prenom }}</td>
                                 <td>
@@ -247,7 +247,7 @@
                                 </td>
                                 <td>
                                     <button class="btn btn-sm btn-outline-danger"
-                                        onclick="removeMembre({{ membre.id }})" title="Supprimer">
+                                        onclick="removeMembre('membre-{{ membre.id }}')" title="Supprimer">
                                         <i data-feather="trash-2" style="width: 16px; height: 16px;"></i>
                                     </button>
                                 </td>
