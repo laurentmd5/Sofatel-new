@@ -137,7 +137,9 @@ class MobileNavManager {
         });
 
         // Initialize Feather icons in navbar
-        if (typeof feather !== 'undefined') {
+        if (typeof window.safeFeatherReplace === 'function') {
+            window.safeFeatherReplace();
+        } else if (typeof feather !== 'undefined') {
             feather.replace();
         }
     }

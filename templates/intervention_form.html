@@ -740,8 +740,8 @@
                 </div>
                 <div class="row">
                     <div class="col-md-3 form-field-group">
-                        <label class="form-label">Étage</label>
-                        <input type="text" class="form-control" name="etage" placeholder="Rdc, 1er, 2e...">
+                        <label class="form-label">Étage*</label>
+                        <input type="text" class="form-control" name="etage" placeholder="Rdc, 1er, 2e..." required>
                     </div>
                     <div class="col-md-3 form-field-group">
                         <label class="form-label">Heure début*</label>
@@ -839,12 +839,12 @@
                 <h5><i data-feather="settings" class="me-2"></i>Configuration</h5>
                 <div class="row">
                     <div class="col-md-3 form-field-group">
-                        <label class="form-label">Technicien structure</label>
-                        <input type="text" class="form-control" name="technicien_structure">
+                        <label class="form-label">Technicien structure*</label>
+                        <input type="text" class="form-control" name="technicien_structure" required>
                     </div>
                     <div class="col-md-3 form-field-group">
-                        <label class="form-label">Back-office structure</label>
-                        <input type="text" class="form-control" name="backoffice_structure">
+                        <label class="form-label">Back-office structure*</label>
+                        <input type="text" class="form-control" name="backoffice_structure" required>
                     </div>
                     <div class="col-md-3 form-field-group">
                         <label class="form-label">Offre*</label>
@@ -959,8 +959,8 @@
             <div class="form-section">
                 <h5><i data-feather="camera" class="me-2"></i>Documentation</h5>
                 <div class="form-field-group">
-                    <label class="form-label">Photos de l'intervention</label>
-                    <input type="file" class="form-control" name="photos" multiple accept="image/*">
+                    <label class="form-label">Photos de l'intervention*</label>
+                    <input type="file" class="form-control" name="photos" multiple accept="image/*" required>
                     <small class="form-text">Fichiers acceptés: JPG, PNG (Max 5MB chacun)</small>
                 </div>
             </div>
@@ -1060,7 +1060,7 @@
                     <span class="step-progress-text">Étape 4 sur 4 (Finale)</span>
                 </div>
                 <div class="form-actions-right">
-                    <button type="submit" class="btn btn-step btn-step-submit" onclick="event.preventDefault(); window.formManager.submit(event);">
+                    <button type="submit" class="btn btn-step btn-step-submit" data-submit-form onclick="event.preventDefault(); window.formManager.submit(event);">
                         <i data-feather="check" style="width: 16px; height: 16px;"></i> Soumettre
                     </button>
                 </div>

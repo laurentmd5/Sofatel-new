@@ -21,7 +21,8 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeSignaturePads();
     setupFormHandlers();
     setupAutoSave();
-    feather.replace();
+    if (typeof window.safeFeatherReplace === 'function') window.safeFeatherReplace();
+    else if (typeof feather !== 'undefined') feather.replace();
 });
 
 function initializeSignaturePads() {

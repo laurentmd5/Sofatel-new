@@ -7,7 +7,7 @@ class FormManager {
     constructor(formSelector) {
         this.form = document.querySelector(formSelector);
         if (!this.form) throw new Error(`Form not found: ${formSelector}`);
-        
+
         this.submitBtn = this.form.querySelector('[type="submit"]');
         this.isSubmitting = false;
         this.init();
@@ -23,7 +23,7 @@ class FormManager {
                 Toast.warning('Veuillez corriger les erreurs du formulaire');
                 return;
             }
-            
+
             // Set loading state only for non-file uploads with no fetch intercept
             if (this.submitBtn && !this.form.hasAttribute('data-no-loading')) {
                 this.setLoading(true);
@@ -72,7 +72,7 @@ class FormManager {
 
             if (response.ok) {
                 Toast.success(data.message || 'Opération réussie!');
-                
+
                 // Reset form if requested
                 if (this.form.hasAttribute('data-reset-on-success')) {
                     this.form.reset();
@@ -128,7 +128,7 @@ class FormManager {
             const field = this.form.querySelector(`[name="${fieldName}"]`);
             if (field) {
                 field.classList.add('is-invalid');
-                
+
                 // Remove old error message
                 const oldError = field.parentElement.querySelector('.invalid-feedback');
                 if (oldError) oldError.remove();
@@ -136,10 +136,10 @@ class FormManager {
                 // Add new error message
                 const errorDiv = document.createElement('div');
                 errorDiv.className = 'invalid-feedback d-block';
-                errorDiv.textContent = Array.isArray(errors[fieldName]) 
-                    ? errors[fieldName][0] 
+                errorDiv.textContent = Array.isArray(errors[fieldName])
+                    ? errors[fieldName][0]
                     : errors[fieldName];
-                
+
                 field.parentElement.appendChild(errorDiv);
             }
         });
@@ -229,7 +229,7 @@ function initializeRealTimeValidation() {
  */
 function initializeFileInputs() {
     document.querySelectorAll('input[type="file"]').forEach(input => {
-        input.addEventListener('change', function() {
+        input.addEventListener('change', function () {
             const files = this.files;
             if (files.length > 0) {
                 const fileNames = Array.from(files).map(f => f.name).join(', ');
@@ -259,20 +259,20 @@ function initializePasswordStrength() {
 
 function calculatePasswordStrength(password) {
     let strength = 0;
-    
+
     if (password.length >= 8) strength++;
     if (password.length >= 12) strength++;
     if (/[a-z]/.test(password) && /[A-Z]/.test(password)) strength++;
     if (/[0-9]/.test(password)) strength++;
     if (/[^a-zA-Z0-9]/.test(password)) strength++;
-    
+
     return Math.min(strength, 4);
 }
 
 function updateStrengthIndicator(indicator, strength) {
     const levels = ['', 'weak', 'fair', 'good', 'strong'];
     const colors = ['', 'danger', 'warning', 'info', 'success'];
-    
+
     indicator.className = 'password-strength';
     if (strength > 0) {
         indicator.classList.add(`strength-${levels[strength]}`);
@@ -292,7 +292,7 @@ function initializeCharacterCounters() {
     document.querySelectorAll('[maxlength][data-counter]').forEach(field => {
         const maxLength = field.maxLength;
         const counter = field.parentElement.querySelector('.char-counter');
-        
+
         if (counter) {
             const updateCounter = () => {
                 const remaining = maxLength - field.value.length;
@@ -333,7 +333,7 @@ class FormStepManager {
         this.currentStep = 1;
         this.totalSteps = this.form.querySelectorAll('[data-step]').length;
         this.validationRules = new Map();
-        
+
         // Options
         this.options = {
             autoFocus: options.autoFocus ?? true,
@@ -341,6 +341,8 @@ class FormStepManager {
             allowSkip: options.allowSkip ?? false,
             ...options
         };
+
+        this.isSubmitting = false;
 
         this.init();
     }
@@ -455,7 +457,11 @@ class FormStepManager {
         const value = field.value?.trim() || '';
         let error = null;
 
-        if (field.hasAttribute('required') && !value) {
+        if (field.type === 'checkbox') {
+            if (field.hasAttribute('required') && !field.checked) {
+                error = 'Champ obligatoire';
+            }
+        } else if (field.hasAttribute('required') && !value) {
             error = 'Champ obligatoire';
         }
 
@@ -479,17 +485,17 @@ class FormStepManager {
         switch (type) {
             case 'email':
                 return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? null : 'Email invalide';
-            
+
             case 'phone':
             case 'tel':
                 return /^(?:\+221|0)?[1-9]\d{8}$/.test(value.replace(/[\s\-\(\)]/g, '')) ? null : 'Téléphone invalide';
-            
+
             case 'number':
                 return !isNaN(value) && value !== '' ? null : 'Doit être un nombre';
-            
+
             case 'date':
                 return new Date(value) instanceof Date ? null : 'Date invalide';
-            
+
             case 'gps':
                 const parts = value.replace(/\s/g, '').split(/[,;]/);
                 if (parts.length === 2) {
@@ -497,7 +503,7 @@ class FormStepManager {
                     return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180 ? null : 'GPS invalide';
                 }
                 return 'Format GPS: lat,lon';
-            
+
             default:
                 return null;
         }
@@ -562,8 +568,12 @@ class FormStepManager {
     async submit(e) {
         e?.preventDefault();
 
+        if (this.isSubmitting) return false;
+        this.isSubmitting = true;
+
         if (!this.validateCurrentStep()) {
             this.scrollToFirstError();
+            this.isSubmitting = false;
             return false;
         }
 
@@ -575,25 +585,85 @@ class FormStepManager {
 
         try {
             const formData = new FormData(this.form);
+            // Récupérer le token CSRF depuis le meta tag ou le champ caché
+            const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+            const csrfInput = this.form.querySelector('input[name="csrf_token"]');
+            const csrfToken = (csrfMeta && csrfMeta.content) || (csrfInput && csrfInput.value) || '';
             const response = await fetch(this.form.action, {
                 method: 'POST',
                 body: formData,
-                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrfToken
+                },
+                redirect: 'manual'  // Ne pas suivre les redirects automatiquement
             });
 
-            if (response.ok) {
-                console.log('✅ Form submitted successfully');
+            // Si le serveur retourne une redirection (3xx), naviguer manuellement
+            if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) {
+                console.log('✅ Redirect reçu, navigation...');
                 this.clearProgress();
-                setTimeout(() => {
+                window.location.href = response.headers.get('Location') || '/';
+                return;
+            }
+
+            if (response.ok) {
+                const contentType = response.headers.get('content-type') || '';
+                if (contentType.includes('application/json')) {
+                    const data = await response.json();
+                    if (data.success) {
+                        console.log('✅ Formulaire soumis avec succès');
+                        this.clearProgress();
+                        setTimeout(() => {
+                            window.location.href = data.redirect || '/';
+                        }, 500);
+                    } else {
+                        // Afficher les erreurs de validation
+                        if (data.errors) {
+                            let errorList = [];
+                            Object.entries(data.errors).forEach(([field, msg]) => {
+                                const el = this.form.querySelector(`[name="${field}"]`);
+                                if (el) {
+                                    this.displayFieldError(el, msg);
+                                } else {
+                                    errorList.push(`${field}: ${msg}`);
+                                }
+                            });
+                            
+                            const errorMsg = data.error || (errorList.length > 0 ? 'Champs manquants: ' + errorList.join(', ') : 'Veuillez corriger les erreurs');
+                            if (typeof Toast !== 'undefined') {
+                                Toast.error(errorMsg);
+                            } else {
+                                alert('❌ Erreur: ' + errorMsg);
+                            }
+                        } else {
+                            const errorMsg = data.error || 'Une erreur est survenue';
+                            if (typeof Toast !== 'undefined') {
+                                Toast.error(errorMsg);
+                            } else {
+                                alert('❌ Erreur: ' + errorMsg);
+                            }
+                        }
+                    }
+                } else {
+                    // Réponse HTML → navigation directe
+                    console.log('✅ Réponse HTML reçue, navigation vers:', response.url);
+                    this.clearProgress();
                     window.location.href = response.url || '/';
-                }, 1500);
+                }
             } else {
-                throw new Error(`HTTP ${response.status}`);
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP ${response.status}`);
             }
         } catch (error) {
             console.error('❌ Submission error:', error);
-            Toast.error('Erreur lors de la soumission');
+            if (typeof Toast !== 'undefined') {
+                Toast.error('Erreur lors de la soumission: ' + error.message);
+            } else {
+                alert('❌ Erreur lors de la soumission: ' + error.message);
+            }
         } finally {
+            this.isSubmitting = false;
             if (submitBtn) {
                 submitBtn.classList.remove('loading');
                 submitBtn.disabled = false;
@@ -618,7 +688,7 @@ class FormStepManager {
             try {
                 const { currentStep } = JSON.parse(saved);
                 this.currentStep = currentStep;
-            } catch (e) {}
+            } catch (e) { }
         }
     }
 

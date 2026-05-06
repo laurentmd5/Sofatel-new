@@ -481,53 +481,34 @@ $(document).ready(function() {
     let currentIntervention = null;
 
 // Fonction pour afficher les détails de l'intervention dans la modal
-function displayInterventionDetails(intervention) {
+function displayInterventionDetails(data) {
+    // data contains { intervention, survey, fiche_technique }
+    const intervention = data.intervention || data;
+    const survey = data.survey;
+    const fiche = data.fiche_technique;
+    
     currentIntervention = intervention;
     
-    if (intervention.demande.service === 'Production') {
-         console.log('DEBUG: Service Production détecté:', intervention.demande.service);
-        console.log('DEBUG: fichier_technique_accessible =', intervention.fichier_technique_accessible);
-        if (intervention.fichier_technique_accessible===false) {
-            console.log('DEBUG: Chargement des données survey pour intervention ID:', intervention.id);
-            // Charger les données de la fiche survey
-            fetch(`/api/survey/${intervention.id}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        displaySurveyDetails(data.survey, data.intervention);
-                    } else {
-                        // Fallback: afficher les données de base
-                        displaySAVDetails(intervention);
-                    }
-                })
-                .catch(error => {
-                    console.error('Erreur chargement survey:', error);
-                    displaySAVDetails(intervention);
-                });
+    if (intervention.demande && intervention.demande.service === 'Production') {
+        console.log('DEBUG: Service Production détecté, checking associated data...');
+        
+        if (intervention.fichier_technique_accessible === true && fiche) {
+            console.log('DEBUG: Using pre-loaded Fiche Technique data');
+            displayFicheTechniqueDetails(fiche, intervention);
+        } else if (survey) {
+            console.log('DEBUG: Using pre-loaded Survey data');
+            displaySurveyDetails(survey, intervention);
         } else {
-            // Charger les données de la fiche technique
-            fetch(`/api/fiche-technique/${intervention.id}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        displayFicheTechniqueDetails(data.fiche_technique, data.intervention);
-                    } else {
-                        // Fallback: afficher les données de base
-                        displaySAVDetails(intervention);
-                    }
-                })
-                .catch(error => {
-                    console.error('Erreur chargement fiche technique:', error);
-                    displaySAVDetails(intervention);
-                });
+            console.log('DEBUG: No pre-loaded data found, falling back to SAV view');
+            displaySAVDetails(intervention, survey, fiche);
         }
     } else {
-        displaySAVDetails(intervention);
+        displaySAVDetails(intervention, survey, fiche);
     }
 }
 
 // Fonction pour afficher les détails SAV
-function displaySAVDetails(intervention) {
+function displaySAVDetails(intervention, survey, fiche) {
     let validateurInfo = 'Non validé';
     
     if (intervention.valideur && intervention.valideur.prenom) {
@@ -581,21 +562,150 @@ function displaySAVDetails(intervention) {
                 </div>
             </div>
             
-            <!-- Diagnostic -->
+            <!-- Adresse et Contact -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card card-enhanced">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-map-marker-alt me-2"></i> ADRESSE ET CONTACT</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <p class="mb-2"><strong>Client:</strong> ${survey?.nom_raison_sociale || intervention.demande.nom_client + ' ' + intervention.demande.prenom_client}</p>
+                                    <p class="mb-2"><strong>Contact:</strong> ${survey?.contact || '-'}</p>
+                                    <p class="mb-2"><strong>Représenté par:</strong> ${survey?.represente_par || '-'}</p>
+                                    <p class="mb-2"><strong>Adresse:</strong> ${survey?.adresse_demande || intervention.demande.libelle_commune + ', ' + intervention.demande.libelle_quartier}</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <p class="mb-2"><strong>Tél 1:</strong> ${survey?.tel1 || '-'}</p>
+                                    <p class="mb-2"><strong>Tél 2:</strong> ${survey?.tel2 || '-'}</p>
+                                    <p class="mb-2"><strong>Étage:</strong> ${survey?.etage || '-'}</p>
+                                    <p class="mb-2"><strong>GPS:</strong> ${survey?.gps_lat || 'N/A'}, ${survey?.gps_long || 'N/A'}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Données Techniques -->
             <div class="row mb-4">
                 <div class="col-12">
                     <div class="card">
                         <div class="card-header bg-primary text-white">
-                            <h5 class="mb-0"><i class="fas fa-search me-2"></i> DIAGNOSTIC</h5>
+                            <h5 class="mb-0"><i class="fas fa-microchip me-2"></i> DONNÉES TECHNIQUES</h5>
                         </div>
                         <div class="card-body">
-                            <p><strong>Numéro:</strong> ${intervention.demande.nd || '-'}</p>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <h6>Réseau</h6>
+                                    <p><strong>NRO:</strong> ${survey?.nro || '-'}</p>
+                                    <p><strong>Plaque:</strong> ${survey?.plaque || '-'}</p>
+                                    <p><strong>Type réseau:</strong> ${survey?.type_reseau || '-'}</p>
+                                    <p><strong>BPI/PBO:</strong> ${survey?.bpi || '-'}/${survey?.pbo || '-'}</p>
+                                </div>
+                                <div class="col-md-4">
+                                    <h6>Equipement</h6>
+                                    <p><strong>Modem:</strong> ${survey?.modem || '-'}</p>
+                                    <p><strong>ONT:</strong> ${survey?.ont || '-'}</p>
+                                    <p><strong>Gpon OLT:</strong> ${survey?.gpon_olt || '-'}</p>
+                                    <p><strong>Splitter:</strong> ${survey?.splitter || '-'}</p>
+                                </div>
+                                <div class="col-md-4">
+                                    <h6>Mesures</h6>
+                                    <p><strong>Valeur PBO:</strong> ${survey?.valeur_pbo_dbm || '-'} dBm</p>
+                                    <p><strong>Nb Prises:</strong> ${survey?.nb_prises || '-'}</p>
+                                    <p><strong>Distance Fibre:</strong> ${survey?.distance_fibre || '-'} m</p>
+                                    <p><strong>Etat Fibre:</strong> ${survey?.etat_fibre || '-'}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Configurations & Vitesses -->
+            <div class="row mb-4">
+                <div class="col-md-7">
+                    <div class="card h-100">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-cogs me-2"></i> CONFIGURATIONS</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <p><strong>Appel Sortant:</strong> ${intervention.appel_sortant ? '✓ OK' : '✗'}</p>
+                                    <p><strong>Envoi Numéro:</strong> ${intervention.envoi_numero || '-'}</p>
+                                    <p><strong>Appel Entrant:</strong> ${intervention.appel_entrant ? '✓ OK' : '✗'}</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <p><strong>Affichage Numéro:</strong> ${intervention.affichage_numero || '-'}</p>
+                                    <p><strong>TVO Mono:</strong> ${intervention.tvo_mono_ok ? '✓ OK' : '✗'}</p>
+                                </div>
+                            </div>
+                            <hr>
+                            <h6>Tests Débit</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <p><strong>Descendant:</strong> ${intervention.debit_mbs_descendant || '-'} Mbps</p>
+                                    <p><strong>Montant:</strong> ${intervention.debit_cable_montant || '-'} Mbps</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <p><strong>Ping:</strong> ${intervention.debit_mbs_ping || '-'} ms</p>
+                                    <p><strong>Gigue:</strong> ${intervention.debit_ms || '-'} ms</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <div class="card h-100">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-wrench me-2"></i> TYPE D'INSTALLATION</h5>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Type MI:</strong> ${intervention.type_mi ? '✓ Oui' : '✗ Non'}</p>
+                            <p><strong>Type NA:</strong> ${intervention.type_na ? '✓ Oui' : '✗ Non'}</p>
+                            <p><strong>Type MA:</strong> ${intervention.type_ma ? '✓ Oui' : '✗ Non'}</p>
+                            <hr>
+                            <p><strong>Offre:</strong> ${intervention.offre || '-'}</p>
+                            <p><strong>Débit:</strong> ${intervention.debit || '-'}</p>
+                            <p><strong>Tech Structure:</strong> ${intervention.technicien_structure || '-'}</p>
+                            <p><strong>BO Structure:</strong> ${intervention.backoffice_structure || '-'}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Détail Intervention et Résultats -->
+            <div class="row mb-4">
+                <div class="col-md-8">
+                    <div class="card h-100">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-list-ul me-2"></i> DÉTAIL INTERVENTION</h5>
+                        </div>
+                        <div class="card-body">
                             <p><strong>Nature signalisation:</strong> ${intervention.nature_signalisation || '-'}</p>
                             <p><strong>Diagnostic technicien:</strong> ${intervention.diagnostic_technicien || '-'}</p>
                             <p><strong>Cause du dérangement:</strong> ${intervention.cause_derangement || '-'}</p>
                             <p><strong>Action relevée:</strong> ${intervention.action_releve || '-'}</p>
                             <p><strong>Constitutions:</strong> ${intervention.constitutions || '-'}</p>
                             <p><strong>Valeur pB0:</strong> ${intervention.valeur_pB0 || '-'}</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100 border-success">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="mb-0"><i class="fas fa-check-circle me-2"></i> RÉSULTATS OBTENUS</h5>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Conclusion:</strong> ${survey?.conclusion || '-'}</p>
+                            <p><strong>Satisfaction:</strong> ${intervention.satisfaction || '-'}</p>
+                            <p><strong>Equipe satisfaite:</strong> ${survey?.client_satisfait ? 'Oui' : 'Non'}</p>
+                            <hr>
+                            <p><strong>Observations:</strong><br>${survey?.observation_tech || '-'}</p>
                         </div>
                     </div>
                 </div>
@@ -1232,16 +1342,36 @@ function displayFicheTechniqueDetails(ficheTechnique, intervention) {
         
         <!-- Informations installation -->
         <div class="row mb-4">
-            <div class="col-md-12">
-                <div class="card">
+            <div class="col-md-8">
+                <div class="card h-100">
                     <div class="card-header bg-primary text-white">
                         <h5 class="mb-0"><i class="fas fa-wrench me-2"></i> INFORMATIONS TECHNIQUES</h5>
                     </div>
                     <div class="card-body">
-                        <p class="mb-2"><strong>N° Ligne:</strong> ${ficheTechnique.n_ligne || 'Non renseigné'}</p>
-                        <p class="mb-2"><strong>N° Demande:</strong> ${ficheTechnique.n_demande || 'Non renseigné'}</p>
-                        <p class="mb-2"><strong>Offre:</strong> ${ficheTechnique.offre || 'Non renseignée'}</p>
-                        <p class="mb-2"><strong>Débit:</strong> ${ficheTechnique.debit || 'Non renseigné'}</p>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p class="mb-2"><strong>N° Ligne:</strong> ${ficheTechnique.n_ligne || 'Non renseigné'}</p>
+                                <p class="mb-2"><strong>N° Demande:</strong> ${ficheTechnique.n_demande || 'Non renseigné'}</p>
+                                <p class="mb-2"><strong>Offre:</strong> ${intervention.offre || ficheTechnique.offre || 'Non renseignée'}</p>
+                                <p class="mb-2"><strong>Débit:</strong> ${intervention.debit || ficheTechnique.debit || 'Non renseigné'}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p class="mb-2"><strong>Tech Structure:</strong> ${intervention.technicien_structure || ficheTechnique.technicien_structure || '-'}</p>
+                                <p class="mb-2"><strong>BO Structure:</strong> ${intervention.backoffice_structure || ficheTechnique.backoffice_structure || '-'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-plug me-2"></i> TYPE INSTALLATION</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Type MI:</strong> ${intervention.type_mi || ficheTechnique.type_mc ? '✓ Oui' : '✗ Non'}</p>
+                        <p><strong>Type NA:</strong> ${intervention.type_na || ficheTechnique.type_na ? '✓ Oui' : '✗ Non'}</p>
+                        <p><strong>Type MA:</strong> ${intervention.type_ma || ficheTechnique.type_autre ? '✓ Oui' : '✗ Non'}</p>
                     </div>
                 </div>
             </div>
@@ -1543,7 +1673,7 @@ function clearFilters() {
             .then(data => {
                 console.log('Data reçue:', data);
                 if (data.success) {
-                    displayInterventionDetails(data.intervention);
+                    displayInterventionDetails(data);
                     new bootstrap.Modal(document.getElementById('interventionModal')).show();
                 } else {
                     alert('Erreur: ' + (data.error || 'Erreur inconnue'));

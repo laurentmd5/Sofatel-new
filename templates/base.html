@@ -276,7 +276,7 @@
     <script src="{{ url_for('static', filename='js/chart-modal-simple.js') }}"></script>
 
     <!-- Puis les autres bibliothèques -->
-    <script src="https://cdn.jsdelivr.net/npm/feather-icons@4.29.0/dist/feather.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons@4.29.0/dist/feather.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <!-- Custom JS -->
@@ -304,7 +304,9 @@
         // After Feather replaces icons, mark decorative icons as aria-hidden
         (function () {
             try {
-                if (window.feather) {
+                if (window.safeFeatherReplace) {
+                    window.safeFeatherReplace();
+                } else if (window.feather) {
                     // ensure icons are replaced
                     feather.replace();
                 }
@@ -365,7 +367,8 @@
             `;
                 document.body.appendChild(modal);
                 warningModal = new bootstrap.Modal(modal);
-                feather.replace();
+                if (window.safeFeatherReplace) window.safeFeatherReplace();
+                else feather.replace();
             }
 
             // Réinitialiser le timer d'inactivité
@@ -520,7 +523,8 @@
 
     <script>
         // Initialize Feather icons
-        feather.replace();
+        if (window.safeFeatherReplace) window.safeFeatherReplace();
+        else if (typeof feather !== 'undefined') feather.replace();
 
         // Fonction pour afficher des alertes
         function showAlert(type, message) {

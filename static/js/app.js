@@ -671,6 +671,11 @@ function handleGlobalError(event) {
         } else {
             message = JSON.stringify(event);
         }
+        // Ne pas afficher de notification pour les erreurs d'icônes Feather (non critiques)
+        if (message.toLowerCase().includes('tosvg')) {
+            return;
+        }
+        
         showNotification(`Erreur: ${message}`, 'error');
     }
 }

@@ -53,21 +53,21 @@ ALL_ROLES = [choice[0] for choice in ROLE_CHOICES]
 
 class Survey(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    date_survey = db.Column(db.Date, nullable=False)
-    nom_raison_sociale = db.Column(db.String(255), nullable=False)
-    contact = db.Column(db.String(100), nullable=False)
+    date_survey = db.Column(db.Date, nullable=True)
+    nom_raison_sociale = db.Column(db.String(255), nullable=True)
+    contact = db.Column(db.String(100), nullable=True)
     represente_par = db.Column(db.String(100))
-    tel1 = db.Column(db.String(20), nullable=False)
+    tel1 = db.Column(db.String(20), nullable=True)
     tel2 = db.Column(db.String(20))
-    adresse_demande = db.Column(db.String(255), nullable=False)
+    adresse_demande = db.Column(db.String(255), nullable=True)
     etage = db.Column(db.String(20))
     gps_lat = db.Column(db.String(50))
     gps_long = db.Column(db.String(50))
     h_debut = db.Column(db.String(20))
     h_fin = db.Column(db.String(20))
     n_ligne = db.Column(db.String(50))
-    n_demande = db.Column(db.String(50), nullable=False)
-    service_demande = db.Column(db.String(50), nullable=False)
+    n_demande = db.Column(db.String(50), nullable=True)
+    service_demande = db.Column(db.String(50), nullable=True)
     etat_client = db.Column(db.String(50))
     nature_local = db.Column(db.String(50))
     type_logement = db.Column(db.String(50))
@@ -87,7 +87,7 @@ class Survey(db.Model):
     quantite_cable = db.Column(db.Integer)
     observation_tech = db.Column(db.Text)
     observation_client = db.Column(db.Text)
-    conclusion = db.Column(db.String(50), nullable=False)
+    conclusion = db.Column(db.String(50), nullable=True)
     photos = db.Column(db.Text)
     """ photo_batiment = db.Column(db.String(255))
     photo_environ = db.Column(db.String(255)) """
@@ -178,13 +178,13 @@ class FicheTechnique(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     
     # Informations générales
-    nom_raison_sociale = db.Column(db.String(255), nullable=False)
-    contact = db.Column(db.String(255), nullable=False)
+    nom_raison_sociale = db.Column(db.String(255), nullable=True)
+    contact = db.Column(db.String(255), nullable=True)
     represente_par = db.Column(db.String(255))
-    date_installation = db.Column(db.Date, nullable=False)
-    tel1 = db.Column(db.String(20), nullable=False)
+    date_installation = db.Column(db.Date, nullable=True)
+    tel1 = db.Column(db.String(20), nullable=True)
     tel2 = db.Column(db.String(20))
-    adresse_demandee = db.Column(db.String(255), nullable=False)
+    adresse_demandee = db.Column(db.String(255), nullable=True)
     etage = db.Column(db.String(50))
     gps_lat = db.Column(db.String(50))
     gps_long = db.Column(db.String(50))
@@ -223,12 +223,23 @@ class FicheTechnique(db.Model):
     type_cable_lc = db.Column(db.String(100))
     type_cable_bti = db.Column(db.String(100))
     type_cable_pto_one = db.Column(db.String(100))
-    kit_pto = db.Column(db.Boolean, default=False)
-    piton = db.Column(db.Boolean, default=False)
-    arobase = db.Column(db.Boolean, default=False)
-    malico = db.Column(db.Boolean, default=False)
-    ds6 = db.Column(db.Boolean, default=False)
+    kit_pto = db.Column(db.String(100))
+    piton = db.Column(db.String(100))
+    arobase = db.Column(db.String(100))
+    malico = db.Column(db.String(100))
+    ds6 = db.Column(db.String(100))
     autre_accessoire = db.Column(db.String(255))
+    
+    # Matching fields from Intervention
+    jarretiere = db.Column(db.String(50))
+    nombre_type_bpe = db.Column(db.String(50))
+    coupleur_c1 = db.Column(db.String(50))
+    coupleur_c2 = db.Column(db.String(50))
+    type_cable = db.Column(db.String(50))
+    lc_metre = db.Column(db.String(50))
+    bti_metre = db.Column(db.String(50))
+    pto_one = db.Column(db.String(50))
+    kitpto_metre = db.Column(db.String(50))
     
     # Tests de services
     appel_sortant_ok = db.Column(db.Boolean, default=False)
@@ -637,6 +648,15 @@ class MembreEquipe(db.Model):
     # Relations
     technicien = db.relationship('User', backref='participations_equipe')
 
+class PiloteEquipe(db.Model):
+    __tablename__ = 'pilote_equipe'
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), primary_key=True)
+    equipe_id = db.Column(db.Integer, db.ForeignKey('equipe.id'), primary_key=True)
+    
+    # Relations pour faciliter l'usage
+    user = db.relationship('User', backref=db.backref('pilote_equipes', cascade='all, delete-orphan'))
+    equipe_relation = db.relationship('Equipe', backref=db.backref('pilote_liens', cascade='all, delete-orphan'))
+
 """ class Intervention(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     demande_id = db.Column(db.Integer, db.ForeignKey('demande_intervention.id'), nullable=False)
@@ -1004,10 +1024,19 @@ class Intervention(db.Model):
 
     photos = db.Column(db.Text)  # JSON ou chemins séparés par des virgules
     
-    # Pour le service Production
+    # Pour le service Production et rapports détaillés
     survey_ok = db.Column(db.Boolean)
     survey_date = db.Column(db.DateTime)
     fichier_technique_accessible = db.Column(db.Boolean, default=False)
+    
+    # Nouveaux champs pour la persistance complète
+    type_mi = db.Column(db.Boolean, default=False)
+    type_na = db.Column(db.Boolean, default=False)
+    type_ma = db.Column(db.Boolean, default=False)
+    technicien_structure = db.Column(db.String(100))
+    backoffice_structure = db.Column(db.String(100))
+    offre = db.Column(db.String(100))
+    debit = db.Column(db.String(50))
     
     # Relations
     technicien = db.relationship('User', foreign_keys=[technicien_id], backref=db.backref('interventions_realisees', overlaps='interventions,technicien_user'), overlaps='interventions,technicien_user')

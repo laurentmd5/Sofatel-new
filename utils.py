@@ -42,24 +42,20 @@ def process_excel_file(filepath, service, importe_par):
         df.columns = [str(col).strip().upper().replace('\xa0', '').replace('\u200b', '') for col in df.columns]
         df = df.dropna(how='all')
         
-        # 1. Préparer le mapping des équipes pour le dispatch automatique
+        # 1. Préparer le mapping des techniciens pour le dispatch automatique
         equipe_map = {}
         try:
-            all_equipes = db.session.query(Equipe, MembreEquipe).join(
-                MembreEquipe, MembreEquipe.equipe_id == Equipe.id
-            ).filter(
-                Equipe.actif == True,
-                MembreEquipe.type_membre == 'technicien'
-            ).all()
+            # On ne se base plus sur les équipes, mais uniquement sur les techniciens actifs
+            all_techs = User.query.filter_by(role='technicien', actif=True).all()
             
-            for eq, mem in all_equipes:
-                if eq.nom_equipe and mem.technicien_id:
-                    equipe_map[eq.nom_equipe.strip().upper()] = {
-                        'tech_id': mem.technicien_id,
-                        'equipe_id': eq.id
+            for tech in all_techs:
+                if tech.username:
+                    equipe_map[tech.username.strip().upper()] = {
+                        'tech_id': tech.id,
+                        'equipe_id': None  # Aucun lien avec une équipe
                     }
         except Exception as e:
-            print(f"Erreur lors de la préparation du mapping des équipes: {e}")
+            print(f"Erreur lors de la préparation du mapping des techniciens: {e}")
         
         # Vérifier le type de fichier
         file_type = determine_file_type(set(df.columns))
@@ -101,7 +97,7 @@ def process_excel_file(filepath, service, importe_par):
             'demande': ['DEMANDE', 'Demande'],
             'taches': ['TACHE', 'Tâches', 'TACHES'],
             'st': ['ST'],
-            'equipe': ['EQUIPE', 'EQUIPES', 'EQUI', 'PILOTE', 'NOM EQUIPE']
+            'equipe': ['EQUIPE', 'EQUIPE2', 'EQUIPES', 'EQUI', 'PILOTE', 'NOM EQUIPE']
         }
         
         # Construction du mapping dynamique
@@ -114,6 +110,16 @@ def process_excel_file(filepath, service, importe_par):
                     found = True
                     print(f"Colonne trouvée: {variant} -> {standard_col}")
                     break
+            
+            # Recherche par mot-clé pour "equipe" si non trouvée exactement
+            if not found and standard_col == 'equipe':
+                for col in df.columns:
+                    if 'EQUIPE' in col:
+                        rename_dict[col] = standard_col
+                        found = True
+                        print(f"Colonne trouvée (mot-clé): {col} -> {standard_col}")
+                        break
+
             if not found:
                 print(f"Attention: Colonne non trouvée pour {standard_col}")
         # Renommer les colonnes selon le mapping
@@ -282,24 +288,19 @@ def process_excel_file_production(filepath, service, importe_par, fichier_import
         fichier_import.service = service
         db.session.commit()
         
-        # 1. Préparer le mapping des équipes pour le dispatch automatique
+        # 1. Préparer le mapping des techniciens pour le dispatch automatique
         equipe_map = {}
         try:
-            all_equipes = db.session.query(Equipe, MembreEquipe).join(
-                MembreEquipe, MembreEquipe.equipe_id == Equipe.id
-            ).filter(
-                Equipe.actif == True,
-                MembreEquipe.type_membre == 'technicien'
-            ).all()
+            all_techs = User.query.filter_by(role='technicien', actif=True).all()
             
-            for eq, mem in all_equipes:
-                if eq.nom_equipe and mem.technicien_id:
-                    equipe_map[eq.nom_equipe.strip().upper()] = {
-                        'tech_id': mem.technicien_id,
-                        'equipe_id': eq.id
+            for tech in all_techs:
+                if tech.username:
+                    equipe_map[tech.username.strip().upper()] = {
+                        'tech_id': tech.id,
+                        'equipe_id': None  # Aucun lien avec une équipe
                     }
         except Exception as e:
-            print(f"Erreur lors de la préparation du mapping des équipes (Prod): {e}")
+            print(f"Erreur lors de la préparation du mapping des techniciens (Prod): {e}")
         
         # Mapping des colonnes spécifiques à la production
         expected_columns = {
@@ -316,18 +317,30 @@ def process_excel_file_production(filepath, service, importe_par, fichier_import
             'adresse': ['ADRESSE'],
             'type_techno': ['TECHO'],
             'offre': ['OFFRES', 'OFFRE'],
-            'equipe': ['EQUIPE', 'EQUIPES', 'EQUI', 'PILOTE', 'NOM EQUIPE', 'ST']
+            'equipe': ['EQUIPE', 'EQUIPE2', 'EQUIPES', 'EQUI', 'PILOTE', 'NOM EQUIPE', 'ST']
         }
         
         # Construction du mapping dynamique
         rename_dict = {}
         for standard_col, variants in expected_columns.items():
+            found = False
             for variant in variants:
                 if variant in df.columns:
                     rename_dict[variant] = standard_col
+                    found = True
                     print(f"Colonne trouvée: {variant} -> {standard_col}")
                     break
-            else:
+            
+            # Recherche par mot-clé pour "equipe" si non trouvée exactement
+            if not found and standard_col == 'equipe':
+                for col in df.columns:
+                    if 'EQUIPE' in col:
+                        rename_dict[col] = standard_col
+                        found = True
+                        print(f"Colonne trouvée (mot-clé): {col} -> {standard_col}")
+                        break
+
+            if not found:
                 print(f"Attention: Colonne non trouvée pour {standard_col}")
         
         # Renommer les colonnes selon le mapping

@@ -145,39 +145,39 @@ class FicheTechniqueForm(FlaskForm):
     # Informations générales
     nom_raison_sociale = StringField('Nom/Raison sociale', validators=[DataRequired()])
     contact = StringField('Contact', validators=[DataRequired()])
-    represente_par = StringField('Représenté par')
+    represente_par = StringField('Représenté par', validators=[DataRequired()])
     date_installation = DateField('Date d\'installation', validators=[DataRequired()])
     tel1 = StringField('Téléphone 1', validators=[DataRequired()])
-    tel2 = StringField('Téléphone 2')
+    tel2 = StringField('Téléphone 2', validators=[Optional()])
     adresse_demandee = StringField('Adresse', validators=[DataRequired()])
-    etage = StringField('Étage')
-    gps_lat = StringField('Latitude GPS')
-    gps_long = StringField('Longitude GPS')
-    type_logement_avec_bpi = TextAreaField('Type logement avec BPI')
-    type_logement_sans_bpi = TextAreaField('Type logement sans BPI')
-    h_arrivee = TimeField('Heure d\'arrivée')
-    h_depart = TimeField('Heure de départ')
+    etage = StringField('Étage', validators=[DataRequired()])
+    gps_lat = StringField('Latitude GPS', validators=[DataRequired()])
+    gps_long = StringField('Longitude GPS', validators=[DataRequired()])
+    type_logement_avec_bpi = TextAreaField('Type logement avec BPI', validators=[DataRequired()])
+    type_logement_sans_bpi = TextAreaField('Type logement sans BPI', validators=[DataRequired()])
+    h_arrivee = TimeField('Heure d\'arrivée', validators=[DataRequired()])
+    h_depart = TimeField('Heure de départ', validators=[DataRequired()])
     
     # Informations techniques
-    n_ligne = StringField('N° Ligne')
-    n_demande = StringField('N° Demande')
-    technicien_structure = StringField('Technicien structure')
-    pilote_structure = StringField('Pilote structure')
-    offre = StringField('Offre')
-    debit = StringField('Débit')
+    n_ligne = StringField('N° Ligne', validators=[DataRequired()])
+    n_demande = StringField('N° Demande', validators=[DataRequired()])
+    technicien_structure = StringField('Technicien structure', validators=[DataRequired()])
+    pilote_structure = StringField('Pilote structure', validators=[DataRequired()])
+    offre = StringField('Offre', validators=[DataRequired()])
+    debit = StringField('Débit', validators=[DataRequired()])
     type_mc = BooleanField('MC')
     type_na = BooleanField('NA')
     type_transfert = BooleanField('Transfert')
     type_autre = BooleanField('Autre')
-    backoffice_structure = StringField('Backoffice structure')
+    backoffice_structure = StringField('Backoffice structure', validators=[DataRequired()])
     
     # Matériels
-    type_ont = StringField('Type ONT')
-    nature_ont = StringField('Nature ONT')
-    numero_serie_ont = StringField('N° série ONT')
-    type_decodeur = StringField('Type décodeur')
-    nature_decodeur = StringField('Nature décodeur')
-    numero_serie_decodeur = StringField('N° série décodeur')
+    type_ont = StringField('Type ONT', validators=[DataRequired()])
+    nature_ont = StringField('Nature ONT', validators=[DataRequired()])
+    numero_serie_ont = StringField('N° série ONT', validators=[DataRequired()])
+    type_decodeur = StringField('Type décodeur', validators=[DataRequired()])
+    nature_decodeur = StringField('Nature décodeur', validators=[DataRequired()])
+    numero_serie_decodeur = StringField('N° série décodeur', validators=[DataRequired()])
     disque_dur = BooleanField('Disque dur')
     telephone = BooleanField('Téléphone')
     recepteur_wifi = BooleanField('Récepteur WiFi')
@@ -185,15 +185,15 @@ class FicheTechniqueForm(FlaskForm):
     carte_vaccess = BooleanField('Carte V-Access')
     
     # Accessoires
-    type_cable_lc = StringField('Type câble LC')
-    type_cable_bti = StringField('Type câble BTI')
-    type_cable_pto_one = StringField('Type câble PTO ONE')
+    type_cable_lc = StringField('Type câble LC', validators=[DataRequired()])
+    type_cable_bti = StringField('Type câble BTI', validators=[DataRequired()])
+    type_cable_pto_one = StringField('Type câble PTO ONE', validators=[DataRequired()])
     kit_pto = BooleanField('Kit PTO')
     piton = BooleanField('Piton')
     arobase = BooleanField('Arobase')
     malico = BooleanField('Malico')
     ds6 = BooleanField('DS6')
-    autre_accessoire = StringField('Autre accessoire')
+    autre_accessoire = StringField('Autre accessoire', validators=[DataRequired()])
     
     # Tests de services
     appel_sortant_ok = BooleanField('Appel sortant OK')
@@ -208,18 +208,18 @@ class FicheTechniqueForm(FlaskForm):
     enregistreur_dd_nok = BooleanField('Enregistreur DD NOK')
     
     # Tests de débits
-    par_cable_salon = StringField('Débit câble - Salon')
-    par_cable_chambres = StringField('Débit câble - Chambres')
-    par_cable_bureau = StringField('Débit câble - Bureau')
-    par_cable_autres = StringField('Débit câble - Autres')
-    par_cable_vitesse_wifi = StringField('Vitesse WiFi câble')
-    par_cable_mesure_mbps = IntegerField('Mesure Mbps câble')
-    par_wifi_salon = StringField('Débit WiFi - Salon')
-    par_wifi_chambres = StringField('Débit WiFi - Chambres')
-    par_wifi_bureau = StringField('Débit WiFi - Bureau')
-    par_wifi_autres = StringField('Débit WiFi - Autres')
-    par_wifi_vitesse_wifi = StringField('Vitesse WiFi')
-    par_wifi_mesure_mbps = IntegerField('Mesure Mbps WiFi')
+    par_cable_salon = StringField('Débit câble - Salon', validators=[DataRequired()])
+    par_cable_chambres = StringField('Débit câble - Chambres', validators=[DataRequired()])
+    par_cable_bureau = StringField('Débit câble - Bureau', validators=[DataRequired()])
+    par_cable_autres = StringField('Débit câble - Autres', validators=[DataRequired()])
+    par_cable_vitesse_wifi = StringField('Vitesse WiFi câble', validators=[DataRequired()])
+    par_cable_mesure_mbps = IntegerField('Mesure Mbps câble', validators=[DataRequired()])
+    par_wifi_salon = StringField('Débit WiFi - Salon', validators=[DataRequired()])
+    par_wifi_chambres = StringField('Débit WiFi - Chambres', validators=[DataRequired()])
+    par_wifi_bureau = StringField('Débit WiFi - Bureau', validators=[DataRequired()])
+    par_wifi_autres = StringField('Débit WiFi - Autres', validators=[DataRequired()])
+    par_wifi_vitesse_wifi = StringField('Vitesse WiFi', validators=[DataRequired()])
+    par_wifi_mesure_mbps = IntegerField('Mesure Mbps WiFi', validators=[DataRequired()])
     
     # Etiquetages et Nettoyage
     etiquetage_colliers_serres = BooleanField('Étiquetage colliers serrés')
@@ -228,20 +228,20 @@ class FicheTechniqueForm(FlaskForm):
     nettoyage_tutorat = BooleanField('Nettoyage tutorat')
     
     # Rattachement
-    rattachement_nro = StringField('NRO')
-    rattachement_type = StringField('Type')
-    rattachement_num_carte = StringField('N° Carte')
-    rattachement_num_port = StringField('N° Port')
-    rattachement_plaque = StringField('Plaque')
-    rattachement_bpi_pbo = StringField('BPI/PBO')
-    rattachement_coupleur = StringField('Coupleur')
-    rattachement_fibre = StringField('Fibre')
-    rattachement_ref_dbm = StringField('Référence dBm')
-    rattachement_mesure_dbm = StringField('Mesure dBm')
+    rattachement_nro = StringField('NRO', validators=[DataRequired()])
+    rattachement_type = StringField('Type', validators=[DataRequired()])
+    rattachement_num_carte = StringField('N° Carte', validators=[DataRequired()])
+    rattachement_num_port = StringField('N° Port', validators=[DataRequired()])
+    rattachement_plaque = StringField('Plaque', validators=[DataRequired()])
+    rattachement_bpi_pbo = StringField('BPI/PBO', validators=[DataRequired()])
+    rattachement_coupleur = StringField('Coupleur', validators=[DataRequired()])
+    rattachement_fibre = StringField('Fibre', validators=[DataRequired()])
+    rattachement_ref_dbm = StringField('Référence dBm', validators=[DataRequired()])
+    rattachement_mesure_dbm = StringField('Mesure dBm', validators=[DataRequired()])
     
     # Commentaires
-    commentaires = TextAreaField('Commentaires')
-    photos = FileField('Photos', validators=[Optional()])
+    commentaires = TextAreaField('Commentaires', validators=[DataRequired()])
+    photos = FileField('Photos', validators=[DataRequired()])
     # Signatures et satisfaction client
     signature_equipe = HiddenField('Signature équipe')
     signature_client = HiddenField('Signature client')
@@ -517,23 +517,23 @@ class MembreEquipeForm(FlaskForm):
 
 class SurveyForm(FlaskForm):
     # Informations générales
-    date_survey = DateField('Date du Survey', validators=[DataRequired()])
-    nom_raison_sociale = StringField('Nom/Raison sociale', validators=[DataRequired()])
-    contact = StringField('Contact', validators=[DataRequired()])
-    represente_par = StringField('Représenté par')
-    tel1 = StringField('Téléphone 1', validators=[DataRequired()])
-    tel2 = StringField('Téléphone 2')
-    adresse_demande = StringField('Adresse', validators=[DataRequired()])
-    etage = StringField('Étage')
-    gps_lat = StringField('Latitude GPS')
-    gps_long = StringField('Longitude GPS')
-    h_debut = StringField('Heure début')
-    h_fin = StringField('Heure fin')
+    date_survey = DateField('Date du Survey*', validators=[DataRequired()])
+    nom_raison_sociale = StringField('Nom/Raison sociale*', validators=[DataRequired()])
+    contact = StringField('Contact*', validators=[DataRequired()])
+    represente_par = StringField('Représenté par*', validators=[DataRequired()])
+    tel1 = StringField('Téléphone 1*', validators=[DataRequired()])
+    tel2 = StringField('Téléphone 2', validators=[Optional()])
+    adresse_demande = StringField('Adresse*', validators=[DataRequired()])
+    etage = StringField('Étage*', validators=[DataRequired()])
+    gps_lat = StringField('Latitude GPS*', validators=[DataRequired()])
+    gps_long = StringField('Longitude GPS*', validators=[DataRequired()])
+    h_debut = StringField('Heure début*', validators=[DataRequired()])
+    h_fin = StringField('Heure fin*', validators=[DataRequired()])
 
     # Champs techniques
-    n_ligne = StringField('N° Ligne')
-    n_demande = StringField('N° Demande')
-    service_demande = SelectField('Service demandé', choices=[
+    n_ligne = StringField('N° Ligne*', validators=[DataRequired()])
+    n_demande = StringField('N° Demande*', validators=[DataRequired()])
+    service_demande = SelectField('Service demandé*', choices=[
         ('', 'Sélectionner...'),
         ('Internet Fibre', 'Internet Fibre'),
         ('Internet Cuivre', 'Internet Cuivre'),
@@ -543,58 +543,58 @@ class SurveyForm(FlaskForm):
     ], validators=[DataRequired()])
     
     # État du client
-    etat_client = SelectField('État du client', choices=[
+    etat_client = SelectField('État du client*', choices=[
         ('', 'Sélectionner...'),
         ('Nouveau', 'Nouveau'),
         ('Migration', 'Migration'),
         ('En service', 'En service')
-    ])
+    ], validators=[DataRequired()])
 
     # Localisation
-    nature_local = SelectField('Nature du local', choices=[
+    nature_local = SelectField('Nature du local*', choices=[
         ('', 'Sélectionner...'),
         ('Appartement', 'Appartement'),
         ('Villa', 'Villa'),
         ('Bureau', 'Bureau'),
         ('Commerce', 'Commerce'),
         ('Autre', 'Autre')
-    ])
-    type_logement = SelectField('Type de logement', choices=[
+    ], validators=[DataRequired()])
+    type_logement = SelectField('Type de logement*', choices=[
         ('', 'Sélectionner...'),
         ('Résidentiel', 'Résidentiel'),
         ('Professionnel', 'Professionnel')
-    ])
+    ], validators=[DataRequired()])
     
     # Disponibilité réseaux
     fibre_dispo = BooleanField('Fibre disponible')
     cuivre_dispo = BooleanField('Cuivre disponible')
-    gpon_olt = StringField('GPON/OLT')
-    splitter = StringField('Splitter')
-    distance_fibre = IntegerField('Distance fibre (m)')
-    etat_fibre = SelectField('État de la fibre', choices=[
+    gpon_olt = StringField('GPON/OLT*', validators=[DataRequired()])
+    splitter = StringField('Splitter*', validators=[DataRequired()])
+    distance_fibre = IntegerField('Distance fibre (m)*', validators=[DataRequired()])
+    etat_fibre = SelectField('État de la fibre*', choices=[
         ('', 'Sélectionner...'),
         ('Bon', 'Bon'),
         ('Mauvais', 'Mauvais')
-    ])
-    sr = StringField('SR')
-    pc = StringField('PC')
-    distance_cuivre = IntegerField('Distance cuivre (m)')
-    etat_cuivre = SelectField('État du cuivre', choices=[
+    ], validators=[DataRequired()])
+    sr = StringField('SR*', validators=[DataRequired()])
+    pc = StringField('PC*', validators=[DataRequired()])
+    distance_cuivre = IntegerField('Distance cuivre (m)*', validators=[DataRequired()])
+    etat_cuivre = SelectField('État du cuivre*', choices=[
         ('', 'Sélectionner...'),
         ('Bon', 'Bon'),
         ('Mauvais', 'Mauvais')
-    ])
+    ], validators=[DataRequired()])
 
     # Matériel requis
     modem = BooleanField('Modem')
     ont = BooleanField('ONT')
-    nb_prises = IntegerField('Nombre de prises')
-    quantite_cable = IntegerField('Quantité de câble (m)')
+    nb_prises = IntegerField('Nombre de prises*', validators=[DataRequired()])
+    quantite_cable = IntegerField('Quantité de câble (m)*', validators=[DataRequired()])
     
     # Observations
-    observation_tech = TextAreaField('Observations techniques')
-    observation_client = TextAreaField('Observations client')
-    conclusion = SelectField('Conclusion', choices=[
+    observation_tech = TextAreaField('Observations techniques*', validators=[DataRequired()])
+    observation_client = TextAreaField('Observations client*', validators=[DataRequired()])
+    conclusion = SelectField('Conclusion*', choices=[
         ('', 'Sélectionner...'),
         ('Réalisable', 'Réalisable'),
         ('Non réalisable', 'Non réalisable'),
@@ -602,44 +602,46 @@ class SurveyForm(FlaskForm):
     ], validators=[DataRequired()])
     
     # Images
-    photo_batiment = FileField('Photo du bâtiment', validators=[
+    photo_batiment = FileField('Photo du bâtiment*', validators=[
+        DataRequired(),
         FileAllowed(['jpg', 'jpeg', 'png'], 'Images uniquement!')
     ])
-    photo_environ = FileField('Photo de l\'environnement', validators=[
+    photo_environ = FileField('Photo de l\'environnement*', validators=[
+        DataRequired(),
         FileAllowed(['jpg', 'jpeg', 'png'], 'Images uniquement!')
     ])
-    technicien_structure = StringField('Technicien structure')
-    backoffice_structure = StringField('Backoffice structure')
-    offre = StringField('Offre')
-    debit = StringField('Débit')
+    technicien_structure = StringField('Technicien structure*', validators=[DataRequired()])
+    backoffice_structure = StringField('Backoffice structure*', validators=[DataRequired()])
+    offre = StringField('Offre*', validators=[DataRequired()])
+    debit = StringField('Débit*', validators=[DataRequired()])
     type_mi = BooleanField('MI')
     type_na = BooleanField('NA')
     type_transfer = BooleanField('Transfer')
     type_autre = BooleanField('Autre')
 
     # Données réseaux
-    nro = StringField('NRO')
-    type_reseau = StringField('Type réseau')
-    plaque = StringField('Plaque')
-    bpi = StringField('BPI')
-    pbo = StringField('PBO')
-    coupleur = StringField('Coupleur')
-    fibre = StringField('Fibre')
-    nb_clients = IntegerField('Nombre clients', validators=[Optional()])
-    valeur_pbo_dbm = StringField('Valeur PBO (dBm)')
-    bpi_b1 = StringField('BPI B1')
-    pbo_b1 = StringField('PBO B1')
-    coupleur_b1 = StringField('Coupleur B1')
-    nb_clients_b1 = IntegerField('Nombre clients B1', validators=[Optional()])
-    valeur_pbo_dbm_b1 = StringField('Valeur PBO B1 (dBm)')
+    nro = StringField('NRO', validators=[DataRequired()])
+    type_reseau = StringField('Type réseau', validators=[DataRequired()])
+    plaque = StringField('Plaque', validators=[DataRequired()])
+    bpi = StringField('BPI', validators=[DataRequired()])
+    pbo = StringField('PBO', validators=[DataRequired()])
+    coupleur = StringField('Coupleur', validators=[DataRequired()])
+    fibre = StringField('Fibre', validators=[DataRequired()])
+    nb_clients = IntegerField('Nombre clients', validators=[DataRequired()])
+    valeur_pbo_dbm = StringField('Valeur PBO (dBm)', validators=[DataRequired()])
+    bpi_b1 = StringField('BPI B1', validators=[DataRequired()])
+    pbo_b1 = StringField('PBO B1', validators=[DataRequired()])
+    coupleur_b1 = StringField('Coupleur B1', validators=[DataRequired()])
+    nb_clients_b1 = IntegerField('Nombre clients B1', validators=[DataRequired()])
+    valeur_pbo_dbm_b1 = StringField('Valeur PBO B1 (dBm)', validators=[DataRequired()])
 
     # Données client
-    description_logement_avec_bpi = TextAreaField('Description logement avec BPI')
-    description_logement_sans_bpi = TextAreaField('Description logement sans BPI')
-    emplacement_pto = StringField('Emplacement PTO')
-    passage_cable = TextAreaField('Passage câble')
-    longueur_tirage_pbo_bti = StringField('Longueur tirage PBO-BTI')
-    longueur_tirage_bti_pto = StringField('Longueur tirage BTI-PTO')
+    description_logement_avec_bpi = TextAreaField('Description logement avec BPI', validators=[DataRequired()])
+    description_logement_sans_bpi = TextAreaField('Description logement sans BPI', validators=[DataRequired()])
+    emplacement_pto = StringField('Emplacement PTO', validators=[DataRequired()])
+    passage_cable = TextAreaField('Passage câble', validators=[DataRequired()])
+    longueur_tirage_pbo_bti = StringField('Longueur tirage PBO-BTI', validators=[DataRequired()])
+    longueur_tirage_bti_pto = StringField('Longueur tirage BTI-PTO', validators=[DataRequired()])
     materiel_existant_decodeur_carte = BooleanField('Décodeur/Carte')
     materiel_existant_wifi_extender = BooleanField('WiFi Extender')
     materiel_existant_fax = BooleanField('Fax')
@@ -650,40 +652,40 @@ class SurveyForm(FlaskForm):
     qualite_ligne_adsl_ras = BooleanField('RAS')
 
     # Pièces et mesures
-    niveau_wifi_salon = StringField('Niveau WiFi salon')
-    niveau_wifi_chambre1 = StringField('Niveau WiFi chambre 1')
-    niveau_wifi_bureau1 = StringField('Niveau WiFi bureau 1')
-    niveau_wifi_autres_pieces = StringField('Niveau WiFi autres pièces')
+    niveau_wifi_salon = StringField('Niveau WiFi salon', validators=[DataRequired()])
+    niveau_wifi_chambre1 = StringField('Niveau WiFi chambre 1', validators=[DataRequired()])
+    niveau_wifi_bureau1 = StringField('Niveau WiFi bureau 1', validators=[DataRequired()])
+    niveau_wifi_autres_pieces = StringField('Niveau WiFi autres pièces', validators=[DataRequired()])
     choix_bf_hall = BooleanField('BF Hall')
     choix_bf_chambre2 = BooleanField('BF Chambre 2')
     choix_bf_bureau2 = BooleanField('BF Bureau 2')
-    choix_bf_mesure_dbm = StringField('BF Mesure dBm')
+    choix_bf_mesure_dbm = StringField('BF Mesure dBm', validators=[DataRequired()])
     cuisine_chambre3 = BooleanField('Cuisine/Chambre 3')
     cuisine_bureau3 = BooleanField('Cuisine/Bureau 3')
-    cuisine_mesure_dbm = StringField('Cuisine Mesure dBm')
+    cuisine_mesure_dbm = StringField('Cuisine Mesure dBm', validators=[DataRequired()])
 
     # Accessoires recommandés
     repeteur_wifi_oui = BooleanField('Répéteur WiFi - Oui')
     repeteur_wifi_non = BooleanField('Répéteur WiFi - Non')
-    repeteur_wifi_quantite = IntegerField('Quantité répéteur', validators=[Optional()])
-    repeteur_wifi_emplacement = StringField('Emplacement répéteur')
+    repeteur_wifi_quantite = IntegerField('Quantité répéteur', validators=[DataRequired()])
+    repeteur_wifi_emplacement = StringField('Emplacement répéteur', validators=[DataRequired()])
     cpl_oui = BooleanField('CPL - Oui')
     cpl_non = BooleanField('CPL - Non')
-    cpl_quantite = IntegerField('Quantité CPL', validators=[Optional()])
-    cpl_emplacement = StringField('Emplacement CPL')
-    cable_local_type = StringField('Type câble local')
-    cable_local_longueur = StringField('Longueur câble')
-    cable_local_connecteurs = StringField('Connecteurs')
+    cpl_quantite = IntegerField('Quantité CPL', validators=[DataRequired()])
+    cpl_emplacement = StringField('Emplacement CPL', validators=[DataRequired()])
+    cable_local_type = StringField('Type câble local', validators=[DataRequired()])
+    cable_local_longueur = StringField('Longueur câble', validators=[DataRequired()])
+    cable_local_connecteurs = StringField('Connecteurs', validators=[DataRequired()])
     goulottes_oui = BooleanField('Goulottes - Oui')
     goulottes_non = BooleanField('Goulottes - Non')
-    goulottes_quantite = IntegerField('Quantité goulottes', validators=[Optional()])
-    goulottes_nombre_x2m = IntegerField('Nombre x 2m', validators=[Optional()])
+    goulottes_quantite = IntegerField('Quantité goulottes', validators=[DataRequired()])
+    goulottes_nombre_x2m = IntegerField('Nombre x 2m', validators=[DataRequired()])
 
     # Survey OK/NOK et motifs
     survey_ok = BooleanField('Survey OK')
     survey_nok = BooleanField('Survey NOK')
     motif = SelectField(
-        'Motif',
+        'Motif*',
         choices=[
             ('CONTRAINTE RACCORDEMENT SONATEL-GC', 'CONTRAINTE RACCORDEMENT SONATEL-GC'),
             ('CONTRAINTE RACCORDEMENT CLIENT-GC', 'CONTRAINTE RACCORDEMENT CLIENT-GC'),
@@ -695,9 +697,9 @@ class SurveyForm(FlaskForm):
             ('PROBLEME TECHNIQUE SONATEL-ABS-VS', 'PROBLEME TECHNIQUE SONATEL-ABS-VS'),
             ('PROBLEME TECHNIQUE SONATEL-ABS-JA', 'PROBLEME TECHNIQUE SONATEL-ABS-JA')
         ],
-        validators=[Optional()]
+        validators=[DataRequired()]
     )
-    commentaires = TextAreaField('Commentaires')
+    commentaires = TextAreaField('Commentaires', validators=[DataRequired()])
 
     # Signatures et satisfaction client
     signature_equipe = HiddenField('Signature équipe')
@@ -718,23 +720,23 @@ class InterventionForm(FlaskForm):
     diagnostic_technicien = TextAreaField('Diagnostic technicien', validators=[Optional()])
     cause_derangement = TextAreaField('Cause dérangement', validators=[Optional()])
     action_releve = TextAreaField('Action de relève', validators=[Optional()])
-    gps_lat = StringField('Latitude GPS')
-    gps_long = StringField('Longitude GPS')
+    gps_lat = StringField('Latitude GPS*', validators=[DataRequired()])
+    gps_long = StringField('Longitude GPS*', validators=[DataRequired()])
     # Matériel
     materiel_livre = SelectField(
-    'MATÉRIELS LIVRÉS',
-    choices=[
-        ('', 'Sélectionner un matériel'),  # Option vide par défaut
-        ('Type ONT', 'Type ONT'),
-        ('Décodeur', 'Décodeur'),
-        ('Disque dur', 'Disque dur'),
-        ('Téléphone', 'Téléphone'),
-        ('Répétiteur Wifi', 'Répétiteur Wifi'),
-        ('CPL', 'CPL'),
-        ('Carte VIACCESS', 'Carte VIACCESS')
-    ],
-    validators=[Optional()]
-)
+        'MATÉRIELS LIVRÉS',
+        choices=[
+            ('', 'Sélectionner un matériel'),
+            ('Type ONT', 'Type ONT'),
+            ('Décodeur', 'Décodeur'),
+            ('Disque dur', 'Disque dur'),
+            ('Téléphone', 'Téléphone'),
+            ('Répétiteur Wifi', 'Répétiteur Wifi'),
+            ('CPL', 'CPL'),
+            ('Carte VIACCESS', 'Carte VIACCESS')
+        ],
+        validators=[Optional()]
+    )
     materiel_recup = StringField('MATÉRIELS RECUPÉRÉS', validators=[Optional(), Length(max=100)])
     numero_serie_livre = StringField('N° SÉRIE LIVRÉ', validators=[Optional(), Length(max=100)])
     numero_serie_recup = StringField('N° SÉRIE RÉCUPÉRÉ', validators=[Optional(), Length(max=100)])
@@ -750,15 +752,15 @@ class InterventionForm(FlaskForm):
     
     pieces = SelectField('Pièces',
                          choices=[
-        ('', 'Sélectionner'),  # Option vide par défaut
+        ('', 'Sélectionner'),
         ('Bureau Wifi < -70dBm', 'Bureau Wifi < -70dBm'),
         ('Choix Bf: 20/40 MHz', 'Choix Bf: 20/40 MHz')
     ],
       validators=[Optional()]
-      )
+    )
     communes = StringField('Communes', validators=[Optional(), Length(max=100)])
-    chambres = IntegerField('Chambres', validators=[Optional(), Length(max=100)])
-    bureau = IntegerField('Bureau', validators=[Optional(), Length(max=100)])
+    chambres = IntegerField('Chambres', validators=[Optional()])
+    bureau = IntegerField('Bureau', validators=[Optional()])
     wifi_extender = BooleanField('Autres pièces')
     mesure_dbm = StringField(
         'Mesure en dBm',
@@ -788,7 +790,7 @@ class InterventionForm(FlaskForm):
     signature_client = HiddenField('Signature client')
 
     # Photos
-    photos = FileField('Photos', validators=[Optional()])
+    photos = FileField('Photos', validators=[DataRequired()])
     # Champs pour la section ACCESSOIRES
     jarretiere = StringField('Jarretière', validators=[Optional(), Length(max=50)])
     nombre_type_bpe = StringField('Nombre et type BPE', validators=[Optional(), Length(max=50)])
@@ -804,6 +806,36 @@ class InterventionForm(FlaskForm):
     piton = StringField('Piton', validators=[Optional(), Length(max=50)])
     ds6 = StringField('DS6', validators=[Optional(), Length(max=50)])
     autres_accessoires = StringField('Autres', validators=[Optional(), Length(max=100)])
+    
+    # Type Installation
+    type_mi = BooleanField('Type MI (Mise en place)')
+    type_na = BooleanField('Type NA (Nouveau client)')
+    type_ma = BooleanField('Type MA (Modification)')
+    
+    # Confirmation
+    confirm_data = BooleanField('Confirmation données*', validators=[DataRequired()])
+    confirm_signature = BooleanField('Confirmation signature*', validators=[DataRequired()])
+    
+    # Template-specific fields (for validation compatibility)
+    adresse_demande = StringField('Adresse*', validators=[Optional()])
+    etage = StringField('Étage*', validators=[Optional()])
+    h_debut = StringField('Heure début*', validators=[Optional()])
+    h_fin = StringField('Heure fin*', validators=[Optional()])
+    date_intervention = StringField('Date*', validators=[Optional()])
+    nom_raison_sociale = StringField('Nom*', validators=[Optional()])
+    contact = StringField('Contact*', validators=[Optional()])
+    tel1 = StringField('Port1*', validators=[Optional()])
+    tel2 = StringField('Port2*', validators=[Optional()])
+    n_ligne = StringField('N Ligne*', validators=[Optional()])
+    n_demande = StringField('N Demande*', validators=[Optional()])
+    service_demande = StringField('Service*', validators=[Optional()])
+    technicien_structure = StringField('Tech Structure*', validators=[Optional()])
+    backoffice_structure = StringField('BO Structure*', validators=[Optional()])
+    offre = StringField('Offre*', validators=[Optional()])
+    debit = StringField('Débit*', validators=[Optional()])
+    technicien_responsable = StringField('Tech Responsable*', validators=[Optional()])
+    statut = StringField('Statut*', validators=[Optional()])
+    observations = TextAreaField('Observations*', validators=[Optional()])
 
     def validate_confirm_password(self, field):
         if field.data != self.password.data:

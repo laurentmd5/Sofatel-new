@@ -18,7 +18,7 @@ import io
 from app import app, db
 from models import *
 from forms import *
-from utils import log_activity, get_chef_pur_stats, get_chef_pilote_stats, get_chef_zone_stats, get_technicien_interventions, get_performance_data, build_stats_by_zone_tech
+from utils import log_activity, get_chef_pur_stats, get_chef_pilote_stats, get_chef_zone_stats, get_technicien_interventions, get_performance_data, build_stats_by_zone_tech, create_sms_notification, send_email
 from kpi_utils import get_unified_performance_data
 from extensions import csrf  # needed to exempt login in tests
 
@@ -1110,19 +1110,77 @@ def save_intervention(intervention_id):
 
         form = InterventionForm()
         if form.validate_on_submit():
+            # Récupérer ou créer les modèles associés (Survey et FicheTechnique)
+            # car le formulaire unique contient des données pour les trois
+            survey = Survey.query.filter_by(intervention_id=intervention.id).first()
+            if not survey:
+                survey = Survey(intervention_id=intervention.id, date_survey=datetime.now(timezone.utc).date())
+                if intervention.demande:
+                    survey.n_demande = intervention.demande.nd
+                    survey.service_demande = intervention.demande.service
+                db.session.add(survey)
+            
+            fiche = FicheTechnique.query.filter_by(intervention_id=intervention.id).first()
+            if not fiche:
+                fiche = FicheTechnique(intervention_id=intervention.id, date_installation=datetime.now(timezone.utc).date())
+                fiche.technicien_id = current_user.id
+                db.session.add(fiche)
+
             # Sauvegarder tous les champs du formulaire avec conversion de type
             for field_name, field in form._fields.items():
+                field_data = field.data
+                # Convert None to empty string for text fields to avoid IntegrityError (NOT NULL)
+                if field_data is None and hasattr(field, 'type') and field.type in ['StringField', 'TextAreaField']:
+                    field_data = ''
+                
+                # Skip fields that shouldn't be copied generically
+                if field_name in ['csrf_token', 'photos', 'signature_equipe', 'signature_client', 'confirm_data', 'confirm_signature', 'submit']:
+                    continue
+                    
+                # 1. Sauvegarder dans Intervention (générique)
                 if hasattr(intervention, field_name):
-                    field_data = field.data
-                    # Conversion des champs numériques si nécessaire
-                    if field_name in ['lc_metre', 'bti_metre', 'kitpto_metre'
-                                      ]:  # Exemple de champs numériques
-                        try:
-                            field_data = float(
-                                field_data) if field_data else None
-                        except (ValueError, TypeError):
-                            field_data = None
                     setattr(intervention, field_name, field_data)
+                
+                # 2. Sauvegarder dans Survey (avec mapping si nécessaire)
+                survey_mapping = {
+                    'date_intervention': 'date_survey',
+                    'observations': 'observation_tech',
+                    'type_ma': 'type_autre'
+                }
+                
+                survey_field = survey_mapping.get(field_name, field_name)
+                if hasattr(survey, survey_field):
+                    setattr(survey, survey_field, field_data)
+                
+                # 3. Sauvegarder dans FicheTechnique (avec mapping si nécessaire)
+                fiche_mapping = {
+                    'adresse_demande': 'adresse_demandee',
+                    'date_intervention': 'date_installation',
+                    'h_debut': 'h_arrivee',
+                    'h_fin': 'h_depart',
+                    'observations': 'commentaires',
+                    'type_mi': 'type_mc',
+                    'type_ma': 'type_autre'
+                }
+                
+                fiche_field = fiche_mapping.get(field_name, field_name)
+                if hasattr(fiche, fiche_field):
+                    setattr(fiche, fiche_field, field_data)
+
+            # Gestion spécifique des signatures
+            if form.signature_equipe.data:
+                intervention.signature_equipe = form.signature_equipe.data
+                if survey:
+                    survey.signature_equipe = form.signature_equipe.data
+                if fiche:
+                    fiche.signature_equipe = form.signature_equipe.data
+            
+            if form.signature_client.data:
+                intervention.signature_client = form.signature_client.data
+                if survey:
+                    survey.signature_client = form.signature_client.data
+                if fiche:
+                    fiche.signature_client = form.signature_client.data
 
             # Gestion des photos uploadées
             uploaded_files = request.files.getlist('photos')
@@ -1140,7 +1198,12 @@ def save_intervention(intervention_id):
                     )  # Stocker uniquement le nom du fichier
 
             if photo_paths:
-                intervention.photos = json.dumps(photo_paths)
+                photos_json = json.dumps(photo_paths)
+                intervention.photos = photos_json
+                if survey:
+                    survey.photos = photos_json
+                if fiche:
+                    fiche.photos = photos_json
 
             intervention.date_fin = datetime.now(timezone.utc)
             intervention.statut = 'termine'
@@ -1207,12 +1270,16 @@ def save_intervention(intervention_id):
                 )
             except Exception as post_e:
                 current_app.logger.warning(f"Post-completion background tasks failed for intervention {intervention.id}: {str(post_e)}")
-            return redirect(url_for('dashboard'))
+            # Pour les requetes XHR/fetch, retourner du JSON avec l'URL de redirection
+            # Evite que fetch() suive le redirect et atterrisse sur une route GET -> 405
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'success': True, 'redirect': '/dashboard'})
+            return redirect('/dashboard')
 
         else:
             errors = {
-                field: errors[0]
-                for field, errors in form.errors.items()
+                field: errs[0]
+                for field, errs in form.errors.items()
             }
             return jsonify({'success': False, 'errors': errors})
 
@@ -1460,7 +1527,10 @@ def api_get_intervention(intervention_id):
                 }), 403
 
         # Vérifier si c'est une fiche technique ou SAV
-        is_fiche_technique = FicheTechnique.query.filter_by(intervention_id=intervention_id).first() is not None
+        survey = Survey.query.filter_by(intervention_id=intervention_id).first()
+        fiche = FicheTechnique.query.filter_by(intervention_id=intervention_id).first()
+        
+        is_fiche_technique = (fiche is not None) or (survey is not None)
         intervention_type = 'fiche_technique' if is_fiche_technique else 'sav'
 
         # Préparer les données de l'intervention avec gestion des None
@@ -1522,9 +1592,14 @@ def api_get_intervention(intervention_id):
             'wifi_extender': bool(intervention.wifi_extender),
             'mesure_dbm': intervention.mesure_dbm or '',
             'satisfaction': intervention.satisfaction or '',
-            'signature_equipe': intervention.signature_equipe or '',
-            'signature_client': intervention.signature_client or '',
+            'signature_equipe': (getattr(intervention, 'signature_equipe', None) or 
+                                 (survey.signature_equipe if survey else None) or 
+                                 (fiche.signature_equipe if fiche else None) or ''),
+            'signature_client': (getattr(intervention, 'signature_client', None) or 
+                                 (survey.signature_client if survey else None) or 
+                                 (fiche.signature_client if fiche else None) or ''),
             'photos_list': photos_list,
+            'adresse_demande': (survey.adresse_demande if survey else (fiche.adresse_demandee if fiche else '')) or '',
             'type': intervention_type,
             'has_fiche_technique': is_fiche_technique,
             'technicien': {
@@ -1549,12 +1624,39 @@ def api_get_intervention(intervention_id):
             } if intervention.demande else None
         }
 
-        return jsonify({'success': True, 'intervention': intervention_data})
+        # Inclure les données Survey et FicheTechnique complètes pour le frontend
+        # Serializer les colonnes en gérant les dates et heures pour le JSON
+        def json_serial(obj):
+            from datetime import date, time, datetime
+            if isinstance(obj, (datetime, date, time)):
+                return obj.isoformat()
+            return obj
+
+        survey_data = {c.name: json_serial(getattr(survey, c.name)) for c in survey.__table__.columns} if survey else None
+        if survey_data:
+            try:
+                survey_data['photos_list'] = json.loads(survey.photos) if survey.photos else []
+            except:
+                survey_data['photos_list'] = []
+
+        fiche_data = {c.name: json_serial(getattr(fiche, c.name)) for c in fiche.__table__.columns} if fiche else None
+        if fiche_data:
+            try:
+                fiche_data['photos_list'] = json.loads(fiche.photos) if fiche.photos else []
+            except:
+                fiche_data['photos_list'] = []
+
+        return jsonify({
+            'success': True, 
+            'intervention': intervention_data,
+            'survey': survey_data,
+            'fiche_technique': fiche_data
+        })
 
     except Exception as e:
-        app.logger.error(f"Erreur dans api_get_intervention: {str(e)}")
-        app.logger.error(traceback.format_exc())
-        return jsonify({'success': False, 'error': 'Erreur interne du serveur'}), 500
+        error_msg = f"{str(e)}\n{traceback.format_exc()}"
+        app.logger.error(f"Erreur dans api_get_intervention: {error_msg}")
+        return jsonify({'success': False, 'error': f'Erreur interne: {str(e)}'}), 500
 
 """ @app.route('/intervention-history')
 @login_required

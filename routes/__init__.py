@@ -6,6 +6,7 @@ from .auth import register_auth_blueprint
 from .surveys import surveys_bp
 from .dispatch import dispatch_bp
 from .teams import teams_bp
+from .pilote_equipes import pilote_equipes_bp
 from flask import redirect, url_for, jsonify, current_app, request
 import os
 
@@ -22,6 +23,7 @@ def register_blueprints(app):
     app.register_blueprint(surveys_bp)
     app.register_blueprint(dispatch_bp)
     app.register_blueprint(teams_bp)
+    app.register_blueprint(pilote_equipes_bp)
 
     # Mobile API blueprint (JWT auth + mobile endpoints)
     try:
@@ -156,3 +158,4 @@ def register_blueprints(app):
                 return redirect(url_for('legacy.connection_history', **request.args))
     except Exception as e:
         app.logger.warning(f'Impossible de charger legacy routes: {e}')
+
